@@ -2,7 +2,7 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::{CueId, Position, Role};
+use crate::{CueId, MediaOptions, Overlay, Position, Role, TextTheme, TimerCue, Transition};
 
 /// Everything any input source can ask the host to do. Every action passes through the single
 /// dispatcher in `crates/core`, which checks it against the sender's role.
@@ -42,6 +42,42 @@ pub enum Action {
     TimerPause,
     TimerReset,
 
+    // --- media playback (cue on the output) ---
+    MediaPlay,
+    MediaPause,
+    MediaSeek {
+        position_ms: u32,
+    },
+    MediaRestart,
+
+    // --- global countdown and stage ---
+    CountdownSet {
+        duration_ms: u32,
+        label: String,
+    },
+    CountdownStart,
+    CountdownPause,
+    CountdownReset,
+    SetStageMessage {
+        text: Option<String>,
+    },
+
+    // --- overlays ---
+    SetOverlayVisible {
+        overlay_id: String,
+        visible: bool,
+    },
+    ToggleOverlay {
+        overlay_id: String,
+    },
+    /// Adds or replaces (by id) an overlay definition.
+    PutOverlay {
+        overlay: Overlay,
+    },
+    RemoveOverlay {
+        overlay_id: String,
+    },
+
     // --- show editing ---
     RenameShow {
         title: String,
@@ -69,6 +105,49 @@ pub enum Action {
         color: String,
         at_index: Option<u32>,
     },
+    AddText {
+        name: String,
+        text: String,
+        lyrics: bool,
+        at_index: Option<u32>,
+    },
+    SetCueText {
+        cue_id: CueId,
+        text: String,
+        lyrics: bool,
+    },
+    AddTimer {
+        name: String,
+        timer: TimerCue,
+        at_index: Option<u32>,
+    },
+    SetCueTimer {
+        cue_id: CueId,
+        timer: TimerCue,
+    },
+    /// `theme: None` returns to the show default.
+    SetCueTheme {
+        cue_id: CueId,
+        theme: Option<TextTheme>,
+    },
+    SetDefaultTheme {
+        theme: TextTheme,
+    },
+    SetCueTransition {
+        cue_id: CueId,
+        transition: Option<Transition>,
+    },
+    SetDefaultTransition {
+        transition: Transition,
+    },
+    SetCueAutoAdvance {
+        cue_id: CueId,
+        after_ms: Option<u32>,
+    },
+    SetMediaOptions {
+        cue_id: CueId,
+        options: MediaOptions,
+    },
 
     // --- host file operations (local only: paths refer to the host's file system) ---
     AddFiles {
@@ -82,6 +161,28 @@ pub enum Action {
     SaveShow {
         path: Option<String>,
         embed_media: bool,
+    },
+    /// Image for the logo screen; `None` restores the built-in logo.
+    SetLogoImage {
+        path: Option<String>,
+    },
+    /// Background image of a cue's theme, or of the default theme when `cue_id` is `None`.
+    SetBackgroundImage {
+        cue_id: Option<CueId>,
+        path: Option<String>,
+    },
+    SetOverlayImage {
+        overlay_id: String,
+        path: Option<String>,
+    },
+
+    // --- reports from host output windows (local only) ---
+    MediaLoaded {
+        cue_id: CueId,
+        duration_ms: u32,
+    },
+    MediaEnded {
+        cue_id: CueId,
     },
 
     // --- devices ---

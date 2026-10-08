@@ -60,30 +60,28 @@ pub fn save(show: &Show, path: &Path, embed_media: bool) -> Result<(), BundleErr
         out.format_version = SHOW_FORMAT_VERSION;
         // source path -> bundled name
         let mut names: HashMap<PathBuf, String> = HashMap::new();
-        for cue in &mut out.cues {
-            for media in cue.content.media_mut() {
-                let source = show
-                    .resolve(media)
-                    .ok_or_else(|| BundleError::Invalid("unresolvable media".into()))?;
-                if !embed_media {
-                    *media = MediaRef::Linked { path: source };
-                    continue;
-                }
-                let name = match names.get(&source) {
-                    Some(n) => n.clone(),
-                    None => {
-                        let mut f = File::open(&source)
-                            .map_err(|_| BundleError::MissingMedia(source.clone()))?;
-                        let name = format!("{:04}-{}", names.len(), sanitize(&media.file_name()));
-                        // Media is usually already compressed (PDF, JPEG, PNG).
-                        zip.start_file(format!("{MEDIA_PREFIX}{name}"), stored)?;
-                        io::copy(&mut f, &mut zip)?;
-                        names.insert(source, name.clone());
-                        name
-                    }
-                };
-                *media = MediaRef::Bundled { name };
+        for media in out.all_media_mut() {
+            let source = show
+                .resolve(media)
+                .ok_or_else(|| BundleError::Invalid("unresolvable media".into()))?;
+            if !embed_media {
+                *media = MediaRef::Linked { path: source };
+                continue;
             }
+            let name = match names.get(&source) {
+                Some(n) => n.clone(),
+                None => {
+                    let mut f = File::open(&source)
+                        .map_err(|_| BundleError::MissingMedia(source.clone()))?;
+                    let name = format!("{:04}-{}", names.len(), sanitize(&media.file_name()));
+                    // Media is usually already compressed (PDF, JPEG, PNG).
+                    zip.start_file(format!("{MEDIA_PREFIX}{name}"), stored)?;
+                    io::copy(&mut f, &mut zip)?;
+                    names.insert(source, name.clone());
+                    name
+                }
+            };
+            *media = MediaRef::Bundled { name };
         }
         zip.start_file(SHOW_JSON, opts)?;
         zip.write_all(&serde_json::to_vec_pretty(&out)?)?;
@@ -136,14 +134,12 @@ pub fn open(path: &Path, extract_dir: &Path) -> Result<Show, BundleError> {
         io::copy(&mut entry, &mut out)?;
     }
 
-    for cue in &show.cues {
-        for media in cue.content.media() {
-            if let MediaRef::Bundled { name } = media {
-                if !is_safe_name(name) || !extract_dir.join(name).is_file() {
-                    return Err(BundleError::Invalid(format!(
-                        "bundled media {name:?} missing"
-                    )));
-                }
+    for media in show.all_media() {
+        if let MediaRef::Bundled { name } = media {
+            if !is_safe_name(name) || !extract_dir.join(name).is_file() {
+                return Err(BundleError::Invalid(format!(
+                    "bundled media {name:?} missing"
+                )));
             }
         }
     }
@@ -244,6 +240,23 @@ mod tests {
         assert_eq!(std::fs::read(pdf).unwrap(), b"%PDF-1.4 fake");
         let entries = std::fs::read_dir(extract.path()).unwrap().count();
         assert_eq!(entries, 2, "duplicate media stored once");
+    }
+
+    #[test]
+    fn assets_are_bundled() {
+        let src = tempfile::tempdir().unwrap();
+        let mut show = fixture(src.path());
+        let logo = src.path().join("logo.png");
+        std::fs::write(&logo, b"logo").unwrap();
+        show.assets.push(crate::model::Asset { id: "a1".into(), file: MediaRef::linked(&logo) });
+        show.logo = Some("a1".into());
+        let file = src.path().join("show.msnack");
+        save(&show, &file, true).unwrap();
+        std::fs::remove_file(&logo).unwrap();
+        let extract = tempfile::tempdir().unwrap();
+        let opened = open(&file, extract.path()).unwrap();
+        let path = opened.resolve(&opened.asset("a1").unwrap().file).unwrap();
+        assert_eq!(std::fs::read(path).unwrap(), b"logo");
     }
 
     #[test]

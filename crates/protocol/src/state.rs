@@ -32,6 +32,191 @@ pub enum CueKind {
     Image,
     ImageFolder,
     Blank,
+    Video,
+    Audio,
+    Text,
+    Timer,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum TransitionKind {
+    #[default]
+    Cut,
+    Fade,
+}
+
+/// How a cue's slides appear.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct Transition {
+    pub kind: TransitionKind,
+    pub duration_ms: u32,
+}
+
+impl Transition {
+    pub const MAX_DURATION_MS: u32 = 10_000;
+}
+
+/// Playback options of a video or audio cue.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct MediaOptions {
+    #[serde(rename = "loop")]
+    pub loop_playback: bool,
+    /// Trim: playback starts here.
+    pub start_ms: u32,
+    /// Trim: playback ends here (`None` = end of file).
+    pub end_ms: Option<u32>,
+    /// 0.0 – 1.0
+    pub volume: f32,
+    /// Go to the next cue when playback ends (ignored when looping).
+    pub auto_advance: bool,
+}
+
+impl Default for MediaOptions {
+    fn default() -> Self {
+        MediaOptions {
+            loop_playback: false,
+            start_ms: 0,
+            end_ms: None,
+            volume: 1.0,
+            auto_advance: false,
+        }
+    }
+}
+
+/// Media facts and options sent with media cues.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct MediaInfo {
+    pub options: MediaOptions,
+    /// Reported by the output once the file's metadata is loaded.
+    pub duration_ms: Option<u32>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum TextAlign {
+    Left,
+    #[default]
+    Center,
+    Right,
+}
+
+/// Look of text and timer slides.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct TextTheme {
+    pub font_family: String,
+    /// Font size in percent of the output height; `None` fits the text to the screen.
+    pub font_size: Option<u32>,
+    pub color: String,
+    pub background: String,
+    /// Asset id of a background image.
+    pub background_image: Option<String>,
+    pub align: TextAlign,
+}
+
+impl Default for TextTheme {
+    fn default() -> Self {
+        TextTheme {
+            font_family: "Inter, system-ui, sans-serif".into(),
+            font_size: None,
+            color: "#ffffff".into(),
+            background: "#000000".into(),
+            background_image: None,
+            align: TextAlign::Center,
+        }
+    }
+}
+
+/// Text content of a text cue.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct TextInfo {
+    /// The text as entered.
+    pub source: String,
+    /// Lyrics mode: verses are separated by blank lines (otherwise by `---` lines).
+    pub lyrics: bool,
+    pub slides: Vec<String>,
+    pub theme: Option<TextTheme>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(tag = "mode", rename_all = "snake_case")]
+#[ts(export)]
+pub enum TimerMode {
+    /// Counts down from `duration_ms` once the cue goes live.
+    Countdown { duration_ms: u32 },
+    /// Counts down to a local wall-clock time (`HH:MM`).
+    CountdownTo { time: String },
+    /// Counts up from when the cue goes live.
+    CountUp,
+    /// Shows the time of day.
+    Clock,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct TimerCue {
+    pub mode: TimerMode,
+    pub label: String,
+    /// Color once a countdown has passed zero.
+    pub overtime_color: String,
+    pub theme: Option<TextTheme>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum OverlayPosition {
+    TopLeft,
+    TopCenter,
+    TopRight,
+    BottomLeft,
+    #[default]
+    BottomCenter,
+    BottomRight,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(tag = "type", rename_all = "snake_case")]
+#[ts(export)]
+pub enum OverlayKind {
+    LowerThird {
+        title: String,
+        subtitle: String,
+    },
+    /// Corner image; `image` is an asset id.
+    LogoBug {
+        image: Option<String>,
+    },
+    Clock {
+        seconds: bool,
+    },
+    /// Scrolling text; `speed` in percent of the screen width per second.
+    Ticker {
+        text: String,
+        speed: u32,
+    },
+    /// Shows the global countdown.
+    Countdown,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct Overlay {
+    pub id: String,
+    pub name: String,
+    pub kind: OverlayKind,
+    pub position: OverlayPosition,
+    pub color: String,
+    pub background: String,
+    /// Size in percent of the default.
+    pub scale: u32,
 }
 
 /// What clients need to know about a cue.
@@ -50,6 +235,13 @@ pub struct CueSummary {
     pub slide_notes: Vec<String>,
     /// Background color for blank cues.
     pub background: Option<String>,
+    /// Per-cue transition; `None` uses the show default.
+    pub transition: Option<Transition>,
+    /// Advance to the next slide after this delay.
+    pub auto_advance_ms: Option<u32>,
+    pub media: Option<MediaInfo>,
+    pub text: Option<TextInfo>,
+    pub timer: Option<TimerCue>,
 }
 
 /// The show structure. Sent whenever the cue list changes.
@@ -64,6 +256,11 @@ pub struct ShowSnapshot {
     /// Unsaved changes exist.
     pub dirty: bool,
     pub revision: u64,
+    pub default_transition: Transition,
+    pub default_theme: TextTheme,
+    pub overlays: Vec<Overlay>,
+    /// Asset id of the logo screen image (`None` = built-in logo).
+    pub logo: Option<String>,
 }
 
 /// Master states, applied on top of the program content.
@@ -96,6 +293,37 @@ impl Stopwatch {
     }
 }
 
+/// Playback of the media cue that is on the output. Every view derives the current position
+/// from this timeline, so the output, the operator and phones agree.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct MediaPlayback {
+    pub cue_id: CueId,
+    /// Position in the file (ms) as a stopwatch: running while playing.
+    pub position: Stopwatch,
+    /// Playback reached the end and stopped.
+    pub ended: bool,
+}
+
+/// The global countdown shown by countdown overlays, stage displays and remotes.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct Countdown {
+    pub duration_ms: u32,
+    pub label: String,
+    pub elapsed: Stopwatch,
+}
+
+impl Default for Countdown {
+    fn default() -> Self {
+        Countdown {
+            duration_ms: 5 * 60 * 1000,
+            label: String::new(),
+            elapsed: Stopwatch::default(),
+        }
+    }
+}
+
 /// Live show state. Sent on every change.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export)]
@@ -113,6 +341,15 @@ pub struct LiveState {
     pub show_timer: Stopwatch,
     /// Time on the current slide.
     pub slide_timer: Stopwatch,
+    pub media: Option<MediaPlayback>,
+    pub countdown: Countdown,
+    /// Ids of overlays currently shown.
+    pub overlays_visible: Vec<String>,
+    /// Message from the operator to stage displays.
+    pub stage_message: Option<String>,
+    /// When the program will advance automatically.
+    #[ts(type = "number | null")]
+    pub auto_advance_at_ms: Option<i64>,
     /// Host clock at the time this state was sent.
     #[ts(type = "number")]
     pub host_time_ms: i64,

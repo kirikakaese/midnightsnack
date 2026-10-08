@@ -87,10 +87,48 @@ fn server_messages_round_trip() {
                     notes: String::new(),
                     slide_notes: vec!["hello".into()],
                     background: None,
+                    transition: Some(Transition {
+                        kind: TransitionKind::Fade,
+                        duration_ms: 300,
+                    }),
+                    auto_advance_ms: Some(5000),
+                    media: Some(MediaInfo {
+                        options: MediaOptions::default(),
+                        duration_ms: Some(1),
+                    }),
+                    text: Some(TextInfo {
+                        source: "a\n\nb".into(),
+                        lyrics: true,
+                        slides: vec!["a".into(), "b".into()],
+                        theme: Some(TextTheme::default()),
+                    }),
+                    timer: Some(TimerCue {
+                        mode: TimerMode::CountdownTo {
+                            time: "19:30".into(),
+                        },
+                        label: "Doors".into(),
+                        overtime_color: "#ef4444".into(),
+                        theme: None,
+                    }),
                 }],
                 path: None,
                 dirty: true,
                 revision: 3,
+                default_transition: Transition::default(),
+                default_theme: TextTheme::default(),
+                overlays: vec![Overlay {
+                    id: "o".into(),
+                    name: "Name".into(),
+                    kind: OverlayKind::Ticker {
+                        text: "News".into(),
+                        speed: 10,
+                    },
+                    position: OverlayPosition::TopRight,
+                    color: "#fff".into(),
+                    background: "#000".into(),
+                    scale: 100,
+                }],
+                logo: Some("asset".into()),
             },
         },
         ServerMessage::Live {
@@ -109,6 +147,18 @@ fn server_messages_round_trip() {
                     running_since_ms: Some(1000),
                 },
                 slide_timer: Stopwatch::default(),
+                media: Some(MediaPlayback {
+                    cue_id: "c1".into(),
+                    position: Stopwatch {
+                        accumulated_ms: 500,
+                        running_since_ms: None,
+                    },
+                    ended: false,
+                }),
+                countdown: Countdown::default(),
+                overlays_visible: vec!["o".into()],
+                stage_message: Some("2 min".into()),
+                auto_advance_at_ms: Some(3000),
                 host_time_ms: 2000,
                 revision: 9,
             },
@@ -145,6 +195,10 @@ fn wire_format_is_tagged_snake_case() {
             "action": { "action": "set_blackout", "on": true }
         })
     );
+
+    // `loop` is a keyword in Rust but the natural name on the wire.
+    let json = serde_json::to_value(MediaOptions::default()).unwrap();
+    assert_eq!(json["loop"], serde_json::json!(false));
 
     let json = serde_json::to_value(PairStatus::Pending).unwrap();
     assert_eq!(json, serde_json::json!({ "status": "pending" }));
