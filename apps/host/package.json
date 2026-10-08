@@ -8,12 +8,14 @@
     "dev": "vite",
     "build": "vite build",
     "check": "svelte-check --tsconfig ./tsconfig.json --fail-on-warnings",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "test": "vitest run"
   },
   "dependencies": {
     "@midnightsnack/protocol": "workspace:*",
     "@midnightsnack/ui": "workspace:*",
-    "@tauri-apps/api": "^2.12.0"
+    "@tauri-apps/api": "^2.12.0",
+    "@tauri-apps/plugin-dialog": "^2.8.1"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^7.3.0",
@@ -22,6 +24,7 @@
     "svelte": "^5.57.0",
     "svelte-check": "^4.7.0",
     "typescript": "~5.9.0",
-    "vite": "^8.3.0"
+    "vite": "^8.3.0",
+    "vitest": "^5.0.3"
   }
 }
