@@ -1,0 +1,40 @@
+name: Bug report
+description: Something does not work as expected
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: Include what you expected to happen instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: "1. Open a show with …\n2. Press …"
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: midnightsnack version
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Host operating system
+      options: [macOS, Windows, Linux (X11), Linux (Wayland)]
+    validations:
+      required: true
+  - type: input
+    id: remote
+    attributes:
+      label: Remote device / browser (if relevant)
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      render: text
