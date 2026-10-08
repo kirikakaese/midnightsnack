@@ -1,0 +1,8 @@
+target/
+node_modules/
+dist/
+pnpm-lock.yaml
+apps/host/src-tauri/gen/
+apps/host/src-tauri/icons/
+LICENSE
+*.md

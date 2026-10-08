@@ -1,0 +1,28 @@
+# Rust
+/target/
+**/target/
+
+# Node
+node_modules/
+dist/
+.svelte-kit/
+*.tsbuildinfo
+
+# Tauri
+apps/host/src-tauri/gen/
+apps/host/src-tauri/resources/pdfium/
+
+# Test output
+test-results/
+playwright-report/
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+
+# Local env
+.env
+.env.*
