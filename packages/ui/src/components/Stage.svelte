@@ -82,6 +82,13 @@
     }, layer.duration + 50);
   }
 
+  // Output windows fetch the start of the next video/audio cue in advance.
+  const preload = $derived.by(() => {
+    if (mode !== "output") return null;
+    const next = describe(conn, conn.live?.next ?? null);
+    return next?.kind === "media" && next.key !== content.key ? next.src : null;
+  });
+
   const masterFade = $derived(
     conn.show?.default_transition.kind === "fade" ? conn.show.default_transition.duration_ms : 0,
   );
@@ -114,6 +121,9 @@
     {/if}
   </div>
   <div class="master blackout" class:on={blackout}></div>
+  {#if preload}
+    <video class="preload" src={preload} preload="auto" muted aria-hidden="true"></video>
+  {/if}
 </div>
 
 <style>
@@ -163,5 +173,12 @@
   }
   .blackout {
     background: #000;
+  }
+  .preload {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
   }
 </style>
