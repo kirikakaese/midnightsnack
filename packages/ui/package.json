@@ -19,7 +19,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "intl-messageformat": "^10.7.0"
+    "intl-messageformat": "^10.7.0",
+    "@midnightsnack/protocol": "workspace:*"
   },
   "peerDependencies": {
     "svelte": "^5.0.0"
