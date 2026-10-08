@@ -11,7 +11,9 @@
 
 use std::path::PathBuf;
 
+use midnightsnack_core::model::split_text;
 use midnightsnack_core::{Cue, CueContent, MediaRef, Show};
+use midnightsnack_protocol::{Overlay, OverlayKind, OverlayPosition, TimerCue, TimerMode};
 use midnightsnack_render::test_support::{build_pdf, TestPage};
 use midnightsnack_server::{start, state::lock, ServerConfig};
 
@@ -117,15 +119,63 @@ fn demo_show(dir: &std::path::Path) -> std::io::Result<Show> {
             page_count: 2,
         },
     );
+    let lyrics = "Oh midnight snack, so sweet and true\nWe gather round to dine with you\n\n\
+                  The night is young, the plates are warm\nWe weather every cheese-less storm";
+    let song = Cue::new(
+        "Anthem",
+        CueContent::Text {
+            source: lyrics.into(),
+            lyrics: true,
+            slides: split_text(lyrics, true),
+            theme: None,
+        },
+    );
+    let timer = Cue::new(
+        "Break timer",
+        CueContent::Timer {
+            timer: TimerCue {
+                mode: TimerMode::Countdown {
+                    duration_ms: 10 * 60 * 1000,
+                },
+                label: "We continue in".into(),
+                overtime_color: "#ef4444".into(),
+                theme: None,
+            },
+        },
+    );
     let blank = Cue::new(
         "Break",
         CueContent::Blank {
             color: "#000000".into(),
         },
     );
+    let overlays = vec![
+        Overlay {
+            id: "host".into(),
+            name: "Host".into(),
+            kind: OverlayKind::LowerThird {
+                title: "Ada Lovelace".into(),
+                subtitle: "Host".into(),
+            },
+            position: OverlayPosition::BottomLeft,
+            color: "#ffd447".into(),
+            background: "#0b0d12".into(),
+            scale: 100,
+        },
+        Overlay {
+            id: "clock".into(),
+            name: "Clock".into(),
+            kind: OverlayKind::Clock { seconds: false },
+            position: OverlayPosition::TopRight,
+            color: "#ffffff".into(),
+            background: "#1c2230".into(),
+            scale: 100,
+        },
+    ];
     Ok(Show {
         title: "Demo show".into(),
-        cues: vec![deck, talk, blank],
+        cues: vec![deck, talk, song, timer, blank],
+        overlays,
         ..Show::default()
     })
 }

@@ -9,6 +9,11 @@ test.beforeEach(async () => {
   await op.action({ action: "disconnect_all" });
   await op.action({ action: "set_blackout", on: false });
   await op.action({ action: "set_logo", on: false });
+  await op.action({ action: "set_stage_message", text: null });
+  await op.action({ action: "countdown_reset" });
+  for (const id of ["host", "clock"]) {
+    await op.action({ action: "set_overlay_visible", overlay_id: id, visible: false });
+  }
   // `disconnect_all` rotates the PIN and join token; the client tracks the new values.
 });
 
@@ -79,4 +84,38 @@ test("removed device is told to pair again", async ({ page }) => {
   await expect(page.getByText("Presenter", { exact: true })).toBeVisible();
   await op.action({ action: "disconnect_all" });
   await expect(page.getByText("This device is not paired")).toBeVisible();
+});
+
+test("operator phone runs text cues, overlays, countdown and stage messages", async ({ page }) => {
+  await pair(page, "operator");
+  await page.getByRole("button", { name: /Anthem/ }).click();
+  await expect(page.getByText(/Anthem · 1 \/ 2/)).toBeVisible();
+  // Text slides are rendered on the phone itself.
+  await expect(page.getByText("Oh midnight snack, so sweet and true").first()).toBeVisible();
+
+  await page.getByRole("button", { name: "Host", exact: true }).click();
+  await expect.poll(() => op.live?.overlays_visible).toContain("host");
+  await expect(page.getByRole("button", { name: "Host", exact: true })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+
+  await page.getByRole("button", { name: "Start" }).click();
+  await expect.poll(() => op.live?.countdown.elapsed.running_since_ms).not.toBeNull();
+
+  await page.getByLabel("Message to stage").fill("Two minutes left");
+  await page.getByRole("button", { name: "Send" }).click();
+  await expect.poll(() => op.live?.stage_message).toBe("Two minutes left");
+  await page.screenshot({ path: "test-results/remote-operator-live.png", fullPage: true });
+});
+
+test("stage viewer shows operator messages and the countdown", async ({ page }) => {
+  await pair(page, "stage_viewer");
+  await expect(page.getByText("Stage viewer", { exact: true })).toBeVisible();
+  await op.action({ action: "countdown_set", duration_ms: 90_000, label: "Q&A" });
+  await op.action({ action: "countdown_start" });
+  await op.action({ action: "set_stage_message", text: "Wrap up please" });
+  await expect(page.getByRole("alert")).toHaveText("Wrap up please");
+  await expect(page.getByText("Q&A")).toBeVisible();
+  await page.screenshot({ path: "test-results/remote-stage.png", fullPage: true });
 });
