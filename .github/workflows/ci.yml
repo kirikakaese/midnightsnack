@@ -79,8 +79,12 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Fetch PDFium
+        run: node scripts/fetch-pdfium.mjs
       - name: Rust tests
         run: cargo test --workspace --locked
+        env:
+          MIDNIGHTSNACK_REQUIRE_PDFIUM: "1"
       - name: Frontend unit tests
         run: pnpm test
       - name: Build host (debug, no bundle)

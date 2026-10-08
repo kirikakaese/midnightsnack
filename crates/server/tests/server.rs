@@ -152,9 +152,14 @@ impl Client {
         }
     }
 
+    /// Waits for a matching message; fails after 15 s even if unrelated messages keep coming.
     async fn wait<T>(&mut self, mut f: impl FnMut(ServerMessage) -> Option<T>) -> T {
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(15);
         loop {
-            let m = self.recv().await.expect("connection closed");
+            let m = tokio::time::timeout_at(deadline, self.recv())
+                .await
+                .expect("timed out waiting for a matching message")
+                .expect("connection closed");
             if let Some(t) = f(m) {
                 return t;
             }
@@ -340,12 +345,16 @@ async fn full_pairing_and_control_flow() {
     }
 
     // Slide image with the session's media key.
-    let program = phone
-        .wait(|m| match m {
-            ServerMessage::Live { live } => live.program,
-            _ => None,
-        })
-        .await;
+    // `action()` consumes intermediate live updates, so read the position from the host.
+    let program = f
+        .handle
+        .state
+        .engine
+        .lock()
+        .unwrap()
+        .program()
+        .cloned()
+        .unwrap();
     let url = f.url(&format!(
         "/api/v1/media/slide/{}/{}?k={}",
         program.cue_id, program.slide, session.media_key
