@@ -20,6 +20,7 @@ use std::sync::Arc;
 
 use axum::http::{header, HeaderValue};
 use axum::routing::{get, post};
+use axum::serve::ListenerExt;
 use axum::Router;
 use midnightsnack_core::APP_VERSION;
 use midnightsnack_protocol::{HostInfo, Role, PROTOCOL_VERSION};
@@ -189,6 +190,12 @@ pub async fn start(config: ServerConfig) -> std::io::Result<ServerHandle> {
 
     let (tx, rx) = tokio::sync::oneshot::channel::<()>();
     let app = router(state.clone()).into_make_service_with_connect_info::<SocketAddr>();
+    // Live control sends many tiny messages; never let Nagle's algorithm delay them.
+    let listener = listener.tap_io(|tcp| {
+        if let Err(e) = tcp.set_nodelay(true) {
+            tracing::debug!(error = %e, "could not set TCP_NODELAY");
+        }
+    });
     tokio::spawn(async move {
         let server = axum::serve(listener, app).with_graceful_shutdown(async {
             let _ = rx.await;
