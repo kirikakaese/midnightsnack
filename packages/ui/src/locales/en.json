@@ -72,7 +72,7 @@
   "monitor.program": "Program",
   "monitor.preview": "Next",
   "monitor.frozen": "Frozen",
-  "monitor.behind_freeze": "Program behind freeze",
+  "monitor.behind_freeze": "Operator is on",
   "monitor.nothing_live": "Nothing live",
   "monitor.end_of_show": "End of show",
 

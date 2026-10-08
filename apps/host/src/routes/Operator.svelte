@@ -45,6 +45,8 @@
   });
 
   const programCue = $derived(conn?.cue(conn.live?.program?.cue_id));
+  const outputPos = $derived(conn?.live?.output ?? null);
+  const outputCue = $derived(conn?.cue(outputPos?.cue_id));
   const nextPos = $derived(conn?.live?.next ?? null);
   const nextCue = $derived(conn?.cue(nextPos?.cue_id));
   const slideNotes = $derived(
@@ -76,9 +78,10 @@
                 >{t("controls.blackout")}</span
               >{/if}
             {#if conn.live?.masters.logo}<span class="badge logo">{t("controls.logo")}</span>{/if}
+            <!-- The big monitor always shows what the audience sees. -->
             <span class="where">
-              {#if programCue && conn.live?.program}
-                {programCue.name} · {conn.live.program.slide + 1}/{programCue.slide_count}
+              {#if outputCue && outputPos}
+                {outputCue.name} · {outputPos.slide + 1}/{outputCue.slide_count}
               {:else}
                 {t("monitor.nothing_live")}
               {/if}
@@ -86,8 +89,18 @@
           </header>
           <div class="screen"><Stage {conn} /></div>
           {#if frozen}
-            <div class="screen small" aria-label={t("monitor.behind_freeze")}>
-              <Stage {conn} which="program" masters={false} />
+            <div class="behind">
+              <div class="screen small">
+                <Stage {conn} which="program" masters={false} />
+              </div>
+              <span class="where">
+                {t("monitor.behind_freeze")}:
+                {#if programCue && conn.live?.program}
+                  {programCue.name} · {conn.live.program.slide + 1}/{programCue.slide_count}
+                {:else}
+                  {t("monitor.nothing_live")}
+                {/if}
+              </span>
             </div>
           {/if}
         </section>
@@ -231,9 +244,15 @@
     border-radius: var(--ms-radius-sm);
     overflow: hidden;
   }
+  .behind {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 6px;
+  }
   .screen.small {
     width: 35%;
-    margin-top: 6px;
+    flex: none;
   }
   .lower {
     display: grid;

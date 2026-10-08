@@ -48,7 +48,11 @@ fn connection_info(window: WebviewWindow, state: State<'_, HostState>) -> Connec
     } else {
         s.operator_token.clone()
     };
-    ConnectionInfo { ws_url: s.local_ws_url(), http_base: s.local_http_url(), token }
+    ConnectionInfo {
+        ws_url: s.local_ws_url(),
+        http_base: s.local_http_url(),
+        token,
+    }
 }
 
 #[tauri::command]
@@ -122,7 +126,12 @@ fn set_keep_awake(state: &HostState, on: bool) {
 /// Keyboard overrides from the host settings file.
 #[tauri::command]
 fn keymap(state: State<'_, HostState>) -> std::collections::BTreeMap<String, String> {
-    state.settings.lock().unwrap_or_else(|e| e.into_inner()).keymap.clone()
+    state
+        .settings
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .keymap
+        .clone()
 }
 
 /// QR code for a join URL, as an SVG document.
@@ -156,7 +165,11 @@ fn pdfium_dirs(app: &AppHandle) -> Vec<PathBuf> {
         dirs.push(res);
     }
     // Development builds: the repository's download location.
-    dirs.push(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources").join("pdfium"));
+    dirs.push(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("resources")
+            .join("pdfium"),
+    );
     dirs
 }
 
@@ -169,7 +182,9 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let host_settings = settings::load(&config_dir);
 
     let mut config = ServerConfig::new(cache_dir);
-    config.bind.set_port(host_settings.port.unwrap_or(DEFAULT_PORT));
+    config
+        .bind
+        .set_port(host_settings.port.unwrap_or(DEFAULT_PORT));
     config.data_dir = Some(data_dir);
     config.pdfium_dirs = pdfium_dirs(&handle);
     if std::env::var_os("MIDNIGHTSNACK_SMOKE_TEST").is_some() {
@@ -190,7 +205,10 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 
     // Restore the output on the display it was on last time, if that display is present.
     if let Some(name) = reopen {
-        if output::list_displays(&handle).iter().any(|d| d.name == name) {
+        if output::list_displays(&handle)
+            .iter()
+            .any(|d| d.name == name)
+        {
             if let Err(e) = output::open(&handle, Some(&name), windowed) {
                 tracing::warn!(error = %e, "could not restore output window");
             } else {
@@ -205,11 +223,14 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 pub fn run() {
     tracing_subscriber::fmt()
         .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "info".into()),
+            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()),
         )
         .init();
-    tracing::info!(version = APP_VERSION, protocol = PROTOCOL_VERSION, "starting midnightsnack");
+    tracing::info!(
+        version = APP_VERSION,
+        protocol = PROTOCOL_VERSION,
+        "starting midnightsnack"
+    );
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())

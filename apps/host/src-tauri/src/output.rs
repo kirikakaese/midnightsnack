@@ -22,11 +22,17 @@ pub struct DisplayInfo {
 }
 
 fn display_name(m: &Monitor, index: usize) -> String {
-    m.name().cloned().unwrap_or_else(|| format!("Display {}", index + 1))
+    m.name()
+        .cloned()
+        .unwrap_or_else(|| format!("Display {}", index + 1))
 }
 
 pub fn list_displays(app: &AppHandle) -> Vec<DisplayInfo> {
-    let primary = app.primary_monitor().ok().flatten().and_then(|m| m.name().cloned());
+    let primary = app
+        .primary_monitor()
+        .ok()
+        .flatten()
+        .and_then(|m| m.name().cloned());
     app.available_monitors()
         .unwrap_or_default()
         .iter()
@@ -53,7 +59,10 @@ pub fn open(app: &AppHandle, display: Option<&str>, windowed: bool) -> tauri::Re
         .enumerate()
         .find(|(i, m)| display.is_some_and(|d| display_name(m, *i) == d))
         .or_else(|| {
-            monitors.iter().enumerate().find(|(_, m)| m.name().cloned() != primary)
+            monitors
+                .iter()
+                .enumerate()
+                .find(|(_, m)| m.name().cloned() != primary)
         })
         .map(|(_, m)| m.clone());
     let windowed = windowed || target.is_none();

@@ -35,7 +35,8 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: var(--ms-gap);
+    flex-wrap: wrap;
+    gap: 6px var(--ms-gap);
     padding: 8px 12px;
     border-bottom: 1px solid var(--ms-border);
   }
@@ -49,6 +50,7 @@
   }
   .actions {
     display: flex;
+    flex-wrap: wrap;
     gap: 6px;
   }
   .body {
