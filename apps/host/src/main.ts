@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import "@midnightsnack/ui/styles/tokens.css";
+import "@midnightsnack/ui/styles/forms.css";
 import { mount } from "svelte";
 import App from "./App.svelte";
 

@@ -13,6 +13,9 @@ pub struct HostSettings {
     pub output_display: Option<String>,
     /// Open the output as a normal window (rehearsal on a single screen).
     pub output_windowed: bool,
+    /// Display of the stage display window, if one is used.
+    pub stage_display: Option<String>,
+    pub stage_windowed: bool,
     /// Key (as `KeyboardEvent.key`, or `Shift+F5` style) -> action name. Overrides defaults.
     pub keymap: BTreeMap<String, String>,
     /// Port of the embedded server.

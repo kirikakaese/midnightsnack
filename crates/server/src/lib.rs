@@ -80,6 +80,8 @@ pub struct ServerHandle {
     pub operator_token: String,
     /// Operator token for the host's output windows (loopback only).
     pub output_token: String,
+    /// Read-only token for the host's stage display windows (loopback only).
+    pub stage_token: String,
     _mdns: Option<discovery::Advertisement>,
     shutdown: Option<tokio::sync::oneshot::Sender<()>>,
 }
@@ -169,11 +171,12 @@ pub async fn start(config: ServerConfig) -> std::io::Result<ServerHandle> {
     };
     *state::lock(&state.base_urls) = base_urls;
 
-    let (operator_token, output_token) = {
+    let (operator_token, output_token, stage_token) = {
         let mut d = state::lock(&state.devices);
         (
             d.add_local("Operator", Role::Admin),
             d.add_local("Output", Role::Operator),
+            d.add_local("Stage display", Role::StageViewer),
         )
     };
 
@@ -221,6 +224,7 @@ pub async fn start(config: ServerConfig) -> std::io::Result<ServerHandle> {
         state,
         operator_token,
         output_token,
+        stage_token,
         _mdns: mdns,
         shutdown: Some(tx),
     })

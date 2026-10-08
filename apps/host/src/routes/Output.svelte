@@ -51,7 +51,7 @@
 
 <div class="output" data-output={outputId}>
   {#if conn}
-    <Stage {conn} width={pixelSize.width} height={pixelSize.height} />
+    <Stage {conn} width={pixelSize.width} height={pixelSize.height} mode="output" />
   {/if}
 </div>
 
