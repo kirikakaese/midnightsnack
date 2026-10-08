@@ -34,6 +34,8 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Fetch PDFium
+        run: node scripts/fetch-pdfium.mjs
       - name: rustfmt
         run: cargo fmt --all --check
       - name: clippy
@@ -79,8 +81,12 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Fetch PDFium
+        run: node scripts/fetch-pdfium.mjs
       - name: Rust tests
         run: cargo test --workspace --locked
+        env:
+          MIDNIGHTSNACK_REQUIRE_PDFIUM: "1"
       - name: Frontend unit tests
         run: pnpm test
       - name: Build host (debug, no bundle)
@@ -91,3 +97,32 @@ jobs:
       - name: Smoke test (macOS / Windows)
         if: runner.os != 'Linux'
         run: node scripts/smoke-test.mjs
+
+  e2e:
+    name: Web remote E2E
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Fetch PDFium
+        run: node scripts/fetch-pdfium.mjs
+      - name: Build web remote
+        run: pnpm build:remote
+      - name: Build development server
+        run: cargo build -p midnightsnack-server --bin midnightsnack-devserver --locked
+      - name: Install Chromium
+        run: pnpm --filter @midnightsnack/remote exec playwright install --with-deps chromium
+      - name: Playwright
+        run: pnpm --filter @midnightsnack/remote e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-results
+          path: apps/remote/test-results

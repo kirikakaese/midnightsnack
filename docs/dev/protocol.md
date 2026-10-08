@@ -1,0 +1,105 @@
+# Protocol
+
+The host's embedded server speaks HTTP and WebSocket on one port (default **4747**). The types
+live in [`crates/protocol`](../../crates/protocol/src) and are generated into TypeScript in
+`packages/protocol`. This document describes the wire format of protocol version **1**.
+
+All JSON uses `snake_case`. Enums with data are internally tagged: messages by `type`, actions
+by `action`, pairing status by `status`. Timestamps are Unix epoch milliseconds of the host
+clock.
+
+## HTTP
+
+| Method & path                                   | Auth          | Purpose                          |
+| ----------------------------------------------- | ------------- | -------------------------------- |
+| `GET /api/v1/info`                              | none          | `HostInfo` (name, versions)      |
+| `POST /api/v1/pair`                             | join token+PIN| Start pairing → `{request_id}`   |
+| `GET /api/v1/pair/{request_id}`                 | request id    | `PairStatus`                     |
+| `GET /api/v1/ws`                                | token (hello) | Realtime WebSocket               |
+| `GET /api/v1/media/slide/{cue_id}/{slide}?k=&w=&h=` | media key | Rendered slide image             |
+| `GET /*`                                        | none          | Web remote (single-page app)     |
+
+Errors are returned as `{"code": "<error_code>"}` with a matching status: `401` for bad tokens or
+PINs, `403` forbidden, `404` not found, `429` pairing locked, `503` PDF engine missing.
+
+### Pairing
+
+1. The host shows a QR code with `http://<lan-ip>:<port>/join#t=<join token>`. The token is in
+   the URL fragment so it is never sent in requests or logged.
+2. The remote posts `{"join_token", "pin", "device_name"}` to `/api/v1/pair`.
+   - The join token is **one-time**: it rotates after every successful submission.
+   - 5 wrong attempts from one address lock that address for 60 s; 20 failures across all
+     addresses within a minute lock pairing globally for 60 s.
+3. The remote polls `/api/v1/pair/{request_id}` once per second:
+   `{"status":"pending"}` → `{"status":"approved","token","device_id","role"}` (returned
+   exactly once) or `{"status":"denied"}`. Requests expire after 5 minutes.
+4. The operator approves with a role (or the host auto-approves with a configured role).
+5. The remote stores the token and uses it for every WebSocket connection.
+
+## WebSocket
+
+The first client message must be `hello` within 10 seconds:
+
+```json
+{ "type": "hello", "protocol_version": 1, "token": "<session token>" }
+```
+
+On failure the server sends `{"type":"error","code":"unauthorized" | "protocol_mismatch" |
+"malformed_message"}` and closes. On success it sends, in order: `welcome`, `show`, `live`,
+(admins: `devices`, `pairing`), `render_progress`.
+
+### Client → host
+
+| `type`     | Fields                         | Notes                                           |
+| ---------- | ------------------------------ | ----------------------------------------------- |
+| `hello`    | `protocol_version`, `token`    | First message only                              |
+| `action`   | `request_id`, `action`         | Answered by `action_result` with the same id    |
+| `viewport` | `width`, `height`              | Output windows only (ignored from remotes)      |
+| `ping`     | `nonce`                        | Answered by `pong`                              |
+
+### Host → client
+
+| `type`            | Fields                         | When                                    |
+| ----------------- | ------------------------------ | --------------------------------------- |
+| `welcome`         | `host`, `session`              | After a valid `hello`                   |
+| `show`            | `show` (`ShowSnapshot`)        | Cue list or show metadata changed       |
+| `live`            | `live` (`LiveState`)           | Position, masters or timers changed     |
+| `devices`         | `devices`, `pending`           | Admins; device list or pairing requests |
+| `pairing`         | `pairing` (PIN, join URLs)     | Admins; PIN/join token changed          |
+| `session`         | `session`                      | This device's role changed              |
+| `render_progress` | `queued`                       | Background render queue length          |
+| `action_result`   | `request_id`, `error \| null`  | Reply to `action`                       |
+| `pong`            | `nonce`                        | Reply to `ping`                         |
+| `error`           | `code`                         | Protocol-level error                    |
+
+The server also sends WebSocket ping frames every 5 s to measure latency (shown in the device
+list).
+
+### State
+
+`LiveState.output` is what the audience sees; it differs from `program` only while frozen.
+Master states are drawn on top in this order: content → logo → blackout.
+Stopwatch elapsed time is `accumulated_ms + (now - running_since_ms)`; clients compute
+`now` as their clock plus `host_time_ms - Date.now()` from the last `live` message.
+
+### Actions and roles
+
+| Action                                                   | Minimum role | Local only |
+| -------------------------------------------------------- | ------------ | ---------- |
+| `go`, `next`, `prev` (presenters: within the live cue)   | presenter    |            |
+| `next_cue`, `prev_cue`, `go_to`                          | operator     |            |
+| `set_/toggle_blackout`, `set_/toggle_freeze`, `set_/toggle_logo`, `panic` | operator |  |
+| `timer_start`, `timer_pause`, `timer_reset`              | operator     |            |
+| `rename_show`, `rename_cue`, `set_cue_notes`, `set_cue_color`, `move_cue`, `remove_cue`, `add_blank` | admin | |
+| `add_files`, `open_show`, `save_show` with a `path`      | admin        | yes        |
+| `new_show`, `save_show` without `path`                   | admin        |            |
+| `approve_pairing`, `deny_pairing`, `set_device_role`, `revoke_device`, `disconnect_all`, `set_auto_approve` | admin | |
+
+"Local only" actions carry paths on the host's file system and are refused from remote devices
+even with the admin role. Stage viewers cannot send any action.
+
+## Media
+
+Slide images require the per-connection `media_key` from `welcome.session` (image elements
+cannot send headers). Without `w`/`h` a 640×360 thumbnail is returned; output windows request
+their native pixel size. Responses carry an `ETag`; send `If-None-Match` to get `304`.

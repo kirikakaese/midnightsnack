@@ -19,13 +19,14 @@
     size = "md",
     active = false,
     type = "button",
+    class: className = "",
     children,
     ...rest
   }: Props = $props();
 </script>
 
 <button
-  class="ms-btn ms-btn--{variant} ms-btn--{size}"
+  class="ms-btn ms-btn--{variant} ms-btn--{size} {className}"
   class:ms-btn--active={active}
   aria-pressed={variant === "default" || variant === "ghost" ? undefined : active}
   {type}
@@ -53,8 +54,12 @@
       background-color 80ms linear,
       border-color 80ms linear;
   }
-  .ms-btn:hover:not(:disabled) {
-    background: var(--ms-surface-3);
+  /* Touchscreens keep :hover after a tap, so only real pointers get a hover state, and it
+     never hides a latched (active) state. */
+  @media (hover: hover) {
+    .ms-btn:hover:not(:disabled):not(.ms-btn--active) {
+      background: var(--ms-surface-3);
+    }
   }
   .ms-btn:disabled {
     opacity: 0.45;

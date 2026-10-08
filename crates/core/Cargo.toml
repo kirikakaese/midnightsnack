@@ -13,6 +13,9 @@ midnightsnack-protocol.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+uuid.workspace = true
+zip.workspace = true
+tempfile.workspace = true
 
 [lints]
 workspace = true

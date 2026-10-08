@@ -1,0 +1,244 @@
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<script lang="ts">
+  import type { CueSummary } from "@midnightsnack/protocol";
+  import { Button, Panel, t, type HostConnection } from "@midnightsnack/ui";
+  import { open } from "@tauri-apps/plugin-dialog";
+
+  interface Props {
+    conn: HostConnection;
+  }
+  let { conn }: Props = $props();
+
+  const cues = $derived(conn.show?.cues ?? []);
+  const programCue = $derived(conn.live?.program?.cue_id);
+  const outputCue = $derived(conn.live?.output?.cue_id);
+  const nextCue = $derived(conn.live?.next?.cue_id);
+  let editing = $state<string | null>(null);
+  let editName = $state("");
+  let dragId = $state<string | null>(null);
+
+  const COLORS = [null, "#ef4444", "#f59e0b", "#22c55e", "#38bdf8", "#a78bfa", "#ec4899"];
+
+  const mediaFilter = [
+    {
+      name: t("cue.filter_media"),
+      extensions: ["pdf", "png", "jpg", "jpeg", "gif", "webp", "bmp", "tif", "tiff"],
+    },
+  ];
+
+  async function addFiles() {
+    const paths = await open({ multiple: true, filters: mediaFilter });
+    if (paths?.length) conn.action({ action: "add_files", paths, at_index: null });
+  }
+
+  async function addFolder() {
+    const path = await open({ directory: true });
+    if (typeof path === "string")
+      conn.action({ action: "add_files", paths: [path], at_index: null });
+  }
+
+  function go(cue: CueSummary) {
+    if (cue.slide_count > 0)
+      conn.action({ action: "go_to", position: { cue_id: cue.id, slide: 0 } });
+  }
+
+  function startRename(cue: CueSummary) {
+    editing = cue.id;
+    editName = cue.name;
+  }
+
+  function commitRename(cue: CueSummary) {
+    if (editing !== cue.id) return;
+    editing = null;
+    const name = editName.trim();
+    if (name && name !== cue.name) conn.action({ action: "rename_cue", cue_id: cue.id, name });
+  }
+
+  function move(cue: CueSummary, delta: number) {
+    const idx = cues.findIndex((c) => c.id === cue.id);
+    const to = idx + delta;
+    if (to < 0 || to >= cues.length) return;
+    conn.action({ action: "move_cue", cue_id: cue.id, to_index: to });
+  }
+
+  function cycleColor(cue: CueSummary) {
+    const i = COLORS.indexOf(cue.color);
+    const color = COLORS[(i + 1) % COLORS.length] ?? null;
+    conn.action({ action: "set_cue_color", cue_id: cue.id, color });
+  }
+
+  function onDrop(target: CueSummary) {
+    if (!dragId || dragId === target.id) return;
+    const to = cues.findIndex((c) => c.id === target.id);
+    conn.action({ action: "move_cue", cue_id: dragId, to_index: to });
+    dragId = null;
+  }
+</script>
+
+<Panel title={t("cue.list")}>
+  {#snippet actions()}
+    <Button onclick={addFiles}>{t("cue.add_files")}</Button>
+    <Button onclick={addFolder}>{t("cue.add_folder")}</Button>
+    <Button onclick={() => conn.action({ action: "add_blank", color: "#000000", at_index: null })}>
+      {t("cue.add_blank")}
+    </Button>
+  {/snippet}
+
+  {#if cues.length === 0}
+    <p class="empty">{t("cue.empty")}</p>
+  {:else}
+    <ol class="cues" aria-label={t("cue.list")}>
+      {#each cues as cue, i (cue.id)}
+        <li
+          class="cue"
+          class:program={cue.id === programCue}
+          class:output={cue.id === outputCue}
+          class:next={cue.id === nextCue && cue.id !== programCue}
+          draggable="true"
+          ondragstart={() => (dragId = cue.id)}
+          ondragover={(e) => e.preventDefault()}
+          ondrop={() => onDrop(cue)}
+        >
+          <button
+            class="tag"
+            style:background={cue.color ?? "transparent"}
+            aria-label={t("cue.color")}
+            onclick={() => cycleColor(cue)}
+          ></button>
+          <span class="num">{i + 1}</span>
+          {#if editing === cue.id}
+            <!-- svelte-ignore a11y_autofocus -->
+            <input
+              class="rename"
+              bind:value={editName}
+              autofocus
+              aria-label={t("cue.rename")}
+              onblur={() => commitRename(cue)}
+              onkeydown={(e) => {
+                if (e.key === "Enter") commitRename(cue);
+                if (e.key === "Escape") editing = null;
+              }}
+            />
+          {:else}
+            <button class="name" onclick={() => go(cue)} ondblclick={() => startRename(cue)}>
+              <span class="title">{cue.name || t("cue.unnamed")}</span>
+              <span class="meta">
+                {t(`cue.kind.${cue.kind}`)} · {t("cue.slides", { n: cue.slide_count })}
+              </span>
+            </button>
+          {/if}
+          <span class="tools">
+            <button aria-label={t("cue.rename")} onclick={() => startRename(cue)}>✎</button>
+            <button aria-label={t("cue.move_up")} disabled={i === 0} onclick={() => move(cue, -1)}
+              >↑</button
+            >
+            <button
+              aria-label={t("cue.move_down")}
+              disabled={i === cues.length - 1}
+              onclick={() => move(cue, 1)}>↓</button
+            >
+            <button
+              aria-label={t("cue.remove")}
+              onclick={() => conn.action({ action: "remove_cue", cue_id: cue.id })}>✕</button
+            >
+          </span>
+        </li>
+      {/each}
+    </ol>
+  {/if}
+</Panel>
+
+<style>
+  .empty {
+    color: var(--ms-text-muted);
+  }
+  .cues {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 4px;
+  }
+  .cue {
+    display: grid;
+    grid-template-columns: 10px 28px 1fr auto;
+    align-items: center;
+    gap: 6px;
+    border: 2px solid transparent;
+    border-radius: var(--ms-radius-sm);
+    background: var(--ms-surface-2);
+    padding: 2px 4px 2px 0;
+  }
+  .cue.next {
+    border-color: var(--ms-accent);
+  }
+  .cue.program {
+    border-color: var(--ms-go);
+  }
+  .cue.output:not(.program) {
+    border-color: var(--ms-freeze);
+  }
+  .tag {
+    width: 10px;
+    height: 100%;
+    min-height: 40px;
+    border: 0;
+    border-radius: 4px 0 0 4px;
+    cursor: pointer;
+    padding: 0;
+  }
+  .num {
+    color: var(--ms-text-muted);
+    font-family: var(--ms-font-mono);
+    text-align: right;
+  }
+  .name {
+    display: grid;
+    text-align: left;
+    background: none;
+    border: 0;
+    color: inherit;
+    font: inherit;
+    padding: 6px 0;
+    cursor: pointer;
+    min-width: 0;
+  }
+  .title {
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .meta {
+    font-size: 0.8rem;
+    color: var(--ms-text-muted);
+  }
+  .rename {
+    font: inherit;
+    padding: 6px;
+    background: var(--ms-bg);
+    color: var(--ms-text);
+    border: 1px solid var(--ms-accent);
+    border-radius: 4px;
+  }
+  .tools {
+    display: flex;
+    gap: 2px;
+  }
+  .tools button {
+    min-width: 30px;
+    min-height: 30px;
+    background: transparent;
+    border: 0;
+    color: var(--ms-text-muted);
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  .tools button:hover:not(:disabled) {
+    background: var(--ms-surface-3);
+    color: var(--ms-text);
+  }
+  .tools button:disabled {
+    opacity: 0.3;
+  }
+</style>

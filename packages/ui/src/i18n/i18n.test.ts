@@ -12,7 +12,7 @@ describe("i18n", () => {
     addMessages("de", { "status.connected": "Verbunden" });
     setLocale("de");
     expect(t("status.connected")).toBe("Verbunden");
-    expect(t("status.disconnected")).toBe("Disconnected");
+    expect(t("status.connecting")).toBe("Connecting…");
     setLocale("en");
   });
 

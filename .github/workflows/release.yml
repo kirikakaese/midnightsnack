@@ -37,14 +37,17 @@ jobs:
             os: macos-14
             rust-targets: aarch64-apple-darwin,x86_64-apple-darwin
             args: --target universal-apple-darwin --bundles dmg
+            pdfium: mac-univ
           - name: Windows x64
             os: windows-2022
             rust-targets: ""
             args: --bundles msi,nsis
+            pdfium: win-x64
           - name: Linux x64
             os: ubuntu-22.04
             rust-targets: ""
             args: --bundles deb,appimage
+            pdfium: linux-x64
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
@@ -64,6 +67,8 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Fetch PDFium
+        run: node scripts/fetch-pdfium.mjs ${{ matrix.pdfium }}
       - uses: tauri-apps/tauri-action@v1
         with:
           projectPath: apps/host
