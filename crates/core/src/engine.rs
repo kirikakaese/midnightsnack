@@ -502,6 +502,11 @@ impl Engine {
         c
     }
 
+    /// Flags unsaved changes (used when restoring an autosave).
+    pub fn mark_dirty(&mut self) {
+        self.dirty = true;
+    }
+
     /// Records a successful save.
     pub fn mark_saved(&mut self, path: PathBuf) -> Change {
         self.path = Some(path);
