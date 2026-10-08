@@ -1,0 +1,17 @@
+[package]
+name = "midnightsnack-protocol"
+description = "Wire protocol shared between the midnightsnack host and its remotes"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+ts-rs.workspace = true
+
+[lints]
+workspace = true
