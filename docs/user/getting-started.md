@@ -9,8 +9,9 @@ A **show** is a list of **cues**. In the operator window use:
   (`2.png` before `10.png`).
 - **+ Blank** — a black slide, e.g. for breaks.
 
-Drag cues (or use ↑/↓) to reorder, ✎ or double-click to rename, click the color bar to tag a
-cue, ✕ to remove it.
+Click a cue to select it and edit it in the **Cue** tab; double-click it or press ▶ to send it
+live. Drag cues (or use ↑/↓) to reorder, ✎ to rename, click the color bar to tag a cue, ✕ to
+remove it. Video, audio, text and timer cues are described in [media.md](media.md).
 
 ### Speaker notes
 
@@ -42,7 +43,7 @@ midnightsnack remembers the display and reopens the output there next time if it
 | **GO** / **NEXT**, Space, →, PageDown | Start the show / next slide (continues into the next cue) |
 | **PREV**, ←, PageUp                   | Previous slide                                           |
 | **CUE ⏭ / ⏮ CUE**, Shift+→ / Shift+← | Jump to the next cue / start of the current or previous cue |
-| Click a cue or slide thumbnail        | Jump there                                               |
+| Double-click a cue, ▶, or click a slide thumbnail | Jump there                               |
 | **BLACKOUT**, B or `.`                | Black screen (toggle)                                    |
 | **FREEZE**, F                         | Keep the audience on the current slide while you move on |
 | **LOGO**, L                           | Show the logo screen (toggle)                            |

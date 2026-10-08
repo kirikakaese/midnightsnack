@@ -13,9 +13,10 @@ MIDI controllers, OSC and Stream Deck via Bitfocus Companion.
   dialogs, cursors or spinners on the audience screen.
 - **Fast** — live actions react in under 100 ms on LAN; upcoming slides are pre-rendered.
 
-> **Status:** early development (phase 1, MVP). PDF and image shows, one projector output,
-> presenter view, keyboard/clicker control and phone remotes with pairing work today. See the
-> [roadmap](#roadmap) and the [user guide](docs/user/README.md).
+> **Status:** early development (phase 2). PDF, image, video, audio, text/lyrics and timer cues,
+> transitions, overlays, a stage display, one projector output, keyboard/clicker control and
+> phone remotes with pairing work today. See the [roadmap](#roadmap) and the
+> [user guide](docs/user/README.md).
 
 ## Quick start (development)
 

@@ -10,6 +10,8 @@
   ```sh
   sudo apt install libwebkit2gtk-4.1-dev libgtk-3-dev libsoup-3.0-dev librsvg2-dev \
     libayatana-appindicator3-dev libasound2-dev
+  # video and audio playback in the webview
+  sudo apt install gstreamer1.0-libav gstreamer1.0-plugins-good gstreamer1.0-gl
   ```
 
 ## Common tasks

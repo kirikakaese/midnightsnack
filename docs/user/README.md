@@ -1,6 +1,7 @@
 # User guide
 
 - [Getting started](getting-started.md) — install, build a show, put it on the projector
+- [Video, audio, text, timers and overlays](media.md) — including the codec matrix
 - [Phones and tablets as remotes](remotes.md) — pairing, roles, stage view
 - [Keyboard and presentation clickers](keyboard.md)
 

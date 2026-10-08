@@ -22,7 +22,7 @@ devices from talking to each other — use a different network or the laptop's h
 | Role             | Can                                                                     |
 | ---------------- | ----------------------------------------------------------------------- |
 | **Admin**        | Everything the operator window can do except opening files on the laptop |
-| **Operator**     | Run the show: next/previous, jump to cues, blackout, freeze, logo, timers |
+| **Operator**     | Run the show: next/previous, jump to cues, blackout, freeze, logo, media playback, overlays, countdown, stage messages |
 | **Presenter**    | Next/previous within the current cue only; sees notes and timers         |
 | **Stage viewer** | Read-only stage display: current and next slide, notes, big timers       |
 
@@ -34,5 +34,5 @@ stage displays during rehearsals). The PIN is still required.
 
 ## Stage view
 
-Every remote can switch to **Stage view**: large current/next slides, notes and timers, no
-controls. Stage viewers always see it.
+Every remote can switch to **Stage view**: large current/next slides, notes, timers, the
+countdown and messages from the operator, no controls. Stage viewers always see it.
