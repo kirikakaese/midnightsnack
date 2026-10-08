@@ -13,7 +13,9 @@ MIDI controllers, OSC and Stream Deck via Bitfocus Companion.
   dialogs, cursors or spinners on the audience screen.
 - **Fast** — live actions react in under 100 ms on LAN; upcoming slides are pre-rendered.
 
-> **Status:** early development. See the [roadmap](#roadmap) for what works today.
+> **Status:** early development (phase 1, MVP). PDF and image shows, one projector output,
+> presenter view, keyboard/clicker control and phone remotes with pairing work today. See the
+> [roadmap](#roadmap) and the [user guide](docs/user/README.md).
 
 ## Quick start (development)
 
@@ -22,7 +24,17 @@ the [Tauri v2 system dependencies](https://v2.tauri.app/start/prerequisites/) fo
 
 ```sh
 pnpm install
-pnpm dev          # starts the host app with hot reload
+node scripts/fetch-pdfium.mjs   # downloads the PDF engine for your platform
+pnpm build:remote               # builds the phone remote served by the host
+pnpm dev                        # starts the host app with hot reload
+```
+
+To work on the phone remote without the desktop app, run the headless development server with a
+demo show and the remote's dev server:
+
+```sh
+cargo run -p midnightsnack-server --bin midnightsnack-devserver -- --demo
+pnpm --filter @midnightsnack/remote dev
 ```
 
 Run all checks the way CI does:
@@ -31,6 +43,7 @@ Run all checks the way CI does:
 cargo fmt --all --check && cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 pnpm lint && pnpm check && pnpm test && pnpm i18n:check
+pnpm --filter @midnightsnack/remote e2e   # after building the remote and the devserver
 ```
 
 More in [docs/dev/setup.md](docs/dev/setup.md).
@@ -43,11 +56,13 @@ More in [docs/dev/setup.md](docs/dev/setup.md).
 | `apps/remote`        | Web remote (Svelte), embedded into the host binary              |
 | `crates/core`        | Show model, cue engine, action dispatcher — no UI, unit-tested  |
 | `crates/protocol`    | Wire protocol types; generates TypeScript via ts-rs             |
+| `crates/render`      | PDF (PDFium) and image rendering with a disk cache              |
+| `crates/server`      | Embedded HTTP/WebSocket server: pairing, devices, media, autosave |
 | `packages/ui`        | Shared Svelte component library, design tokens and i18n         |
 | `packages/protocol`  | Generated TypeScript protocol types                             |
 | `docs/`              | User guides, developer docs, ADRs and phase plans               |
 
-Further crates (`render`, `capture`, `control`, `relay`, …) are added in the phase that needs
+Further crates (`capture`, `control`, `relay`, …) are added in the phase that needs
 them; see [docs/dev/architecture.md](docs/dev/architecture.md).
 
 ## Roadmap
