@@ -1,0 +1,14 @@
+{
+  "app.name": "midnightsnack",
+  "app.tagline": "Presentation host with remote control",
+  "operator.placeholder": "The operator view will live here.",
+  "action.go": "GO",
+  "remote.placeholder": "The remote will live here.",
+  "status.connected": "Connected",
+  "status.connecting": "Connecting…",
+  "status.disconnected": "Disconnected",
+  "error.protocol_mismatch": "This remote is not compatible with the host version.",
+  "error.malformed_message": "The host could not understand a message.",
+  "error.unauthorized": "This device is not paired.",
+  "error.forbidden": "Your role does not allow this action."
+}

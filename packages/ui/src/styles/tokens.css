@@ -1,0 +1,62 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
+/* midnightsnack design tokens — dark, high-contrast show-control palette. */
+:root {
+  color-scheme: dark;
+
+  --ms-bg: #0b0d12;
+  --ms-surface: #141821;
+  --ms-surface-2: #1c2230;
+  --ms-surface-3: #262e40;
+  --ms-border: #2f3850;
+  --ms-text: #eef1f7;
+  --ms-text-muted: #a3acc2;
+  --ms-focus: #ffd447;
+
+  --ms-accent: #4f8cff;
+  --ms-go: #22c55e;
+  --ms-go-text: #04210f;
+  --ms-danger: #ef4444;
+  --ms-warn: #f59e0b;
+  --ms-freeze: #38bdf8;
+  --ms-logo: #a78bfa;
+
+  --ms-radius: 10px;
+  --ms-radius-sm: 6px;
+  --ms-gap: 12px;
+  --ms-touch: 48px;
+
+  --ms-font: "Inter", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  --ms-font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Consolas, monospace;
+  --ms-font-size: 15px;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--ms-bg);
+  color: var(--ms-text);
+  font-family: var(--ms-font);
+  font-size: var(--ms-font-size);
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible {
+  outline: 3px solid var(--ms-focus);
+  outline-offset: 2px;
+}
+
+.ms-visually-hidden {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
