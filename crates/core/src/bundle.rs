@@ -248,7 +248,10 @@ mod tests {
         let mut show = fixture(src.path());
         let logo = src.path().join("logo.png");
         std::fs::write(&logo, b"logo").unwrap();
-        show.assets.push(crate::model::Asset { id: "a1".into(), file: MediaRef::linked(&logo) });
+        show.assets.push(crate::model::Asset {
+            id: "a1".into(),
+            file: MediaRef::linked(&logo),
+        });
         show.logo = Some("a1".into());
         let file = src.path().join("show.msnack");
         save(&show, &file, true).unwrap();
