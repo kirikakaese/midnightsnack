@@ -19,6 +19,8 @@ thiserror = "2"
 ts-rs = { version = "12", features = ["serde-compat", "no-serde-warnings"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 tracing = "0.1"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+tempfile = "3"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [workspace.lints.rust]
