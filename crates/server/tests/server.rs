@@ -605,3 +605,150 @@ async fn serves_remote_or_placeholder() {
     assert!(res.status() == 200 || res.status() == 404);
     assert_eq!(res.headers()["x-content-type-options"], "nosniff");
 }
+
+#[tokio::test]
+async fn media_files_support_range_requests() {
+    let f = fixture().await;
+    let mut op = f.connect(&f.handle.operator_token).await;
+    let session = op.welcome().await;
+    let clip = f.dir.path().join("clip.mp4");
+    std::fs::write(&clip, (0u8..=255).cycle().take(10_000).collect::<Vec<u8>>()).unwrap();
+    op.action(Action::AddFiles {
+        paths: vec![clip.to_string_lossy().into()],
+        at_index: None,
+    })
+    .await
+    .unwrap();
+    let show = f.handle.state.show_snapshot(Role::Admin);
+    assert_eq!(show.cues[0].kind, CueKind::Video);
+    let url = f.url(&format!(
+        "/api/v1/media/file/{}?k={}",
+        show.cues[0].id, session.media_key
+    ));
+
+    let res = f
+        .http
+        .get(&url)
+        .header("range", "bytes=100-109")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 206);
+    assert_eq!(res.headers()["content-type"], "video/mp4");
+    let body = res.bytes().await.unwrap();
+    assert_eq!(body.as_ref(), &(100u8..110).collect::<Vec<u8>>()[..]);
+
+    let res = f.http.get(&url).send().await.unwrap();
+    assert_eq!(res.status(), 200);
+    assert_eq!(res.bytes().await.unwrap().len(), 10_000);
+
+    let no_key = f.url(&format!("/api/v1/media/file/{}?k=nope", show.cues[0].id));
+    assert_eq!(f.http.get(no_key).send().await.unwrap().status(), 401);
+}
+
+#[tokio::test]
+async fn scheduler_auto_advances() {
+    let f = fixture().await;
+    let mut op = f.connect(&f.handle.operator_token).await;
+    op.welcome().await;
+    let (a, b) = (f.png("a.png"), f.png("b.png"));
+    op.action(Action::AddFiles {
+        paths: vec![a, b],
+        at_index: None,
+    })
+    .await
+    .unwrap();
+    let first = f.handle.state.show_snapshot(Role::Admin).cues[0].id.clone();
+    let second = f.handle.state.show_snapshot(Role::Admin).cues[1].id.clone();
+    op.action(Action::SetCueAutoAdvance {
+        cue_id: first,
+        after_ms: Some(300),
+    })
+    .await
+    .unwrap();
+    op.action(Action::Go).await.unwrap();
+    let live = op
+        .wait(|m| match m {
+            ServerMessage::Live { live }
+                if live.program.as_ref().is_some_and(|p| p.cue_id == second) =>
+            {
+                Some(live)
+            }
+            _ => None,
+        })
+        .await;
+    assert!(live.auto_advance_at_ms.is_none());
+}
+
+#[tokio::test]
+async fn logo_assets_and_stage_messages() {
+    let f = fixture().await;
+    let mut op = f.connect(&f.handle.operator_token).await;
+    let session = op.welcome().await;
+    let logo = f.png("logo.png");
+    op.action(Action::SetLogoImage { path: Some(logo) })
+        .await
+        .unwrap();
+    let show = f.handle.state.show_snapshot(Role::Admin);
+    let asset = show.logo.expect("logo asset");
+    let res = f
+        .http
+        .get(f.url(&format!(
+            "/api/v1/media/asset/{asset}?k={}",
+            session.media_key
+        )))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 200);
+    assert_eq!(res.headers()["content-type"], "image/png");
+    let txt = f.dir.path().join("x.txt");
+    std::fs::write(&txt, "x").unwrap();
+    assert_eq!(
+        op.action(Action::SetLogoImage {
+            path: Some(txt.to_string_lossy().into())
+        })
+        .await,
+        Err(ErrorCode::UnsupportedFile)
+    );
+
+    // A stage viewer receives the operator's message.
+    op.action(Action::SetAutoApprove {
+        role: Some(Role::StageViewer),
+    })
+    .await
+    .unwrap();
+    let info = f.handle.state.pairing_info();
+    let token = info.join_urls[0].split("#t=").nth(1).unwrap().to_owned();
+    let res: PairResponse = f
+        .http
+        .post(f.url("/api/v1/pair"))
+        .json(&PairRequest {
+            join_token: token,
+            pin: info.pin,
+            device_name: "Stage".into(),
+        })
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let PairStatus::Approved { token, .. } = f.status(&res.request_id).await else {
+        panic!()
+    };
+    let mut stage = f.connect(&token).await;
+    stage.welcome().await;
+    op.action(Action::SetStageMessage {
+        text: Some("Wrap up".into()),
+    })
+    .await
+    .unwrap();
+    let msg = stage
+        .wait(|m| match m {
+            ServerMessage::Live { live } => live.stage_message,
+            _ => None,
+        })
+        .await;
+    assert_eq!(msg, "Wrap up");
+}

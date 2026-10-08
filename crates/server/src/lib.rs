@@ -10,6 +10,7 @@ mod devices;
 pub mod discovery;
 mod host_actions;
 mod pairing;
+mod scheduler;
 pub mod state;
 mod util;
 mod ws;
@@ -108,6 +109,8 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/v1/pair/{request_id}", get(api::pair_status))
         .route("/api/v1/ws", get(ws::handler))
         .route("/api/v1/media/slide/{cue_id}/{slide}", get(api::slide))
+        .route("/api/v1/media/file/{cue_id}", get(api::media_file))
+        .route("/api/v1/media/asset/{asset_id}", get(api::asset))
         .fallback(assets::serve)
         .layer(SetResponseHeaderLayer::overriding(
             header::X_CONTENT_TYPE_OPTIONS,
@@ -186,6 +189,7 @@ pub async fn start(config: ServerConfig) -> std::io::Result<ServerHandle> {
         });
     }
     tokio::spawn(autosave::run(state.clone()));
+    tokio::spawn(scheduler::run(state.clone()));
     state.prefetch();
 
     let (tx, rx) = tokio::sync::oneshot::channel::<()>();
