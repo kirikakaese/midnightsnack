@@ -42,10 +42,17 @@
     onready,
   }: Props = $props();
 
-  /** Maximum drift before we seek (ms). */
-  const DRIFT_MS = 300;
+  /** Drift that is corrected by seeking (ms). Smaller drift is absorbed by the playback rate. */
+  const SEEK_DRIFT_MS = 1000;
+  /** Drift below this is ignored (ms). */
+  const TOLERANCE_MS = 60;
+  /** Never seek more often than this (ms): seeking is expensive and restarts decoding. */
+  const SEEK_COOLDOWN_MS = 2000;
+  let lastSeek = 0;
 
   let el = $state<HTMLMediaElement | null>(null);
+  /** Bumped when the element can be synced (metadata loaded), to re-run the sync effect. */
+  let loaded = $state(0);
   let endReported = false;
   let loadReported = false;
 
@@ -62,21 +69,43 @@
     if (mode === "thumb") onready();
   });
 
-  // Keep the element on the host's timeline.
+  // Keep the element on the host's timeline: small drift is corrected by playing slightly
+  // faster or slower (inaudible), large drift (seek, restart, pause) by seeking.
   $effect(() => {
+    // Read every reactive input before any early return: Svelte only re-runs an effect for
+    // the state it actually read.
     const m = el;
+    const target = desiredMs;
+    const shouldPlay = playing;
+    const volume = mode === "output" ? Math.max(0, Math.min(1, options.volume)) : 0;
+    void loaded;
     if (!m || m.readyState < 1) return;
-    m.volume = mode === "output" ? Math.max(0, Math.min(1, options.volume)) : 0;
-    const drift = Math.abs(m.currentTime * 1000 - desiredMs);
-    if (drift > DRIFT_MS) m.currentTime = desiredMs / 1000;
-    if (playing && m.paused) m.play().catch(() => {});
-    if (!playing && !m.paused) m.pause();
+    m.volume = volume;
+    const drift = target - m.currentTime * 1000;
+    const now = performance.now();
+    if (!shouldPlay) {
+      if (!m.paused) m.pause();
+      if (Math.abs(drift) > TOLERANCE_MS) m.currentTime = target / 1000;
+      return;
+    }
+    if (Math.abs(drift) > SEEK_DRIFT_MS && now - lastSeek > SEEK_COOLDOWN_MS) {
+      lastSeek = now;
+      m.currentTime = target / 1000;
+      m.playbackRate = 1;
+    } else if (Math.abs(drift) > TOLERANCE_MS) {
+      m.playbackRate = 1 + Math.max(-0.08, Math.min(0.08, drift / 2000));
+    } else {
+      m.playbackRate = 1;
+    }
+    if (m.paused) m.play().catch(() => {});
   });
 
   function onLoaded() {
     const m = el;
     if (!m) return;
+    lastSeek = performance.now();
     m.currentTime = desiredMs / 1000;
+    loaded++;
     if (mode === "output" && !loadReported && Number.isFinite(m.duration)) {
       loadReported = true;
       void conn.action({

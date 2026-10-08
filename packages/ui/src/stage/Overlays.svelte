@@ -27,7 +27,7 @@
   {#each visible as o (o.id)}
     {#if o.kind.type === "ticker"}
       {@const t = o.kind}
-      <div class="ticker pos-{o.position.startsWith('top') ? 'top' : 'bottom'}" style={style(o)}>
+      <div class="ticker {o.position.startsWith('top') ? 'at-top' : 'at-bottom'}" style={style(o)}>
         <!-- Duration: one screen width per (100 / speed) seconds, plus the text length. -->
         <div
           class="track"
@@ -37,7 +37,7 @@
         </div>
       </div>
     {:else}
-      <div class="box {o.position}" style={style(o)}>
+      <div class="box pos-{o.position}" style={style(o)}>
         {#if o.kind.type === "lower_third"}
           <div class="lower-third">
             <div class="title">{o.kind.title}</div>
@@ -75,29 +75,29 @@
     font-size: calc(4.2cqh * var(--scale));
     color: var(--fg);
   }
-  .top-left {
+  .pos-top_left {
     top: 5cqh;
     left: 4cqw;
   }
-  .top-center {
+  .pos-top_center {
     top: 5cqh;
     left: 50%;
     transform: translateX(-50%);
   }
-  .top-right {
+  .pos-top_right {
     top: 5cqh;
     right: 4cqw;
   }
-  .bottom-left {
+  .pos-bottom_left {
     bottom: 7cqh;
     left: 4cqw;
   }
-  .bottom-center {
+  .pos-bottom_center {
     bottom: 7cqh;
     left: 50%;
     transform: translateX(-50%);
   }
-  .bottom-right {
+  .pos-bottom_right {
     bottom: 7cqh;
     right: 4cqw;
   }
@@ -148,10 +148,10 @@
     display: flex;
     align-items: center;
   }
-  .ticker.pos-bottom {
+  .ticker.at-bottom {
     bottom: 0;
   }
-  .ticker.pos-top {
+  .ticker.at-top {
     top: 0;
   }
   .track {
