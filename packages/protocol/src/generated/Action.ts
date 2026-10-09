@@ -5,6 +5,7 @@ import type { OutputDef } from "./OutputDef";
 import type { Overlay } from "./Overlay";
 import type { Position } from "./Position";
 import type { Role } from "./Role";
+import type { Stroke } from "./Stroke";
 import type { TestPattern } from "./TestPattern";
 import type { TextTheme } from "./TextTheme";
 import type { TimerCue } from "./TimerCue";
@@ -41,6 +42,8 @@ export type Action =
   | { action: "countdown_pause" }
   | { action: "countdown_reset" }
   | { action: "set_stage_message"; text: string | null }
+  | { action: "draw_stroke"; stroke: Stroke }
+  | { action: "clear_drawing" }
   | { action: "set_test_pattern"; pattern: TestPattern | null }
   | { action: "put_output"; output: OutputDef }
   | { action: "remove_output"; output_id: string }

@@ -893,3 +893,76 @@ async fn only_admins_list_capture_targets() {
     })
     .await;
 }
+
+#[tokio::test]
+async fn presenters_point_and_draw_stage_viewers_do_not() {
+    let f = fixture().await;
+    let mut op = f.connect(&f.handle.operator_token).await;
+    op.welcome().await;
+    op.action(Action::AddFiles {
+        paths: vec![f.pdf("deck.pdf", 2)],
+        at_index: None,
+    })
+    .await
+    .unwrap();
+    op.action(Action::Go).await.unwrap();
+    let token = f.pair(&mut op, "Presenter", Role::Presenter).await;
+    let mut phone = f.connect(&token).await;
+    let me = phone.welcome().await;
+
+    phone
+        .send(&ClientMessage::Pointer {
+            pos: Some([0.25, 1.5]),
+            mode: PointerMode::Point,
+            color: "#ff3b30".into(),
+        })
+        .await;
+    let (device, pos) = op
+        .wait(|m| match m {
+            ServerMessage::Pointer { device_id, pos, .. } => Some((device_id, pos)),
+            _ => None,
+        })
+        .await;
+    assert_eq!(device, me.device_id);
+    assert_eq!(pos, Some([0.25, 1.0]), "clamped to the slide");
+
+    phone
+        .action(Action::DrawStroke {
+            stroke: Stroke {
+                color: "#ff3b30".into(),
+                width: 0.01,
+                points: vec![[0.1, 0.1], [0.4, 0.4]],
+            },
+        })
+        .await
+        .unwrap();
+    let drawing = op
+        .wait(|m| match m {
+            ServerMessage::Live { live } => live.drawing,
+            _ => None,
+        })
+        .await;
+    assert_eq!(drawing.strokes.len(), 1);
+
+    let token = f.pair(&mut op, "Stage", Role::StageViewer).await;
+    let mut stage = f.connect(&token).await;
+    stage.welcome().await;
+    stage
+        .send(&ClientMessage::Pointer {
+            pos: Some([0.5, 0.5]),
+            mode: PointerMode::Point,
+            color: "#ffffff".into(),
+        })
+        .await;
+    let err = stage
+        .wait(|m| match m {
+            ServerMessage::Error { code } => Some(code),
+            _ => None,
+        })
+        .await;
+    assert_eq!(err, ErrorCode::Forbidden);
+    assert_eq!(
+        stage.action(Action::ClearDrawing).await,
+        Err(ErrorCode::Forbidden)
+    );
+}

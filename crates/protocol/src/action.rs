@@ -3,8 +3,8 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::{
-    CaptureSource, CueId, MediaOptions, OutputDef, Overlay, Position, Role, TestPattern, TextTheme,
-    TimerCue, Transition, WebInfo,
+    CaptureSource, CueId, MediaOptions, OutputDef, Overlay, Position, Role, Stroke, TestPattern,
+    TextTheme, TimerCue, Transition, WebInfo,
 };
 
 /// Everything any input source can ask the host to do. Every action passes through the single
@@ -64,6 +64,14 @@ pub enum Action {
     SetStageMessage {
         text: Option<String>,
     },
+
+    // --- pointer and drawing ---
+    /// Adds a finished stroke to the drawing on the current slide.
+    DrawStroke {
+        stroke: Stroke,
+    },
+    /// Removes all drawings.
+    ClearDrawing,
 
     // --- outputs ---
     /// Shows a test pattern on every output, or hides it.

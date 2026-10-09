@@ -11,6 +11,7 @@
   import type { HostConnection } from "../client/connection.svelte";
   import { Ticker } from "../client/time.svelte";
   import { describe, effectiveTransition, type Content } from "../stage/content";
+  import PointerLayer from "../stage/PointerLayer.svelte";
   import Layer from "../stage/Layer.svelte";
   import Overlays from "../stage/Overlays.svelte";
   import TestPatternView from "../stage/TestPatternView.svelte";
@@ -144,6 +145,9 @@
     {/each}
     {#if showOverlays}
       <Overlays {conn} {hostNow} />
+    {/if}
+    {#if which !== "next"}
+      <PointerLayer {conn} position={pos} />
     {/if}
   </div>
   <div class="master logo" class:on={logo}>

@@ -295,5 +295,11 @@
   "error.converter_missing": "Install LibreOffice to import presentations (Keynote files need Keynote on a Mac).",
   "error.conversion_failed": "The presentation could not be converted. Export it as PDF and import that instead.",
   "error.capture_permission": "Screen recording is not allowed for midnightsnack.",
-  "cue.add_more": "+ Add…"
+  "cue.add_more": "+ Add…",
+  "pointer.title": "Pointer",
+  "pointer.laser": "Laser",
+  "pointer.draw": "Draw",
+  "pointer.color": "Pointer color",
+  "pointer.clear": "Clear drawing",
+  "pointer.hint": "Touch the slide to point or draw on the screen. Drawings disappear when the slide changes."
 }

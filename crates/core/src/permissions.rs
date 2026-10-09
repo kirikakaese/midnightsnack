@@ -23,6 +23,7 @@ pub fn required_role(action: &Action) -> Role {
         CountdownSet { .. } | CountdownStart | CountdownPause | CountdownReset => Role::Operator,
         SetStageMessage { .. } | SetOverlayVisible { .. } | ToggleOverlay { .. } => Role::Operator,
         SetTestPattern { .. } => Role::Operator,
+        DrawStroke { .. } | ClearDrawing => Role::Presenter,
         PutOutput { .. }
         | RemoveOutput { .. }
         | SetCueTargets { .. }
@@ -92,7 +93,8 @@ pub fn check(role: Role, local: bool, action: &Action, engine: &Engine) -> Resul
     }
     // Presenters may only move within the cue that is currently live (for a web page with key
     // forwarding, next/prev stay inside the page).
-    if role == Role::Presenter && !engine.forwards_keys() {
+    let navigates = matches!(action, Action::Next | Action::Go | Action::Prev);
+    if role == Role::Presenter && navigates && !engine.forwards_keys() {
         let program_cue = engine.program().map(|p| p.cue_id.clone());
         let target = match action {
             Action::Next | Action::Go => engine.next_position(),

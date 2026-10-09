@@ -3,8 +3,8 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::{
-    Action, CaptureTarget, DeviceInfo, ErrorCode, LiveState, PairingInfo, PendingPairing, Role,
-    ShowSnapshot,
+    Action, CaptureTarget, DeviceInfo, ErrorCode, LiveState, PairingInfo, PendingPairing,
+    PointerMode, Role, ShowSnapshot,
 };
 
 /// Static information about a host, available before pairing (`GET /api/v1/info`).
@@ -54,9 +54,20 @@ pub enum ClientMessage {
     },
     /// Admins: list screens and windows available for capture.
     ListCaptureTargets,
+    /// Laser pointer or drawing in progress (presenters and up). `pos` is a fraction (0–1) of
+    /// the content area; `null` hides the pointer. Not acknowledged; excess messages are dropped.
+    Pointer {
+        pos: Option<[f32; 2]>,
+        mode: PointerMode,
+        /// `#rrggbb`.
+        color: String,
+    },
 }
 
 /// Messages sent from the host to a client.
+// Messages are built, serialized and dropped right away; boxing the large state variants would
+// only complicate every construction site.
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[ts(export)]
@@ -87,6 +98,13 @@ pub enum ServerMessage {
     /// Screens and windows that can be captured (admins, on request).
     CaptureTargets {
         targets: Vec<CaptureTarget>,
+    },
+    /// Another device's pointer moved (not sent back to the device that points).
+    Pointer {
+        device_id: String,
+        pos: Option<[f32; 2]>,
+        mode: PointerMode,
+        color: String,
     },
     /// Session role changed by an admin.
     Session {

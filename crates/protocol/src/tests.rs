@@ -25,6 +25,11 @@ fn client_messages_round_trip() {
             token: "t".into(),
         },
         ClientMessage::Ping { nonce: 7 },
+        ClientMessage::Pointer {
+            pos: None,
+            mode: PointerMode::Point,
+            color: "#ff0000".into(),
+        },
         ClientMessage::Viewport {
             width: 1920,
             height: 1080,
@@ -188,6 +193,14 @@ fn server_messages_round_trip() {
                     forward: true,
                     seq: 4,
                 }),
+                drawing: Some(Drawing {
+                    position: pos(0),
+                    strokes: vec![Stroke {
+                        color: "#ff0000".into(),
+                        width: 0.01,
+                        points: vec![[0.1, 0.2], [0.3, 0.4]],
+                    }],
+                }),
                 host_time_ms: 2000,
                 revision: 9,
             },
@@ -195,6 +208,12 @@ fn server_messages_round_trip() {
         ServerMessage::ActionResult {
             request_id: 1,
             error: Some(ErrorCode::Forbidden),
+        },
+        ServerMessage::Pointer {
+            device_id: "d".into(),
+            pos: Some([0.5, 0.25]),
+            mode: PointerMode::Draw,
+            color: "#00ff00".into(),
         },
         ServerMessage::Pong { nonce: 1 },
         ServerMessage::Error {

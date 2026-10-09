@@ -16,12 +16,14 @@ use midnightsnack_render::TargetSize;
 use tokio::sync::broadcast::error::RecvError;
 
 use crate::devices::Device;
-use crate::state::{lock, AppState, Event};
+use crate::state::{lock, AppState, Event, PointerUpdate};
 use crate::util::random_token;
 
 const HELLO_TIMEOUT: Duration = Duration::from_secs(10);
 const PING_INTERVAL: Duration = Duration::from_secs(5);
 const MAX_MESSAGE: usize = 1 << 20;
+/// Pointer updates accepted per device and second (a finger reports at up to 60 Hz).
+const POINTER_RATE: u32 = 60;
 
 pub async fn handler(
     ws: WebSocketUpgrade,
@@ -85,9 +87,23 @@ struct Conn {
     device_id: String,
     local: bool,
     media_key: String,
+    /// Start of the current one-second window and pointer updates in it.
+    pointer_window: std::sync::Mutex<(Instant, u32)>,
 }
 
 impl Conn {
+    fn pointer_allowed(&self) -> bool {
+        let mut w = self
+            .pointer_window
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        if w.0.elapsed() >= Duration::from_secs(1) {
+            *w = (Instant::now(), 0);
+        }
+        w.1 += 1;
+        w.1 <= POINTER_RATE
+    }
+
     fn role(&self, state: &AppState) -> Option<Role> {
         lock(&state.devices).get(&self.device_id).map(|d| d.role)
     }
@@ -115,6 +131,7 @@ async fn run(mut socket: WebSocket, addr: SocketAddr, state: Arc<AppState>) -> W
         device_id: device.id.clone(),
         local: device.local,
         media_key: random_token(),
+        pointer_window: std::sync::Mutex::new((Instant::now(), 0)),
     };
     lock(&state.media_keys).insert(conn.media_key.clone(), conn.device_id.clone());
     lock(&state.devices).mark_connected(&conn.device_id, 1);
@@ -236,6 +253,14 @@ async fn session(
                             return socket.send(Message::Close(None)).await;
                         }
                     }
+                    Ok(Event::Pointer(p)) if p.device_id != conn.device_id => {
+                        send(socket, &ServerMessage::Pointer {
+                            device_id: p.device_id.clone(),
+                            pos: p.pos,
+                            mode: p.mode,
+                            color: p.color.clone(),
+                        }).await?;
+                    }
                     Ok(Event::Session(id)) if id == conn.device_id => {
                         if let Some(session) = conn.session(state) {
                             send(socket, &ServerMessage::Session { session }).await?;
@@ -284,6 +309,31 @@ async fn handle_message(state: &Arc<AppState>, conn: &Conn, text: &str) -> Optio
                     targets: Vec::new(),
                 },
             })
+        }
+        ClientMessage::Pointer { pos, mode, color } => {
+            if conn.role(state).is_none_or(|r| r < Role::Presenter) {
+                return Some(ServerMessage::Error {
+                    code: ErrorCode::Forbidden,
+                });
+            }
+            let valid = midnightsnack_core::model::is_valid_color(&color)
+                && pos.is_none_or(|p| p.iter().all(|v| v.is_finite()));
+            if !valid {
+                return Some(ServerMessage::Error {
+                    code: ErrorCode::MalformedMessage,
+                });
+            }
+            // Hiding is always delivered; movement beyond the rate is dropped.
+            if pos.is_some() && !conn.pointer_allowed() {
+                return None;
+            }
+            state.emit(Event::Pointer(Arc::new(PointerUpdate {
+                device_id: conn.device_id.clone(),
+                pos: pos.map(|[x, y]| [x.clamp(0.0, 1.0), y.clamp(0.0, 1.0)]),
+                mode,
+                color,
+            })));
+            None
         }
         ClientMessage::Viewport { width, height } => {
             // Only host output windows decide the render resolution.

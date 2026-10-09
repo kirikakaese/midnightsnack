@@ -31,8 +31,17 @@ pub const DEFAULT_OUTPUT_SIZE: TargetSize = TargetSize {
 /// Slides pre-rendered beyond the next one.
 const PREFETCH_AHEAD: usize = 3;
 
+/// A remote's pointer moved; relayed to every other connection.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PointerUpdate {
+    pub device_id: String,
+    pub pos: Option<[f32; 2]>,
+    pub mode: midnightsnack_protocol::PointerMode,
+    pub color: String,
+}
+
 /// Something changed; connections decide what to send.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Event {
     Show,
     Live,
@@ -43,6 +52,7 @@ pub enum Event {
     Kick(Option<String>),
     /// A device's role changed.
     Session(String),
+    Pointer(Arc<PointerUpdate>),
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

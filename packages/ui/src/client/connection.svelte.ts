@@ -12,6 +12,7 @@ import {
   type LiveState,
   type PairingInfo,
   type PendingPairing,
+  type PointerMode,
   type Position,
   type ServerMessage,
   type SessionInfo,
@@ -37,6 +38,18 @@ export interface ConnectionOptions {
 
 const ACTION_TIMEOUT_MS = 5000;
 const PING_INTERVAL_MS = 5000;
+/** A remote pointer that stops reporting disappears after this long. */
+export const POINTER_IDLE_MS = 3000;
+
+/** Another device's pointer, with the trail of a drawing in progress. */
+export interface RemotePointer {
+  pos: [number, number];
+  mode: PointerMode;
+  color: string;
+  trail: [number, number][];
+  /** `performance.now()` of the last update. */
+  at: number;
+}
 
 export class HostConnection {
   status = $state<ConnectionStatus>("connecting");
@@ -48,6 +61,8 @@ export class HostConnection {
   pending = $state<PendingPairing[]>([]);
   pairing = $state<PairingInfo | null>(null);
   renderQueued = $state(0);
+  /** Pointers of other devices, by device id. */
+  pointers = $state<Record<string, RemotePointer>>({});
   /** Round-trip time of the last ping, in ms. */
   latency = $state<number | null>(null);
   /** Last error reported for an action (cleared after a few seconds). */
@@ -69,6 +84,9 @@ export class HostConnection {
   #pingSent = new Map<number, number>();
   #closed = false;
   #viewport: { width: number; height: number } | null = null;
+  #pointerTimer: ReturnType<typeof setInterval> | undefined;
+  #pointerQueued: { pos: [number, number] | null; mode: PointerMode; color: string } | null = null;
+  #pointerFrame = 0;
 
   constructor(opts: ConnectionOptions) {
     this.#opts = opts;
@@ -112,6 +130,7 @@ export class HostConnection {
     this.#closed = true;
     clearTimeout(this.#retryTimer);
     clearInterval(this.#pingTimer);
+    clearInterval(this.#pointerTimer);
     this.#ws?.close();
     this.#ws = null;
   }
@@ -165,6 +184,9 @@ export class HostConnection {
       case "render_progress":
         this.renderQueued = msg.queued;
         break;
+      case "pointer":
+        this.#updatePointer(msg.device_id, msg.pos, msg.mode, msg.color);
+        break;
       case "action_result": {
         const resolve = this.#pendingActions.get(msg.request_id);
         this.#pendingActions.delete(msg.request_id);
@@ -187,6 +209,50 @@ export class HostConnection {
         else this.#flashError(msg.code);
         break;
     }
+  }
+
+  #updatePointer(
+    deviceId: string,
+    pos: [number, number] | null,
+    mode: PointerMode,
+    color: string,
+  ): void {
+    if (!pos) {
+      delete this.pointers[deviceId];
+      return;
+    }
+    const prev = this.pointers[deviceId];
+    const trail = mode === "draw" && prev?.mode === "draw" ? [...prev.trail, pos] : [pos];
+    this.pointers[deviceId] = { pos, mode, color, trail, at: performance.now() };
+    // Pointers whose device went quiet (or disconnected) fade out.
+    this.#pointerTimer ??= setInterval(() => {
+      const now = performance.now();
+      for (const [id, p] of Object.entries(this.pointers)) {
+        if (now - p.at > POINTER_IDLE_MS) delete this.pointers[id];
+      }
+    }, 1000);
+  }
+
+  /**
+   * Moves this device's pointer (`pos` as a fraction of the 16:9 slide frame) or hides it
+   * (`null`). Updates are coalesced to one per animation frame.
+   */
+  sendPointer(pos: [number, number] | null, mode: PointerMode, color: string): void {
+    const first = this.#pointerQueued === null;
+    this.#pointerQueued = { pos, mode, color };
+    if (pos === null) {
+      // Hiding is sent at once so it is never overtaken by a queued move.
+      cancelAnimationFrame(this.#pointerFrame);
+      this.#pointerQueued = null;
+      this.#send({ type: "pointer", pos, mode, color });
+      return;
+    }
+    if (!first) return;
+    this.#pointerFrame = requestAnimationFrame(() => {
+      const q = this.#pointerQueued;
+      this.#pointerQueued = null;
+      if (q) this.#send({ type: "pointer", ...q });
+    });
   }
 
   #ping(): void {

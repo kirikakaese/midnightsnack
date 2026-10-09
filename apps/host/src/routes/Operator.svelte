@@ -1,7 +1,9 @@
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 <script lang="ts">
   import {
+    Button,
     Panel,
+    PointerPad,
     Stage,
     Tabs,
     Ticker,
@@ -81,6 +83,10 @@
     conn ? elapsedMs(conn.live?.slide_timer, ticker.now + conn.clockOffset) : 0,
   );
   const frozen = $derived(!!conn?.live?.masters.freeze);
+  // Point and draw on the audience screen with the mouse on the program monitor.
+  let pointerMode = $state<"off" | "point" | "draw">("off");
+  const togglePointer = (mode: "point" | "draw") =>
+    (pointerMode = pointerMode === mode ? "off" : mode);
 </script>
 
 {#if conn}
@@ -109,8 +115,29 @@
                 {t("monitor.nothing_live")}
               {/if}
             </span>
+            <span class="pointer-tools" role="group" aria-label={t("pointer.title")}>
+              <Button
+                variant="ghost"
+                active={pointerMode === "point"}
+                aria-pressed={pointerMode === "point"}
+                onclick={() => togglePointer("point")}>{t("pointer.laser")}</Button
+              >
+              <Button
+                variant="ghost"
+                active={pointerMode === "draw"}
+                aria-pressed={pointerMode === "draw"}
+                onclick={() => togglePointer("draw")}>{t("pointer.draw")}</Button
+              >
+              {#if conn.live?.drawing}
+                <Button variant="ghost" onclick={() => conn?.action({ action: "clear_drawing" })}
+                  >{t("pointer.clear")}</Button
+                >
+              {/if}
+            </span>
           </header>
-          <div class="screen"><Stage {conn} /></div>
+          <div class="screen">
+            <PointerPad {conn} mode={pointerMode} color="#ff3b30"><Stage {conn} /></PointerPad>
+          </div>
           <MediaTransport {conn} {ticker} />
           {#if frozen}
             <div class="behind">
@@ -235,6 +262,11 @@
     align-items: center;
     margin-bottom: 6px;
     min-height: 26px;
+  }
+  .pointer-tools {
+    display: flex;
+    gap: 2px;
+    margin-left: auto;
   }
   .where {
     color: var(--ms-text-muted);

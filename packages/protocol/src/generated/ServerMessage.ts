@@ -6,6 +6,7 @@ import type { HostInfo } from "./HostInfo";
 import type { LiveState } from "./LiveState";
 import type { PairingInfo } from "./PairingInfo";
 import type { PendingPairing } from "./PendingPairing";
+import type { PointerMode } from "./PointerMode";
 import type { SessionInfo } from "./SessionInfo";
 import type { ShowSnapshot } from "./ShowSnapshot";
 
@@ -20,6 +21,13 @@ export type ServerMessage =
   | { type: "pairing"; pairing: PairingInfo }
   | { type: "render_progress"; queued: number }
   | { type: "capture_targets"; targets: Array<CaptureTarget> }
+  | {
+      type: "pointer";
+      device_id: string;
+      pos: [number, number] | null;
+      mode: PointerMode;
+      color: string;
+    }
   | { type: "session"; session: SessionInfo }
   | { type: "action_result"; request_id: number; error: ErrorCode | null }
   | { type: "pong"; nonce: number }

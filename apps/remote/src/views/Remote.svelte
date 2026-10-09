@@ -5,6 +5,7 @@
     Button,
     HostConnection,
     Panel,
+    PointerPad,
     Stage,
     StageDisplay,
     StatusDot,
@@ -83,6 +84,16 @@
   );
   let message = $state("");
 
+  // Laser pointer and drawing on the current slide (presenters and up).
+  const POINTER_COLORS = ["#ff3b30", "#ffd60a", "#30d158", "#0a84ff", "#ffffff"];
+  let pointerMode = $state<"off" | "point" | "draw">("off");
+  let pointerColor = $state(POINTER_COLORS[0]!);
+  const hasDrawing = $derived(!!live?.drawing?.strokes.length);
+  function togglePointer(mode: "point" | "draw") {
+    tap();
+    pointerMode = pointerMode === mode ? "off" : mode;
+  }
+
   function send(action: Action) {
     tap();
     conn.action(action);
@@ -116,9 +127,13 @@
     {#if showStage}
       <StageDisplay {conn} />
     {:else}
-      <section class="screens">
+      <section class="screens" class:pointing={pointerMode !== "off"}>
         <figure>
-          <div class="screen"><Stage {conn} mode="thumb" /></div>
+          <div class="screen">
+            <PointerPad {conn} mode={pointerMode} color={pointerColor}>
+              <Stage {conn} mode="thumb" />
+            </PointerPad>
+          </div>
           <figcaption>
             {t("remote.current")}
             {#if programCue && live?.program}
@@ -136,6 +151,43 @@
           </figcaption>
         </figure>
       </section>
+
+      {#if can("presenter")}
+        <section class="pointer-bar" aria-label={t("pointer.title")}>
+          <Button
+            variant="go"
+            active={pointerMode === "point"}
+            aria-pressed={pointerMode === "point"}
+            onclick={() => togglePointer("point")}>{t("pointer.laser")}</Button
+          >
+          <Button
+            variant="go"
+            active={pointerMode === "draw"}
+            aria-pressed={pointerMode === "draw"}
+            onclick={() => togglePointer("draw")}>{t("pointer.draw")}</Button
+          >
+          {#if pointerMode !== "off"}
+            <span class="swatches" role="radiogroup" aria-label={t("pointer.color")}>
+              {#each POINTER_COLORS as c (c)}
+                <button
+                  class="swatch"
+                  role="radio"
+                  aria-checked={pointerColor === c}
+                  aria-label={c}
+                  style:background={c}
+                  onclick={() => (pointerColor = c)}
+                ></button>
+              {/each}
+            </span>
+          {/if}
+          <Button disabled={!hasDrawing} onclick={() => send({ action: "clear_drawing" })}
+            >{t("pointer.clear")}</Button
+          >
+        </section>
+        {#if pointerMode !== "off"}
+          <p class="pointer-hint">{t("pointer.hint")}</p>
+        {/if}
+      {/if}
 
       <section class="timers" aria-label={t("timer.show")}>
         <div><span>{t("timer.show")}</span><strong>{showTime}</strong></div>
@@ -327,6 +379,39 @@
     grid-template-columns: 2fr 1fr;
     gap: 8px;
     align-items: start;
+  }
+  /* While pointing, the current slide takes the full width. */
+  .screens.pointing {
+    grid-template-columns: 1fr;
+  }
+  .screens.pointing .next {
+    display: none;
+  }
+  .pointer-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+  }
+  .swatches {
+    display: flex;
+    gap: 6px;
+  }
+  .swatch {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: 2px solid var(--ms-border);
+    cursor: pointer;
+  }
+  .swatch[aria-checked="true"] {
+    border-color: var(--ms-text);
+    box-shadow: 0 0 0 2px var(--ms-bg) inset;
+  }
+  .pointer-hint {
+    margin: 0;
+    font-size: 0.8rem;
+    color: var(--ms-text-muted);
   }
   figure {
     margin: 0;

@@ -463,6 +463,48 @@ pub struct WebNav {
     pub seq: u64,
 }
 
+/// A freehand stroke on the slide. Coordinates are fractions (0–1) of the content area, so every
+/// output and monitor draws it in the same place.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct Stroke {
+    /// `#rrggbb`.
+    pub color: String,
+    /// Line width as a fraction of the content height (0.002–0.05).
+    pub width: f32,
+    pub points: Vec<[f32; 2]>,
+}
+
+impl Stroke {
+    pub const MAX_POINTS: usize = 2000;
+    pub const MIN_WIDTH: f32 = 0.002;
+    pub const MAX_WIDTH: f32 = 0.05;
+}
+
+/// Drawings on the slide the main output shows. Cleared when that slide changes.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct Drawing {
+    pub position: Position,
+    pub strokes: Vec<Stroke>,
+}
+
+impl Drawing {
+    /// Oldest strokes are dropped beyond this.
+    pub const MAX_STROKES: usize = 200;
+}
+
+/// What a remote's pointer is doing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum PointerMode {
+    /// Laser pointer dot.
+    Point,
+    /// Drawing in progress (the finished stroke follows as `draw_stroke`).
+    Draw,
+}
+
 /// Live show state. Sent on every change.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export)]
@@ -494,6 +536,8 @@ pub struct LiveState {
     pub capture_lost: Vec<CueId>,
     /// Last next/prev forwarded to the live web page.
     pub web_nav: Option<WebNav>,
+    /// Strokes drawn on the slide on the main output.
+    pub drawing: Option<Drawing>,
     /// When the program will advance automatically.
     #[ts(type = "number | null")]
     pub auto_advance_at_ms: Option<i64>,

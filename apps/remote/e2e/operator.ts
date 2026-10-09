@@ -27,6 +27,8 @@ export class Operator {
   show: ShowSnapshot | null = null;
   pending: PendingPairing[] = [];
   pin = "";
+  /** Last pointer message per device. */
+  pointers = new Map<string, Extract<ServerMessage, { type: "pointer" }>>();
   joinUrl = "";
 
   private constructor(ws: WebSocket) {
@@ -35,6 +37,7 @@ export class Operator {
       const m = JSON.parse(String(ev.data)) as ServerMessage;
       if (m.type === "live") this.live = m.live;
       if (m.type === "show") this.show = m.show;
+      if (m.type === "pointer") this.pointers.set(m.device_id, m);
       if (m.type === "devices") this.pending = m.pending;
       if (m.type === "pairing") {
         this.pin = m.pairing.pin;

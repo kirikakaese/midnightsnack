@@ -172,3 +172,38 @@ test("cues follow their output targets and web pages show as placeholders", asyn
     await op.action({ action: "remove_output", output_id: "side" });
   }
 });
+
+test("presenter draws and points on the slide", async ({ page }) => {
+  await pair(page, "presenter");
+  const deck = op.show?.cues.find((c) => c.name === "Welcome deck");
+  await op.action({ action: "go_to", position: { cue_id: deck!.id, slide: 0 } });
+  await expect(page.getByText(/Welcome deck · 1 \/ 4/)).toBeVisible();
+
+  await page.getByRole("button", { name: "Draw", exact: true }).click();
+  const box = (await page.locator(".screens .screen").first().boundingBox())!;
+  await page.mouse.move(box.x + box.width * 0.2, box.y + box.height * 0.3);
+  await page.mouse.down();
+  for (let i = 1; i <= 10; i++) {
+    await page.mouse.move(box.x + box.width * (0.2 + i * 0.05), box.y + box.height * 0.3);
+  }
+  await page.mouse.up();
+  await expect.poll(() => op.live?.drawing?.strokes.length).toBe(1);
+  const stroke = op.live!.drawing!.strokes[0]!;
+  expect(stroke.points.length).toBeGreaterThan(5);
+  expect(stroke.points[0]![0]).toBeCloseTo(0.2, 1);
+  expect(stroke.points[0]![1]).toBeCloseTo(0.3, 1);
+  // The phone draws the stroke from the host's drawing.
+  await expect(page.locator(".screens polyline")).toHaveCount(1);
+
+  await page.getByRole("button", { name: "Laser", exact: true }).click();
+  await page.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.5);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width * 0.6, box.y + box.height * 0.5);
+  await expect.poll(() => [...op.pointers.values()].at(-1)?.mode).toBe("point");
+  await page.mouse.up();
+  await expect.poll(() => [...op.pointers.values()].at(-1)?.pos).toBeNull();
+
+  await page.getByRole("button", { name: "Clear drawing" }).click();
+  await expect.poll(() => op.live?.drawing).toBeNull();
+  await page.screenshot({ path: "test-results/remote-pointer.png", fullPage: true });
+});
