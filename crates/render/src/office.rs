@@ -244,15 +244,15 @@ fn relationships(xml: &str) -> Vec<(String, String, String)> {
     let mut reader = Reader::from_str(xml);
     loop {
         match reader.read_event() {
-            Ok(Event::Empty(e) | Event::Start(e)) if e.local_name().as_ref() == b"Relationship" => {
-                let attr = |name: &[u8]| {
+            Ok(Event::Empty(e) | Event::Start(e)) if e.local_name().as_ref() == "Relationship" => {
+                let attr = |name: &str| {
                     e.attributes()
                         .flatten()
                         .find(|a| a.key.local_name().as_ref() == name)
-                        .map(|a| String::from_utf8_lossy(&a.value).into_owned())
+                        .map(|a| a.value.to_string())
                         .unwrap_or_default()
                 };
-                out.push((attr(b"Id"), attr(b"Target"), attr(b"Type")));
+                out.push((attr("Id"), attr("Target"), attr("Type")));
             }
             Ok(Event::Eof) | Err(_) => break,
             _ => {}
@@ -291,13 +291,13 @@ fn pptx_notes(path: &Path) -> Result<Vec<String>, Box<dyn std::error::Error>> {
     let mut reader = Reader::from_str(&presentation);
     loop {
         match reader.read_event() {
-            Ok(Event::Empty(e) | Event::Start(e)) if e.local_name().as_ref() == b"sldId" => {
+            Ok(Event::Empty(e) | Event::Start(e)) if e.local_name().as_ref() == "sldId" => {
                 if let Some(id) = e
                     .attributes()
                     .flatten()
-                    .find(|a| a.key.local_name().as_ref() == b"id" && a.key.as_ref() != b"id")
+                    .find(|a| a.key.local_name().as_ref() == "id" && a.key.as_ref() != "id")
                 {
-                    order.push(String::from_utf8_lossy(&id.value).into_owned());
+                    order.push(id.value.to_string());
                 }
             }
             Ok(Event::Eof) | Err(_) => break,
@@ -341,20 +341,20 @@ fn pptx_notes_text(xml: &str) -> String {
     loop {
         match reader.read_event() {
             Ok(Event::Start(e)) => match e.local_name().as_ref() {
-                b"sp" => {
+                "sp" => {
                     in_shape = true;
                     skip_shape = false;
                     shape_paras.clear();
                 }
-                b"t" if in_shape => in_text = true,
+                "t" if in_shape => in_text = true,
                 _ => {}
             },
-            Ok(Event::Empty(e)) if e.local_name().as_ref() == b"ph" && in_shape => {
+            Ok(Event::Empty(e)) if e.local_name().as_ref() == "ph" && in_shape => {
                 let ty = e
                     .attributes()
                     .flatten()
-                    .find(|a| a.key.local_name().as_ref() == b"type")
-                    .map(|a| String::from_utf8_lossy(&a.value).into_owned());
+                    .find(|a| a.key.local_name().as_ref() == "type")
+                    .map(|a| a.value.to_string());
                 if matches!(
                     ty.as_deref(),
                     Some("sldImg" | "sldNum" | "hdr" | "ftr" | "dt")
@@ -363,11 +363,11 @@ fn pptx_notes_text(xml: &str) -> String {
                 }
             }
             Ok(Event::Text(t)) if in_text => {
-                current.push_str(&t.decode().map(|c| c.into_owned()).unwrap_or_default());
+                current.push_str(&t.xml10_content());
             }
             Ok(Event::GeneralRef(r)) if in_text => {
-                let name = String::from_utf8_lossy(r.as_ref()).into_owned();
-                current.push_str(match name.as_str() {
+                let name: &str = r.as_ref();
+                current.push_str(match name {
                     "amp" => "&",
                     "lt" => "<",
                     "gt" => ">",
@@ -377,9 +377,9 @@ fn pptx_notes_text(xml: &str) -> String {
                 });
             }
             Ok(Event::End(e)) => match e.local_name().as_ref() {
-                b"t" => in_text = false,
-                b"p" if in_shape => shape_paras.push(std::mem::take(&mut current)),
-                b"sp" => {
+                "t" => in_text = false,
+                "p" if in_shape => shape_paras.push(std::mem::take(&mut current)),
+                "sp" => {
                     in_shape = false;
                     if !skip_shape {
                         paragraphs.append(&mut shape_paras);
@@ -405,24 +405,24 @@ fn odp_notes(path: &Path) -> Result<Vec<String>, Box<dyn std::error::Error>> {
     loop {
         match reader.read_event() {
             Ok(Event::Start(e)) => match e.name().as_ref() {
-                b"draw:page" => {
+                "draw:page" => {
                     in_page = true;
                     page_notes.clear();
                 }
-                b"presentation:notes" if in_page => in_notes = true,
-                b"text:p" if in_notes => in_para = true,
+                "presentation:notes" if in_page => in_notes = true,
+                "text:p" if in_notes => in_para = true,
                 _ => {}
             },
             Ok(Event::Text(t)) if in_para => {
-                current.push_str(&t.decode().map(|c| c.into_owned()).unwrap_or_default());
+                current.push_str(&t.xml10_content());
             }
             Ok(Event::End(e)) => match e.name().as_ref() {
-                b"text:p" if in_para => {
+                "text:p" if in_para => {
                     in_para = false;
                     page_notes.push(std::mem::take(&mut current));
                 }
-                b"presentation:notes" => in_notes = false,
-                b"draw:page" => {
+                "presentation:notes" => in_notes = false,
+                "draw:page" => {
                     in_page = false;
                     notes.push(page_notes.join("\n").trim().to_owned());
                 }
