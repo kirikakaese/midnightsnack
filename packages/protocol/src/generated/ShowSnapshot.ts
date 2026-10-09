@@ -20,7 +20,7 @@ export type ShowSnapshot = {
    * Unsaved changes exist.
    */
   dirty: boolean;
-  revision: bigint;
+  revision: number;
   default_transition: Transition;
   default_theme: TextTheme;
   overlays: Array<Overlay>;

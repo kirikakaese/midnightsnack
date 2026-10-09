@@ -74,5 +74,5 @@ export type LiveState = {
    * Host clock at the time this state was sent.
    */
   host_time_ms: number;
-  revision: bigint;
+  revision: number;
 };

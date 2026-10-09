@@ -374,6 +374,7 @@ pub struct ShowSnapshot {
     pub path: Option<String>,
     /// Unsaved changes exist.
     pub dirty: bool,
+    #[ts(type = "number")]
     pub revision: u64,
     pub default_transition: Transition,
     pub default_theme: TextTheme,
@@ -579,5 +580,6 @@ pub struct LiveState {
     /// Host clock at the time this state was sent.
     #[ts(type = "number")]
     pub host_time_ms: i64,
+    #[ts(type = "number")]
     pub revision: u64,
 }

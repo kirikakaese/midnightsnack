@@ -31,6 +31,11 @@ midnightsnack is licensed under GPL-3.0-or-later. All dependencies must be compa
 | [x11rb](https://github.com/psychon/x11rb) | MIT OR Apache-2.0 | Screen and window capture (Linux/X11) |
 | [jpeg-encoder](https://github.com/vstroebel/jpeg-encoder) | (MIT OR Apache-2.0) AND IJG | JPEG frames for capture streams |
 | [quick-xml](https://github.com/tafia/quick-xml) | MIT | Speaker notes from PPTX/ODP |
+| [midir](https://github.com/Boddlnagg/midir) | MIT | MIDI input |
+| [rosc](https://github.com/klingtnet/rosc) | MIT OR Apache-2.0 | OSC encoding and decoding |
+| [reqwest](https://github.com/seanmonstar/reqwest) | MIT OR Apache-2.0 | Pairing with another host (controller mode) |
+| [@companion-module/base](https://github.com/bitfocus/companion-module-base) | MIT | Companion module framework |
+| [ws](https://github.com/websockets/ws) | MIT | WebSocket client of the Companion module |
 | [LibreOffice](https://www.libreoffice.org) | MPL-2.0 | Optional, not bundled: converts presentations to PDF when installed |
 
 ## Exceptions
