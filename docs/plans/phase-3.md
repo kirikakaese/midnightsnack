@@ -73,8 +73,9 @@ live screen capture, web pages, office presentations and OpenSlides.
 - **Linux web pages** are stacked, not layered, by Tauri's GTK multi-webview, so the output page
   is hidden while a web page shows: switching to and from a web page is always a cut there
   (ADR 0010). Overlays are not drawn over web pages on any platform.
-- **Capture** has no audio; window capture on Wayland is untested (X11 works). Window lists may
-  be empty under minimal window managers.
+- **Capture** has no audio. On Linux only X11 sessions are supported (a direct x11rb backend;
+  xcap's Wayland recorder needs newer PipeWire than Ubuntu 22.04 has). Window lists need a
+  window manager that publishes `_NET_CLIENT_LIST`.
 - **Office fidelity** is LibreOffice's: missing fonts are substituted and animations are
   flattened. Speaker notes come from PPTX and ODP only.
 - Test patterns are global for all program outputs, not chosen per output.

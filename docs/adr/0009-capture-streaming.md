@@ -13,9 +13,12 @@ path), or frames over HTTP.
 
 ## Decision
 
-- `crates/capture` grabs frames with `xcap` (macOS ScreenCaptureKit/CoreGraphics, Windows
-  DXGI/GDI, Linux X11 and Wayland). On X11 a persistent `x11rb` connection reads the screen with
-  `GetImage`, because opening a connection per frame was slow and unreliable.
+- `crates/capture` grabs frames with `xcap` on macOS and Windows. On Linux it talks X11 directly
+  through `x11rb` (pure Rust): screens are RandR monitors, windows come from the window
+  manager's `_NET_CLIENT_LIST`, and frames are read with `GetImage` over one persistent
+  connection per source. `xcap`'s Linux backend was dropped because its Wayland recorder needs
+  newer PipeWire headers than Ubuntu 22.04 ships and opening a connection per frame was slow and
+  unreliable.
 - One worker thread per source, started when the first viewer subscribes and stopped a few
   seconds after the last one leaves. Frames are scaled down to at most 1920×1200 and encoded once
   as JPEG (quality 80); all viewers share the encoded frame through a `tokio::sync::watch`
@@ -32,7 +35,8 @@ path), or frames over HTTP.
 
 - Latency is one capture plus one JPEG encode (≈ 20 ms at 1600×1000 on the development machine,
   ≈ 28 fps); good enough for slides, spreadsheets and demos, not for fast games.
-- No audio is captured.
+- No audio is captured. Wayland sessions are not supported on Linux yet (a PipeWire/portal
+  backend can be added behind the same interface).
 - macOS needs the Screen Recording permission; the operator UI links to the settings page.
 - A native capture surface for the output window can replace the `<img>` later without changing
   the protocol.

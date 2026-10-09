@@ -17,6 +17,15 @@ use image::RgbaImage;
 use midnightsnack_protocol::{CaptureSource, CaptureTarget};
 use tokio::sync::watch;
 
+#[cfg(not(target_os = "linux"))]
+mod native;
+#[cfg(not(target_os = "linux"))]
+use native::{list_targets_once, resolve, Target};
+#[cfg(target_os = "linux")]
+mod x11;
+#[cfg(target_os = "linux")]
+use x11::{list_targets_once, resolve, Target};
+
 /// Frames larger than this (in either dimension) are scaled down to keep latency low.
 const MAX_WIDTH: u32 = 1920;
 const MAX_HEIGHT: u32 = 1200;
@@ -32,17 +41,6 @@ pub enum CaptureError {
     Capture(String),
     #[error("screen recording permission missing")]
     Permission,
-}
-
-impl From<xcap::XCapError> for CaptureError {
-    fn from(e: xcap::XCapError) -> Self {
-        let msg = e.to_string();
-        if msg.to_ascii_lowercase().contains("permission") {
-            CaptureError::Permission
-        } else {
-            CaptureError::Capture(msg)
-        }
-    }
 }
 
 /// One encoded frame.
@@ -73,102 +71,11 @@ pub fn list_targets() -> Result<Vec<CaptureTarget>, CaptureError> {
     }
 }
 
-fn list_targets_once() -> Result<Vec<CaptureTarget>, CaptureError> {
-    let mut out = Vec::new();
-    for m in xcap::Monitor::all()? {
-        let Ok(name) = m.name() else { continue };
-        out.push(CaptureTarget {
-            source: CaptureSource::Screen { name },
-            width: m.width().unwrap_or(0),
-            height: m.height().unwrap_or(0),
-        });
-    }
-    // Window listing is not available everywhere (e.g. Wayland); screens still work.
-    if let Ok(windows) = xcap::Window::all() {
-        for w in windows {
-            if w.is_minimized().unwrap_or(false) {
-                continue;
-            }
-            let title = w.title().unwrap_or_default();
-            let app = w.app_name().unwrap_or_default();
-            if title.trim().is_empty() || app.to_ascii_lowercase().contains("midnightsnack") {
-                continue;
-            }
-            out.push(CaptureTarget {
-                source: CaptureSource::Window { app, title },
-                width: w.width().unwrap_or(0),
-                height: w.height().unwrap_or(0),
-            });
-        }
-    }
-    Ok(out)
-}
-
-enum Target {
-    Monitor(xcap::Monitor),
-    Window(xcap::Window),
-    /// Linux/X11: one persistent connection instead of one per frame.
-    #[cfg(target_os = "linux")]
-    X11(Box<x11::Grabber>),
-}
-
-impl Target {
-    fn capture(&mut self) -> Result<RgbaImage, CaptureError> {
-        Ok(match self {
-            Target::Monitor(m) => m.capture_image()?,
-            Target::Window(w) => {
-                if w.is_minimized().unwrap_or(false) {
-                    return Err(CaptureError::Capture("window minimized".into()));
-                }
-                w.capture_image()?
-            }
-            #[cfg(target_os = "linux")]
-            Target::X11(g) => g.capture()?,
-        })
-    }
-}
-
 fn matches(haystack: &str, needle: &str) -> bool {
     needle.trim().is_empty()
         || haystack
             .to_lowercase()
             .contains(&needle.trim().to_lowercase())
-}
-
-fn resolve(source: &CaptureSource) -> Option<Target> {
-    let target = resolve_xcap(source)?;
-    #[cfg(target_os = "linux")]
-    if let Some(g) = x11::Grabber::for_target(&target) {
-        return Some(Target::X11(Box::new(g)));
-    }
-    Some(target)
-}
-
-fn resolve_xcap(source: &CaptureSource) -> Option<Target> {
-    match source {
-        CaptureSource::Screen { name } => xcap::Monitor::all()
-            .ok()?
-            .into_iter()
-            .find(|m| m.name().is_ok_and(|n| n == *name))
-            .map(Target::Monitor),
-        CaptureSource::Window { app, title } => {
-            let windows = xcap::Window::all().ok()?;
-            let candidates = windows.into_iter().filter(|w| {
-                !w.is_minimized().unwrap_or(false)
-                    && matches(&w.app_name().unwrap_or_default(), app)
-                    && matches(&w.title().unwrap_or_default(), title)
-            });
-            // Prefer an exact title match, then the front-most window.
-            let mut best: Vec<xcap::Window> = candidates.collect();
-            best.sort_by_key(|w| {
-                let exact = w
-                    .title()
-                    .is_ok_and(|t| t.eq_ignore_ascii_case(title.trim()));
-                (!exact, -w.z().unwrap_or(0))
-            });
-            best.into_iter().next().map(Target::Window)
-        }
-    }
 }
 
 /// JPEG-encodes a frame, scaling it down if it is very large.
@@ -321,100 +228,6 @@ impl CaptureHub {
             if let Some(rest) = wait.checked_sub(started.elapsed()) {
                 std::thread::sleep(rest);
             }
-        }
-    }
-}
-
-#[cfg(target_os = "linux")]
-mod x11 {
-    //! Frame grabbing over a persistent X11 connection (not used under Wayland).
-    use image::RgbaImage;
-    use x11rb::connection::Connection;
-    use x11rb::protocol::xproto::{ConnectionExt, ImageFormat, ImageOrder};
-    use x11rb::rust_connection::RustConnection;
-
-    use super::{CaptureError, Target};
-
-    pub struct Grabber {
-        conn: RustConnection,
-        drawable: u32,
-        /// Region for screens; `None` = the whole drawable (windows).
-        region: Option<(i16, i16, u16, u16)>,
-    }
-
-    fn is_x11_session() -> bool {
-        let session = std::env::var("XDG_SESSION_TYPE").unwrap_or_default();
-        std::env::var_os("DISPLAY").is_some()
-            && (session == "x11" || std::env::var_os("WAYLAND_DISPLAY").is_none())
-    }
-
-    impl Grabber {
-        pub fn for_target(target: &Target) -> Option<Self> {
-            if !is_x11_session() {
-                return None;
-            }
-            let (conn, screen) = x11rb::connect(None).ok()?;
-            let root = conn.setup().roots.get(screen)?.root;
-            let (drawable, region) = match target {
-                Target::Monitor(m) => (
-                    root,
-                    Some((
-                        m.x().ok()? as i16,
-                        m.y().ok()? as i16,
-                        m.width().ok()? as u16,
-                        m.height().ok()? as u16,
-                    )),
-                ),
-                Target::Window(w) => (w.id().ok()?, None),
-                Target::X11(_) => return None,
-            };
-            Some(Grabber {
-                conn,
-                drawable,
-                region,
-            })
-        }
-
-        pub fn capture(&mut self) -> Result<RgbaImage, CaptureError> {
-            let err = |e: &dyn std::fmt::Display| CaptureError::Capture(e.to_string());
-            let (x, y, w, h) = match self.region {
-                Some(r) => r,
-                None => {
-                    let g = self
-                        .conn
-                        .get_geometry(self.drawable)
-                        .map_err(|e| err(&e))?
-                        .reply()
-                        .map_err(|e| err(&e))?;
-                    (0, 0, g.width, g.height)
-                }
-            };
-            let reply = self
-                .conn
-                .get_image(ImageFormat::Z_PIXMAP, self.drawable, x, y, w, h, !0)
-                .map_err(|e| err(&e))?
-                .reply()
-                .map_err(|e| err(&e))?;
-            let setup = self.conn.setup();
-            let bpp = setup
-                .pixmap_formats
-                .iter()
-                .find(|f| f.depth == reply.depth)
-                .map(|f| f.bits_per_pixel)
-                .unwrap_or(0);
-            if bpp != 32 || setup.image_byte_order != ImageOrder::LSB_FIRST {
-                return Err(CaptureError::Capture(format!(
-                    "unsupported pixel format ({bpp} bpp)"
-                )));
-            }
-            // BGRX -> RGBA
-            let mut rgba = reply.data;
-            for px in rgba.chunks_exact_mut(4) {
-                px.swap(0, 2);
-                px[3] = 255;
-            }
-            RgbaImage::from_raw(w as u32, h as u32, rgba)
-                .ok_or_else(|| CaptureError::Capture("short image".into()))
         }
     }
 }

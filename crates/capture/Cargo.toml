@@ -16,10 +16,12 @@ midnightsnack-protocol.workspace = true
 tokio = { version = "1", features = ["sync"] }
 thiserror.workspace = true
 tracing.workspace = true
+
+[target.'cfg(not(target_os = "linux"))'.dependencies]
 xcap = "0.9"
 
 [target.'cfg(target_os = "linux")'.dependencies]
-x11rb = "0.13"
+x11rb = { version = "0.13", features = ["randr"] }
 
 [lints]
 workspace = true

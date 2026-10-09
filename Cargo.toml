@@ -36,6 +36,16 @@ debug = "line-tables-only"
 [profile.dev.package."*"]
 debug = false
 
+# Live capture converts and encodes every frame; unoptimized it manages only a few per second.
+[profile.dev.package.jpeg-encoder]
+opt-level = 3
+
+[profile.dev.package.x11rb-protocol]
+opt-level = 3
+
+[profile.dev.package.midnightsnack-capture]
+opt-level = 3
+
 [profile.release]
 lto = "thin"
 codegen-units = 1

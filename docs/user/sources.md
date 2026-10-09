@@ -62,8 +62,8 @@ the **Cue** tab says the source is gone; capture resumes when it is back.
   picker offers **Open screen recording settings**: allow midnightsnack under *Privacy &
   Security → Screen Recording*, then restart midnightsnack.
 - **Windows:** works without setup.
-- **Linux:** works on X11 sessions. Wayland support depends on the desktop and is not tested yet;
-  if capture fails, log in with an X11 ("Xorg") session.
+- **Linux:** works on X11 sessions. Wayland sessions are not supported yet; log in with an X11
+  ("Xorg") session to capture.
 
 Capturing costs CPU: on a typical laptop a full-HD screen runs at about 25–30 fps. Lower the
 frame rate for static content such as a spreadsheet.
