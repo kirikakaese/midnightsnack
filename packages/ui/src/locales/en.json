@@ -240,5 +240,8 @@
   "window.stage_title": "Stage display",
   "window.stage_hint": "A screen facing the presenter: current and next slide, notes, timers and your messages.",
   "window.open_output": "Open output",
-  "window.open_stage": "Open stage display"
+  "window.open_stage": "Open stage display",
+  "cue.kind.openslides": "OpenSlides projector",
+  "cue.kind.web": "Web page",
+  "cue.kind.capture": "Capture"
 }

@@ -13,6 +13,7 @@
   import { describe, effectiveTransition, type Content } from "../stage/content";
   import Layer from "../stage/Layer.svelte";
   import Overlays from "../stage/Overlays.svelte";
+  import TestPatternView from "../stage/TestPatternView.svelte";
   import Logo from "./Logo.svelte";
 
   interface Props {
@@ -26,9 +27,19 @@
     which?: "output" | "program" | "next";
     /** `output` plays media with sound; `monitor` mirrors it muted; `thumb` never decodes media. */
     mode?: "output" | "monitor" | "thumb";
+    /** Which output (for `which="output"`); defaults to the main output. */
+    outputId?: string;
   }
 
-  let { conn, width, height, masters = true, which = "output", mode = "monitor" }: Props = $props();
+  let {
+    conn,
+    width,
+    height,
+    masters = true,
+    which = "output",
+    mode = "monitor",
+    outputId,
+  }: Props = $props();
 
   interface LayerState {
     id: number;
@@ -42,8 +53,25 @@
   onDestroy(() => ticker.stop());
   const hostNow = $derived(ticker.now + conn.clockOffset);
 
-  const pos = $derived(conn.live?.[which] ?? null);
-  const content = $derived(describe(conn, pos, width, height) ?? BLACK);
+  const outputDef = $derived(
+    conn.show?.outputs.find((o) => o.id === outputId) ??
+      conn.show?.outputs.find((o) => o.feed === "program") ??
+      null,
+  );
+  const pos = $derived(
+    which === "output" && outputId
+      ? (conn.live?.outputs.find((o) => o.output_id === outputId)?.position ?? null)
+      : (conn.live?.[which] ?? null),
+  );
+  const content = $derived(
+    describe(conn, pos, width, height, mode === "thumb" ? 2 : undefined) ?? BLACK,
+  );
+  const fit = $derived(
+    outputDef?.scaling === "fill" ? "cover" : outputDef?.scaling === "stretch" ? "fill" : "contain",
+  );
+  const margin = $derived(which === "output" ? (outputDef?.margin ?? 0) : 0);
+  const showOverlays = $derived(masters && (outputDef?.overlays ?? true));
+  const testPattern = $derived(masters && which === "output" ? (conn.live?.test_pattern ?? null) : null);
   const live = $derived(which !== "next");
 
   let layers = $state<LayerState[]>([]);
@@ -98,21 +126,24 @@
 </script>
 
 <div class="stage" style:--master-fade="{mode === 'thumb' ? 0 : masterFade}ms">
-  {#each layers as layer (layer.id)}
-    <div class="layer" class:shown={layer.ready} style:--fade="{layer.duration}ms">
-      <Layer
-        {conn}
-        content={layer.content}
-        {mode}
-        {live}
-        {hostNow}
-        onready={() => onReady(layer)}
-      />
-    </div>
-  {/each}
-  {#if masters}
-    <Overlays {conn} {hostNow} />
-  {/if}
+  <div class="content" style:inset="{margin}%">
+    {#each layers as layer (layer.id)}
+      <div class="layer" class:shown={layer.ready} style:--fade="{layer.duration}ms">
+        <Layer
+          {conn}
+          content={layer.content}
+          {mode}
+          {live}
+          {hostNow}
+          {fit}
+          onready={() => onReady(layer)}
+        />
+      </div>
+    {/each}
+    {#if showOverlays}
+      <Overlays {conn} {hostNow} />
+    {/if}
+  </div>
   <div class="master logo" class:on={logo}>
     {#if logoSrc}
       <img src={logoSrc} alt="" />
@@ -121,6 +152,9 @@
     {/if}
   </div>
   <div class="master blackout" class:on={blackout}></div>
+  {#if testPattern}
+    <TestPatternView pattern={testPattern} label={outputDef?.name ?? ""} {width} {height} />
+  {/if}
   {#if preload}
     <video class="preload" src={preload} preload="auto" muted aria-hidden="true"></video>
   {/if}
@@ -132,6 +166,11 @@
     width: 100%;
     height: 100%;
     background: #000;
+    overflow: hidden;
+    container-type: size;
+  }
+  .content {
+    position: absolute;
     overflow: hidden;
     container-type: size;
   }

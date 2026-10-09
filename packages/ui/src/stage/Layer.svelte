@@ -6,6 +6,8 @@
   import MediaContent from "./MediaContent.svelte";
   import TextContent from "./TextContent.svelte";
   import TimerContent from "./TimerContent.svelte";
+  import CaptureContent from "./CaptureContent.svelte";
+  import WebPlaceholder from "./WebPlaceholder.svelte";
 
   interface Props {
     conn: HostConnection;
@@ -14,9 +16,10 @@
     /** This layer shows the live output (media follows the host timeline). */
     live: boolean;
     hostNow: number;
+    fit?: "contain" | "cover" | "fill";
     onready: () => void;
   }
-  let { conn, content, mode, live, hostNow, onready }: Props = $props();
+  let { conn, content, mode, live, hostNow, fit = "contain", onready }: Props = $props();
 
   const playback = $derived(
     live && content.kind === "media" && conn.live?.media?.cue_id === content.cueId
@@ -30,12 +33,13 @@
   );
 
   $effect(() => {
-    if (content.kind === "blank") onready();
+    // On the output a web page is a separate webview on top; underneath is black.
+    if (content.kind === "blank" || (content.kind === "web" && mode === "output")) onready();
   });
 </script>
 
 {#if content.kind === "image"}
-  <ImageContent src={content.src} background={content.background} {onready} />
+  <ImageContent src={content.src} background={content.background} {fit} {onready} />
 {:else if content.kind === "blank"}
   <div class="blank" style:background={content.background}></div>
 {:else if content.kind === "media"}
@@ -50,8 +54,17 @@
     {playback}
     {mode}
     {hostNow}
+    {fit}
     {onready}
   />
+{:else if content.kind === "web"}
+  {#if mode === "output"}
+    <div class="blank" style:background="#000"></div>
+  {:else}
+    <WebPlaceholder name={content.name} url={content.url} openslides={content.openslides} {onready} />
+  {/if}
+{:else if content.kind === "capture"}
+  <CaptureContent src={content.src} {fit} {onready} />
 {:else if content.kind === "text"}
   <TextContent
     text={content.text}
