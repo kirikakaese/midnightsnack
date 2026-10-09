@@ -1,0 +1,39 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# A midnightsnack relay behind Caddy, which gets a TLS certificate from Let's Encrypt.
+# 1. Point a DNS name (e.g. relay.example.org) at this server; open ports 80 and 443.
+# 2. Put the name into RELAY_DOMAIN (and optionally an access token) in a .env file:
+#      RELAY_DOMAIN=relay.example.org
+#      MIDNIGHTSNACK_RELAY_ACCESS_TOKEN=change-me
+# 3. docker compose up -d
+# Then enter https://relay.example.org (and the token) in the host's Connect tab.
+services:
+  relay:
+    image: ghcr.io/kirikakaese/midnightsnack-relay:latest
+    restart: unless-stopped
+    environment:
+      MIDNIGHTSNACK_RELAY_ACCESS_TOKEN: ${MIDNIGHTSNACK_RELAY_ACCESS_TOKEN:-}
+      RUST_LOG: info
+    expose:
+      - "8080"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      RELAY_DOMAIN: ${RELAY_DOMAIN:?set RELAY_DOMAIN in .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on: [relay]
+
+volumes:
+  caddy-data:
+  caddy-config:
