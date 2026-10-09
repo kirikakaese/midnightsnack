@@ -2720,7 +2720,7 @@ dependencies = [
 
 [[package]]
 name = "midnightsnack-capture"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "bytes",
  "image",
@@ -2735,7 +2735,7 @@ dependencies = [
 
 [[package]]
 name = "midnightsnack-core"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "midnightsnack-protocol",
  "serde",
@@ -2748,7 +2748,7 @@ dependencies = [
 
 [[package]]
 name = "midnightsnack-host"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "keepawake",
  "midnightsnack-core",
@@ -2768,7 +2768,7 @@ dependencies = [
 
 [[package]]
 name = "midnightsnack-protocol"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -2777,7 +2777,7 @@ dependencies = [
 
 [[package]]
 name = "midnightsnack-render"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "image",
  "midnightsnack-protocol",
@@ -2793,7 +2793,7 @@ dependencies = [
 
 [[package]]
 name = "midnightsnack-server"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "axum",
  "bytes",
