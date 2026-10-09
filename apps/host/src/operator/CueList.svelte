@@ -104,7 +104,7 @@
   const webUrlValid = $derived(/^https?:\/\/[^\s/?#]+/i.test(webUrl.trim()));
 
   function startAdding(kind: "web" | "openslides" | "capture") {
-    adding = adding === kind ? null : kind;
+    adding = kind;
     webUrl = "https://";
   }
 
@@ -151,6 +151,15 @@
     const kind = t(`cue.kind.${cue.kind}`);
     const from = cue.converted_from ? ` · ${cue.converted_from}` : "";
     return `${kind} · ${t("cue.slides", { n: cue.slide_count })}${from}`;
+  }
+
+  function addMore(kind: string) {
+    if (kind === "folder") addFolder();
+    else if (kind === "text") addText();
+    else if (kind === "timer") addTimer();
+    else if (kind === "blank")
+      conn.action({ action: "add_blank", color: "#000000", at_index: null });
+    else if (kind === "web" || kind === "openslides" || kind === "capture") startAdding(kind);
   }
 
   async function addFiles() {
@@ -206,19 +215,25 @@
 <Panel title={t("cue.list")}>
   {#snippet actions()}
     <Button onclick={addFiles}>{t("cue.add_files")}</Button>
-    <Button onclick={addFolder}>{t("cue.add_folder")}</Button>
-    <Button onclick={addText}>{t("cue.add_text")}</Button>
-    <Button onclick={addTimer}>{t("cue.add_timer")}</Button>
-    <Button onclick={() => conn.action({ action: "add_blank", color: "#000000", at_index: null })}>
-      {t("cue.add_blank")}
-    </Button>
-    <Button active={adding === "web"} onclick={() => startAdding("web")}>{t("cue.add_web")}</Button>
-    <Button active={adding === "openslides"} onclick={() => startAdding("openslides")}>
-      {t("cue.add_openslides")}
-    </Button>
-    <Button active={adding === "capture"} onclick={() => startAdding("capture")}>
-      {t("cue.add_capture")}
-    </Button>
+    <select
+      class="add-menu"
+      aria-label={t("cue.add_more")}
+      value=""
+      onchange={(e) => {
+        const v = e.currentTarget.value;
+        e.currentTarget.value = "";
+        addMore(v);
+      }}
+    >
+      <option value="" disabled>{t("cue.add_more")}</option>
+      <option value="folder">{t("cue.add_folder")}</option>
+      <option value="text">{t("cue.add_text")}</option>
+      <option value="timer">{t("cue.add_timer")}</option>
+      <option value="blank">{t("cue.add_blank")}</option>
+      <option value="web">{t("cue.add_web")}</option>
+      <option value="openslides">{t("cue.add_openslides")}</option>
+      <option value="capture">{t("cue.add_capture")}</option>
+    </select>
   {/snippet}
 
   {#if adding === "web" || adding === "openslides"}
@@ -328,6 +343,17 @@
 </Panel>
 
 <style>
+  .add-menu {
+    min-height: 40px;
+    padding: 0 10px;
+    font: inherit;
+    font-weight: 600;
+    color: var(--ms-text);
+    background: var(--ms-surface-2);
+    border: 1px solid var(--ms-border);
+    border-radius: var(--ms-radius-sm);
+    cursor: pointer;
+  }
   .add-form {
     display: grid;
     gap: 6px;
@@ -430,6 +456,15 @@
   .tools {
     display: flex;
     gap: 2px;
+  }
+  /* Row tools only take room on the row in use, so names stay readable in narrow lists. */
+  .tools button:not(.go) {
+    display: none;
+  }
+  .cue:hover .tools button,
+  .cue:focus-within .tools button,
+  .cue.selected .tools button {
+    display: inline-block;
   }
   .tools button {
     min-width: 30px;
