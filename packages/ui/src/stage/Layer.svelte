@@ -61,7 +61,12 @@
   {#if mode === "output"}
     <div class="blank" style:background="#000"></div>
   {:else}
-    <WebPlaceholder name={content.name} url={content.url} openslides={content.openslides} {onready} />
+    <WebPlaceholder
+      name={content.name}
+      url={content.url}
+      openslides={content.openslides}
+      {onready}
+    />
   {/if}
 {:else if content.kind === "capture"}
   <CaptureContent src={content.src} {fit} {onready} />

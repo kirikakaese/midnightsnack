@@ -1,14 +1,24 @@
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 <script lang="ts">
   import type {
+    CaptureSource,
     MediaOptions,
     TextTheme,
     TimerCue,
     TimerMode,
     Transition,
+    WebInfo,
   } from "@midnightsnack/protocol";
-  import { Button, formatDuration, parseDuration, t, type HostConnection } from "@midnightsnack/ui";
+  import {
+    Button,
+    captureLabel,
+    formatDuration,
+    parseDuration,
+    t,
+    type HostConnection,
+  } from "@midnightsnack/ui";
   import { open } from "@tauri-apps/plugin-dialog";
+  import CapturePicker from "./CapturePicker.svelte";
   import ThemeEditor from "./ThemeEditor.svelte";
 
   interface Props {
@@ -79,6 +89,31 @@
     const path = await open({ multiple: false, filters: imageFilter });
     if (typeof path === "string")
       conn.action({ action: "set_background_image", cue_id: id(), path });
+  }
+
+  // Outputs that can show cues (stage feeds follow the program on their own).
+  const programOutputs = $derived(show?.outputs.filter((o) => o.feed === "program") ?? []);
+
+  function setTargets(targets: string[] | null) {
+    conn.action({ action: "set_cue_targets", cue_id: id(), targets });
+  }
+
+  function toggleTarget(outputId: string, on: boolean) {
+    const current = cue?.targets ?? programOutputs.map((o) => o.id);
+    const next = on ? [...new Set([...current, outputId])] : current.filter((t) => t !== outputId);
+    setTargets(next);
+  }
+
+  let webUrl = $derived(cue?.web?.url ?? "");
+  function setWeb(patch: Partial<WebInfo>) {
+    if (!cue?.web) return;
+    conn.action({ action: "set_web_options", cue_id: id(), web: { ...cue.web, ...patch } });
+  }
+
+  let pickingCapture = $state(false);
+  function setCapture(source: CaptureSource, fps: number) {
+    conn.action({ action: "set_capture", cue_id: id(), source, fps });
+    pickingCapture = false;
   }
 
   function msField(ms: number | null): string {
@@ -250,6 +285,114 @@
       </label>
     {/if}
 
+    {#if cue.web}
+      {@const web = cue.web}
+      <h3>{web.openslides ? t("cue.kind.openslides") : t("inspector.web")}</h3>
+      <label>
+        <span>{t("cue.web_url")}</span>
+        <input
+          type="url"
+          bind:value={webUrl}
+          onchange={() => webUrl.trim() !== web.url && setWeb({ url: webUrl.trim() })}
+        />
+      </label>
+      <label>
+        <span>{t("inspector.zoom", { n: web.zoom })}</span>
+        <input
+          type="range"
+          min="25"
+          max="400"
+          step="5"
+          value={web.zoom}
+          onchange={(e) => setWeb({ zoom: Number(e.currentTarget.value) })}
+        />
+      </label>
+      <label class="check">
+        <input
+          type="checkbox"
+          checked={web.block_navigation}
+          onchange={(e) => setWeb({ block_navigation: e.currentTarget.checked })}
+        />
+        {t("inspector.block_navigation")}
+      </label>
+      <label class="check">
+        <input
+          type="checkbox"
+          checked={web.forward_keys}
+          onchange={(e) => setWeb({ forward_keys: e.currentTarget.checked })}
+        />
+        {t("inspector.forward_keys")}
+      </label>
+      <label class="check">
+        <input
+          type="checkbox"
+          checked={web.persist_session}
+          onchange={(e) => setWeb({ persist_session: e.currentTarget.checked })}
+        />
+        {t("inspector.persist_session")}
+      </label>
+      <p class="hint">
+        {web.persist_session ? t("inspector.persist_hint") : t("inspector.private_hint")}
+      </p>
+    {/if}
+
+    {#if cue.capture}
+      {@const capture = cue.capture}
+      <h3>{t("inspector.capture")}</h3>
+      <p>
+        {t(`capture.kind_${capture.source.type}`)}: <strong>{captureLabel(capture.source)}</strong>
+      </p>
+      {#if conn.live?.capture_lost.includes(cue.id)}
+        <p class="warn" role="alert">{t("inspector.capture_lost")}</p>
+      {/if}
+      {#if pickingCapture}
+        <CapturePicker
+          {conn}
+          onpick={(source) => setCapture(source, capture.fps)}
+          oncancel={() => (pickingCapture = false)}
+        />
+      {:else}
+        <Button onclick={() => (pickingCapture = true)}>{t("inspector.change_source")}</Button>
+      {/if}
+      <label>
+        <span>{t("inspector.fps")}</span>
+        <select
+          value={String(capture.fps)}
+          onchange={(e) => setCapture(capture.source, Number(e.currentTarget.value))}
+        >
+          {#each [5, 10, 15, 24, 30] as fps (fps)}
+            <option value={String(fps)}>{fps}</option>
+          {/each}
+        </select>
+      </label>
+    {/if}
+
+    {#if programOutputs.length > 1}
+      <h3>{t("inspector.outputs")}</h3>
+      <label class="check">
+        <input
+          type="checkbox"
+          checked={cue.targets === null}
+          onchange={(e) =>
+            setTargets(e.currentTarget.checked ? null : programOutputs.map((o) => o.id))}
+        />
+        {t("inspector.all_outputs")}
+      </label>
+      {#if cue.targets !== null}
+        {#each programOutputs as o (o.id)}
+          <label class="check">
+            <input
+              type="checkbox"
+              checked={cue.targets.includes(o.id)}
+              onchange={(e) => toggleTarget(o.id, e.currentTarget.checked)}
+            />
+            {o.name}
+          </label>
+        {/each}
+        <p class="hint">{t("inspector.targets_hint")}</p>
+      {/if}
+    {/if}
+
     <h3>{t("inspector.transition")}</h3>
     <div class="row">
       <select
@@ -332,5 +475,8 @@
 <style>
   .hint {
     color: var(--ms-text-muted);
+  }
+  .warn {
+    color: var(--ms-warn);
   }
 </style>

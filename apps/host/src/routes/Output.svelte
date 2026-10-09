@@ -4,7 +4,7 @@
   the last frame stays up; nothing else (errors, cursors, spinners) is ever drawn here.
 -->
 <script lang="ts">
-  import { Stage, type HostConnection } from "@midnightsnack/ui";
+  import { Stage, StageDisplay, type HostConnection } from "@midnightsnack/ui";
   import { onDestroy } from "svelte";
   import { connectToHost, host } from "../lib/host";
   import { buildKeymap, installKeyHandler, type KeyAction } from "../lib/keymap";
@@ -17,6 +17,9 @@
   let conn = $state<HostConnection | null>(null);
   let keymap = $state<Record<string, KeyAction>>(buildKeymap({}));
   let size = $state({ width: window.innerWidth, height: window.innerHeight });
+
+  // A stage feed is a confidence monitor for the presenter; anything else is the audience.
+  const feed = $derived(conn?.show?.outputs.find((o) => o.id === outputId)?.feed ?? "program");
 
   const pixelSize = $derived({
     width: Math.round(size.width * window.devicePixelRatio),
@@ -50,8 +53,10 @@
 </script>
 
 <div class="output" data-output={outputId}>
-  {#if conn}
-    <Stage {conn} width={pixelSize.width} height={pixelSize.height} mode="output" />
+  {#if conn && feed === "stage"}
+    <div class="stage-feed"><StageDisplay {conn} mode="monitor" /></div>
+  {:else if conn}
+    <Stage {conn} {outputId} width={pixelSize.width} height={pixelSize.height} mode="output" />
   {/if}
 </div>
 
@@ -70,5 +75,11 @@
     position: fixed;
     inset: 0;
     background: #000;
+  }
+  .stage-feed {
+    height: 100%;
+    padding: 16px;
+    overflow: hidden;
+    background: var(--ms-bg);
   }
 </style>

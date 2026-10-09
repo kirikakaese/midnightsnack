@@ -71,7 +71,9 @@
   );
   const margin = $derived(which === "output" ? (outputDef?.margin ?? 0) : 0);
   const showOverlays = $derived(masters && (outputDef?.overlays ?? true));
-  const testPattern = $derived(masters && which === "output" ? (conn.live?.test_pattern ?? null) : null);
+  const testPattern = $derived(
+    masters && which === "output" ? (conn.live?.test_pattern ?? null) : null,
+  );
   const live = $derived(which !== "next");
 
   let layers = $state<LayerState[]>([]);

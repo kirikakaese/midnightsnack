@@ -100,7 +100,14 @@ export function describe(
     }
     case "web": {
       if (!cue.web) return null;
-      return { kind: "web", key, cueId: cue.id, url: cue.web.url, openslides: cue.web.openslides, name: cue.name };
+      return {
+        kind: "web",
+        key,
+        cueId: cue.id,
+        url: cue.web.url,
+        openslides: cue.web.openslides,
+        name: cue.name,
+      };
     }
     case "capture": {
       const src = conn.captureUrl(cue.id, captureFps);

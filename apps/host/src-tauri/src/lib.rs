@@ -1,29 +1,39 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! Tauri desktop host: starts the embedded server, manages windows and displays.
+//! Tauri desktop host: starts the embedded server, manages output windows and displays.
 //!
 //! The operator and output windows talk to the core through the same WebSocket protocol as
 //! remote devices (with loopback-only tokens), so every control path shares one dispatcher.
 
+mod hotplug;
 mod output;
 mod settings;
+mod web;
 
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::Mutex;
 
 use midnightsnack_core::APP_VERSION;
-use midnightsnack_protocol::{HostInfo, DEFAULT_PORT, PROTOCOL_VERSION};
-use midnightsnack_server::{start, ServerConfig, ServerHandle};
+use midnightsnack_protocol::{HostInfo, OutputFeed, DEFAULT_PORT, PROTOCOL_VERSION};
+use midnightsnack_server::{start, state::lock, ServerConfig, ServerHandle};
 use serde::Serialize;
-use tauri::{AppHandle, Manager, State, WebviewWindow};
+use tauri::{AppHandle, Manager, State, Webview};
 
-use crate::output::{DisplayInfo, DisplayWindow};
-use crate::settings::HostSettings;
+use crate::output::DisplayInfo;
+use crate::settings::{HostSettings, Placement};
 
-struct HostState {
+pub(crate) struct HostState {
     server: ServerHandle,
-    settings: Mutex<HostSettings>,
+    pub(crate) settings: Mutex<HostSettings>,
     config_dir: PathBuf,
     keep_awake: Mutex<Option<keepawake::KeepAwake>>,
+}
+
+impl HostState {
+    fn save_settings(&self) {
+        let s = self.settings.lock().unwrap_or_else(|e| e.into_inner());
+        settings::save(&self.config_dir, &s);
+    }
 }
 
 #[derive(Serialize)]
@@ -31,6 +41,8 @@ struct ConnectionInfo {
     ws_url: String,
     http_base: String,
     token: String,
+    /// For output windows: the output this window shows.
+    output_id: Option<String>,
 }
 
 #[tauri::command]
@@ -38,23 +50,33 @@ fn host_info(state: State<'_, HostState>) -> HostInfo {
     state.server.state.host.clone()
 }
 
-/// Token and URLs for the calling window. Output windows get an operator token, the operator
-/// window an admin token; both only work from this machine.
+/// Token and URLs for the calling webview: program outputs get an operator token, stage
+/// outputs a read-only one, the operator window an admin token. All only work from this machine.
 #[tauri::command]
-fn connection_info(window: WebviewWindow, state: State<'_, HostState>) -> ConnectionInfo {
+fn connection_info(webview: Webview, state: State<'_, HostState>) -> ConnectionInfo {
     let s = &state.server;
-    let label = window.label();
-    let token = if label.starts_with("output-") {
-        s.output_token.clone()
-    } else if label.starts_with("stage-") {
-        s.stage_token.clone()
-    } else {
-        s.operator_token.clone()
+    let output_id = output::output_id(webview.label()).map(str::to_owned);
+    let token = match &output_id {
+        None => s.operator_token.clone(),
+        Some(id) => {
+            let engine = lock(&s.state.engine);
+            let stage = engine
+                .show()
+                .outputs
+                .iter()
+                .any(|o| o.id == *id && o.feed == OutputFeed::Stage);
+            if stage {
+                s.stage_token.clone()
+            } else {
+                s.output_token.clone()
+            }
+        }
     };
     ConnectionInfo {
         ws_url: s.local_ws_url(),
         http_base: s.local_http_url(),
         token,
+        output_id,
     }
 }
 
@@ -63,93 +85,104 @@ fn list_displays(app: AppHandle) -> Vec<DisplayInfo> {
     output::list_displays(&app)
 }
 
+#[tauri::command]
+fn display_status(app: AppHandle) -> hotplug::DisplayStatus {
+    hotplug::status(&app)
+}
+
 #[derive(Serialize)]
-struct WindowState {
-    open: bool,
-    display: Option<String>,
-    windowed: bool,
+struct OutputWindowState {
+    #[serde(flatten)]
+    placement: Placement,
+    /// The window exists.
+    window_open: bool,
 }
 
-fn parse_kind(kind: &str) -> Result<DisplayWindow, String> {
-    match kind {
-        "output" => Ok(DisplayWindow::Output),
-        "stage" => Ok(DisplayWindow::Stage),
-        other => Err(format!("unknown window kind {other}")),
-    }
-}
-
-/// State of the output (`kind = "output"`) or stage display (`kind = "stage"`) window.
+/// Placement and window state of every output configured on this host.
 #[tauri::command]
-fn window_state(
+fn output_windows(
     app: AppHandle,
     state: State<'_, HostState>,
-    kind: String,
-) -> Result<WindowState, String> {
-    let kind = parse_kind(&kind)?;
+) -> BTreeMap<String, OutputWindowState> {
     let s = state.settings.lock().unwrap_or_else(|e| e.into_inner());
-    let (display, windowed) = match kind {
-        DisplayWindow::Output => (s.output_display.clone(), s.output_windowed),
-        DisplayWindow::Stage => (s.stage_display.clone(), s.stage_windowed),
-    };
-    Ok(WindowState {
-        open: output::is_open(&app, kind),
-        display,
-        windowed,
-    })
+    s.outputs
+        .iter()
+        .map(|(id, p)| {
+            (
+                id.clone(),
+                OutputWindowState {
+                    placement: p.clone(),
+                    window_open: output::window(&app, id).is_some(),
+                },
+            )
+        })
+        .collect()
 }
 
 #[tauri::command]
-fn open_window(
+fn open_output(
     app: AppHandle,
     state: State<'_, HostState>,
-    kind: String,
+    output_id: String,
     display: Option<String>,
     windowed: bool,
 ) -> Result<(), String> {
-    let kind = parse_kind(&kind)?;
-    output::open(&app, kind, display.as_deref(), windowed).map_err(|e| e.to_string())?;
-    {
-        let mut s = state.settings.lock().unwrap_or_else(|e| e.into_inner());
-        match kind {
-            DisplayWindow::Output => {
-                s.output_display = display;
-                s.output_windowed = windowed;
-            }
-            DisplayWindow::Stage => {
-                s.stage_display = display;
-                s.stage_windowed = windowed;
-            }
-        }
-        settings::save(&state.config_dir, &s);
+    let exists = lock(&state.server.state.engine)
+        .show()
+        .outputs
+        .iter()
+        .any(|o| o.id == output_id);
+    if !exists {
+        return Err(format!("unknown output {output_id}"));
     }
-    if kind == DisplayWindow::Output {
-        set_keep_awake(&state, true);
-    }
+    output::open(&app, &output_id, display.as_deref(), windowed).map_err(|e| e.to_string())?;
+    state
+        .settings
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .outputs
+        .insert(
+            output_id,
+            Placement {
+                display,
+                windowed,
+                open: true,
+            },
+        );
+    state.save_settings();
+    update_keep_awake(&app, &state);
+    web::WINDOWS_CHANGED.notify_one();
     Ok(())
 }
 
 #[tauri::command]
-fn close_window(app: AppHandle, state: State<'_, HostState>, kind: String) -> Result<(), String> {
-    let kind = parse_kind(&kind)?;
-    output::close(&app, kind).map_err(|e| e.to_string())?;
+fn close_output(
+    app: AppHandle,
+    state: State<'_, HostState>,
+    output_id: String,
+) -> Result<(), String> {
+    output::close(&app, &output_id).map_err(|e| e.to_string())?;
+    if let Some(p) = state
+        .settings
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .outputs
+        .get_mut(&output_id)
     {
-        // Closing on purpose means: do not reopen on the next launch.
-        let mut s = state.settings.lock().unwrap_or_else(|e| e.into_inner());
-        match kind {
-            DisplayWindow::Output => s.output_display = None,
-            DisplayWindow::Stage => s.stage_display = None,
-        }
-        settings::save(&state.config_dir, &s);
+        // Closing on purpose: do not reopen on the next launch.
+        p.open = false;
     }
-    if kind == DisplayWindow::Output {
-        set_keep_awake(&state, false);
-    }
+    state.save_settings();
+    update_keep_awake(&app, &state);
+    web::WINDOWS_CHANGED.notify_one();
     Ok(())
 }
 
-fn set_keep_awake(state: &HostState, on: bool) {
+/// Screen sleep is prevented while any output window is open.
+fn update_keep_awake(app: &AppHandle, state: &HostState) {
+    let any_open = app.windows().keys().any(|l| output::output_id(l).is_some());
     let mut guard = state.keep_awake.lock().unwrap_or_else(|e| e.into_inner());
-    if !on {
+    if !any_open {
         *guard = None;
         return;
     }
@@ -170,7 +203,7 @@ fn set_keep_awake(state: &HostState, on: bool) {
 
 /// Keyboard overrides from the host settings file.
 #[tauri::command]
-fn keymap(state: State<'_, HostState>) -> std::collections::BTreeMap<String, String> {
+fn keymap(state: State<'_, HostState>) -> BTreeMap<String, String> {
     state
         .settings
         .lock()
@@ -190,6 +223,17 @@ fn qr_svg(text: String) -> Result<String, String> {
         .dark_color(qrcode::render::svg::Color("#000000"))
         .light_color(qrcode::render::svg::Color("#ffffff"))
         .build())
+}
+
+/// Opens the macOS privacy settings for Screen Recording.
+#[tauri::command]
+fn open_capture_settings() {
+    #[cfg(target_os = "macos")]
+    {
+        let _ = std::process::Command::new("open")
+            .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")
+            .spawn();
+    }
 }
 
 /// Called by the operator window once it has rendered. In smoke-test mode
@@ -230,27 +274,23 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     config
         .bind
         .set_port(host_settings.port.unwrap_or(DEFAULT_PORT));
-    config.data_dir = Some(data_dir);
+    config.data_dir = Some(data_dir.clone());
     config.pdfium_dirs = pdfium_dirs(&handle);
-    if std::env::var_os("MIDNIGHTSNACK_SMOKE_TEST").is_some() {
+    let smoke = std::env::var_os("MIDNIGHTSNACK_SMOKE_TEST").is_some();
+    if smoke {
         config.mdns = false;
         config.restore_autosave = false;
         config.bind.set_port(0);
     }
     let server = tauri::async_runtime::block_on(start(config))?;
+    let server_state = server.state.clone();
 
-    let reopen = [
-        (
-            DisplayWindow::Output,
-            host_settings.output_display.clone(),
-            host_settings.output_windowed,
-        ),
-        (
-            DisplayWindow::Stage,
-            host_settings.stage_display.clone(),
-            host_settings.stage_windowed,
-        ),
-    ];
+    let reopen: Vec<(String, Placement)> = host_settings
+        .outputs
+        .iter()
+        .filter(|(_, p)| p.open)
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect();
     app.manage(HostState {
         server,
         settings: Mutex::new(host_settings),
@@ -258,19 +298,31 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         keep_awake: Mutex::new(None),
     });
 
-    // Restore display windows on the displays they were on last time, if present.
+    // Restore outputs that were open, on their displays if connected (the watcher brings the
+    // others back when their display appears).
+    let known: Vec<String> = lock(&server_state.engine)
+        .show()
+        .outputs
+        .iter()
+        .map(|o| o.id.clone())
+        .collect();
     let displays = output::list_displays(&handle);
-    for (kind, name, windowed) in reopen {
-        let Some(name) = name else { continue };
-        if !displays.iter().any(|d| d.name == name) {
+    for (id, p) in reopen {
+        let present = p.windowed
+            || p.display
+                .as_ref()
+                .is_none_or(|d| displays.iter().any(|x| x.name == *d));
+        if !known.contains(&id) || !present || smoke {
             continue;
         }
-        if let Err(e) = output::open(&handle, kind, Some(&name), windowed) {
-            tracing::warn!(error = %e, ?kind, "could not restore window");
-        } else if kind == DisplayWindow::Output {
-            set_keep_awake(&app.state::<HostState>(), true);
+        if let Err(e) = output::open(&handle, &id, p.display.as_deref(), p.windowed) {
+            tracing::warn!(error = %e, output = %id, "could not restore output window");
         }
     }
+    update_keep_awake(&handle, &app.state::<HostState>());
+
+    hotplug::spawn(handle.clone());
+    tauri::async_runtime::spawn(web::run(handle, server_state, data_dir.join("web")));
     Ok(())
 }
 
@@ -291,8 +343,8 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .setup(setup)
         .on_window_event(|window, event| {
-            // Closing the operator window quits the app (including outputs).
             if let tauri::WindowEvent::CloseRequested { .. } = event {
+                // Closing the operator window quits the app (including outputs).
                 if window.label() == "operator" {
                     window.app_handle().exit(0);
                 }
@@ -302,11 +354,13 @@ pub fn run() {
             host_info,
             connection_info,
             list_displays,
-            window_state,
-            open_window,
-            close_window,
+            display_status,
+            output_windows,
+            open_output,
+            close_output,
             keymap,
             qr_svg,
+            open_capture_settings,
             ui_ready
         ])
         .run(tauri::generate_context!())

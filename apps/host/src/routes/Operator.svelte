@@ -172,7 +172,7 @@
         {:else if tab === "show"}
           <ShowPanel {conn} />
         {:else if tab === "outputs"}
-          <OutputPanel />
+          <OutputPanel {conn} />
         {:else}
           <ConnectPanel {conn} />
         {/if}
