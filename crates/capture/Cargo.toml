@@ -1,0 +1,25 @@
+[package]
+name = "midnightsnack-capture"
+description = "Screen and window capture for midnightsnack"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+bytes = "1"
+image = { version = "0.25", default-features = false }
+jpeg-encoder = "0.6"
+midnightsnack-protocol.workspace = true
+tokio = { version = "1", features = ["sync"] }
+thiserror.workspace = true
+tracing.workspace = true
+xcap = "0.9"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+x11rb = "0.13"
+
+[lints]
+workspace = true
