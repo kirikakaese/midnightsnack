@@ -159,6 +159,7 @@ async fn send_full_state(socket: &mut WebSocket, state: &AppState, role: Role) -
     send(socket, &ServerMessage::Live { live }).await?;
     if role == Role::Admin {
         send_devices(socket, state).await?;
+        send_inbox(socket, state).await?;
         send(
             socket,
             &ServerMessage::Pairing {
@@ -169,6 +170,12 @@ async fn send_full_state(socket: &mut WebSocket, state: &AppState, role: Role) -
     }
     let queued = *state.render.subscribe_queued().borrow();
     send(socket, &ServerMessage::RenderProgress { queued }).await
+}
+
+async fn send_inbox(socket: &mut WebSocket, state: &AppState) -> WsResult {
+    let items = lock(&state.inbox).items();
+    let auto_accept = lock(&state.settings).auto_accept_uploads;
+    send(socket, &ServerMessage::Inbox { items, auto_accept }).await
 }
 
 async fn send_devices(socket: &mut WebSocket, state: &AppState) -> WsResult {
@@ -237,6 +244,7 @@ async fn session(
                         send(socket, &ServerMessage::Live { live }).await?;
                     }
                     Ok(Event::Devices) if role == Role::Admin => send_devices(socket, state).await?,
+                    Ok(Event::Inbox) if role == Role::Admin => send_inbox(socket, state).await?,
                     Ok(Event::Pairing) if role == Role::Admin => {
                         send(socket, &ServerMessage::Pairing { pairing: state.pairing_info() }).await?;
                     }

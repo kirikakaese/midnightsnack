@@ -23,4 +23,5 @@ export type ErrorCode =
   | "converter_missing"
   | "conversion_failed"
   | "capture_permission"
+  | "file_too_large"
   | "internal";

@@ -3,6 +3,7 @@ import type { CaptureTarget } from "./CaptureTarget";
 import type { DeviceInfo } from "./DeviceInfo";
 import type { ErrorCode } from "./ErrorCode";
 import type { HostInfo } from "./HostInfo";
+import type { InboxItem } from "./InboxItem";
 import type { LiveState } from "./LiveState";
 import type { PairingInfo } from "./PairingInfo";
 import type { PendingPairing } from "./PendingPairing";
@@ -19,6 +20,7 @@ export type ServerMessage =
   | { type: "live"; live: LiveState }
   | { type: "devices"; devices: Array<DeviceInfo>; pending: Array<PendingPairing> }
   | { type: "pairing"; pairing: PairingInfo }
+  | { type: "inbox"; items: Array<InboxItem>; auto_accept: boolean }
   | { type: "render_progress"; queued: number }
   | { type: "capture_targets"; targets: Array<CaptureTarget> }
   | {

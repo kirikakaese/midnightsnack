@@ -104,7 +104,7 @@ test("operator phone runs text cues, overlays, countdown and stage messages", as
   await expect.poll(() => op.live?.countdown.elapsed.running_since_ms).not.toBeNull();
 
   await page.getByLabel("Message to stage").fill("Two minutes left");
-  await page.getByRole("button", { name: "Send" }).click();
+  await page.getByRole("button", { name: "Send", exact: true }).click();
   await expect.poll(() => op.live?.stage_message).toBe("Two minutes left");
   await page.screenshot({ path: "test-results/remote-operator-live.png", fullPage: true });
 });
@@ -206,4 +206,31 @@ test("presenter draws and points on the slide", async ({ page }) => {
   await page.getByRole("button", { name: "Clear drawing" }).click();
   await expect.poll(() => op.live?.drawing).toBeNull();
   await page.screenshot({ path: "test-results/remote-pointer.png", fullPage: true });
+});
+
+// 8×8 red PNG.
+const PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEklEQVR4nGP4z8CAFWEXHbQSACj/P8Fu7N9hAAAAAElFTkSuQmCC",
+  "base64",
+);
+
+test("presenter sends a file that the operator adds", async ({ page }) => {
+  await pair(page, "presenter");
+  await page
+    .locator("#upload-file")
+    .setInputFiles({ name: "sponsor.png", mimeType: "image/png", buffer: PNG });
+  await expect(page.locator(".upload [role=status]")).toHaveText(/operator decides/);
+  await expect.poll(() => op.inbox.map((i) => i.file_name)).toEqual(["sponsor.png"]);
+  const item = op.inbox[0]!;
+  expect(item.device_name).toBe("Test presenter");
+  await op.action({ action: "accept_upload", upload_id: item.id, at_index: null });
+  await expect.poll(() => op.inbox.length).toBe(0);
+  await expect.poll(() => op.show?.cues.some((c) => c.name === "sponsor")).toBe(true);
+  const cue = op.show!.cues.find((c) => c.name === "sponsor")!;
+  await op.action({ action: "remove_cue", cue_id: cue.id });
+
+  await page
+    .locator("#upload-file")
+    .setInputFiles({ name: "notes.txt", mimeType: "text/plain", buffer: Buffer.from("x") });
+  await expect(page.locator(".upload [role=status]")).toHaveText("Unsupported file type.");
 });

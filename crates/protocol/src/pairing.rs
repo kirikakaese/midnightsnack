@@ -70,6 +70,29 @@ pub struct DeviceInfo {
     pub last_seen_ms: Option<i64>,
 }
 
+/// A file sent from a device, waiting for an admin to accept or reject it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct InboxItem {
+    pub id: String,
+    pub file_name: String,
+    #[ts(type = "number")]
+    pub size: u64,
+    pub device_name: String,
+    #[ts(type = "number")]
+    pub received_ms: i64,
+}
+
+/// `POST /api/v1/upload` success response.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct UploadResponse {
+    pub upload_id: String,
+    /// The file was added to the show right away (admin or auto-accept); otherwise it waits in
+    /// the inbox.
+    pub added: bool,
+}
+
 /// Pairing information shown by the host (QR code + PIN). Only sent to admins.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export)]

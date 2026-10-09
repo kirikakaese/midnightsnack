@@ -4,6 +4,7 @@
   import { Button, Panel, captureLabel, t, type HostConnection } from "@midnightsnack/ui";
   import { open } from "@tauri-apps/plugin-dialog";
   import CapturePicker from "./CapturePicker.svelte";
+  import InboxPanel from "./InboxPanel.svelte";
 
   interface Props {
     conn: HostConnection;
@@ -262,6 +263,8 @@
       <CapturePicker {conn} onpick={addCapture} oncancel={() => (adding = null)} />
     </div>
   {/if}
+
+  <InboxPanel {conn} />
 
   {#if cues.length === 0}
     <p class="empty">{t("cue.empty")}</p>

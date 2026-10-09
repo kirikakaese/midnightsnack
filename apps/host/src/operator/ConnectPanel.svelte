@@ -76,6 +76,15 @@
           {/each}
         </select>
       </label>
+      <label class="check">
+        <input
+          type="checkbox"
+          checked={conn.autoAcceptUploads}
+          onchange={(e) =>
+            conn.action({ action: "set_auto_accept_uploads", on: e.currentTarget.checked })}
+        />
+        {t("inbox.auto_accept")}
+      </label>
     {/if}
 
     {#if conn.pending.length > 0}

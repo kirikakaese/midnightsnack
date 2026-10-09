@@ -966,3 +966,145 @@ async fn presenters_point_and_draw_stage_viewers_do_not() {
         Err(ErrorCode::Forbidden)
     );
 }
+
+impl Fixture {
+    async fn upload(&self, token: &str, name: &str, body: Vec<u8>) -> reqwest::Response {
+        self.http
+            .post(self.url("/api/v1/upload"))
+            .query(&[("name", name)])
+            .bearer_auth(token)
+            .body(body)
+            .send()
+            .await
+            .unwrap()
+    }
+}
+
+async fn inbox(c: &mut Client) -> (Vec<InboxItem>, bool) {
+    c.wait(|m| match m {
+        ServerMessage::Inbox { items, auto_accept } => Some((items, auto_accept)),
+        _ => None,
+    })
+    .await
+}
+
+#[tokio::test]
+async fn uploads_wait_in_the_inbox_until_accepted() {
+    let f = fixture().await;
+    let mut op = f.connect(&f.handle.operator_token).await;
+    op.welcome().await;
+    let (items, auto) = inbox(&mut op).await;
+    assert!(items.is_empty() && !auto);
+    let token = f.pair(&mut op, "Speaker", Role::Presenter).await;
+
+    let pdf = std::fs::read(f.pdf("talk.pdf", 3)).unwrap();
+    let res = f.upload(&token, "../talk.pdf", pdf.clone()).await;
+    assert_eq!(res.status(), 200);
+    let up: UploadResponse = res.json().await.unwrap();
+    assert!(!up.added);
+    let (items, _) = inbox(&mut op).await;
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0].file_name, "talk.pdf");
+    assert_eq!(items[0].device_name, "Speaker");
+    assert_eq!(items[0].size, pdf.len() as u64);
+
+    op.action(Action::AcceptUpload {
+        upload_id: up.upload_id.clone(),
+        at_index: None,
+    })
+    .await
+    .unwrap();
+    let show = op
+        .wait(|m| match m {
+            ServerMessage::Show { show } if !show.cues.is_empty() => Some(show),
+            _ => None,
+        })
+        .await;
+    assert_eq!(show.cues[0].name, "talk");
+    assert_eq!(show.cues[0].slide_count, 3);
+    assert_eq!(
+        op.action(Action::AcceptUpload {
+            upload_id: up.upload_id,
+            at_index: None,
+        })
+        .await,
+        Err(ErrorCode::NotFound)
+    );
+
+    // Rejected uploads are deleted.
+    let res = f
+        .upload(&token, "photo.png", std::fs::read(f.png("p.png")).unwrap())
+        .await;
+    let up: UploadResponse = res.json().await.unwrap();
+    let pending = f.dir.path().join("data/inbox").join(&up.upload_id);
+    assert!(pending.join("photo.png").is_file());
+    op.action(Action::RejectUpload {
+        upload_id: up.upload_id,
+    })
+    .await
+    .unwrap();
+    assert!(!pending.exists());
+}
+
+#[tokio::test]
+async fn uploads_are_checked() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut config = ServerConfig::new(dir.path().join("cache"));
+    config.bind = "127.0.0.1:0".parse().unwrap();
+    config.mdns = false;
+    config.data_dir = Some(dir.path().join("data"));
+    config.max_upload_bytes = 1000;
+    let handle = start(config).await.unwrap();
+    let f = Fixture {
+        handle,
+        dir,
+        http: reqwest::Client::new(),
+    };
+    let mut op = f.connect(&f.handle.operator_token).await;
+    op.welcome().await;
+
+    let res = f.upload("nope", "a.pdf", vec![1; 10]).await;
+    assert_eq!(res.status(), 401);
+    let viewer = f.pair(&mut op, "Viewer", Role::StageViewer).await;
+    assert_eq!(f.upload(&viewer, "a.pdf", vec![1; 10]).await.status(), 403);
+    let presenter = f.pair(&mut op, "Presenter", Role::Presenter).await;
+    let res = f.upload(&presenter, "script.sh", vec![1; 10]).await;
+    assert_eq!(res.status(), 415);
+    let res = f.upload(&presenter, "big.mp4", vec![0; 5000]).await;
+    assert_eq!(res.status(), 413);
+    let err: ApiError = res.json().await.unwrap();
+    assert_eq!(err.code, ErrorCode::FileTooLarge);
+    let inbox_dir = f.dir.path().join("data/inbox");
+    let leftovers = std::fs::read_dir(&inbox_dir)
+        .map(|d| d.count())
+        .unwrap_or(0);
+    assert_eq!(leftovers, 0, "rejected uploads leave nothing behind");
+
+    // Admin uploads and auto-accept skip the inbox.
+    let png = std::fs::read(f.png("p.png")).unwrap();
+    assert!(png.len() < 1000);
+    let up: UploadResponse = f
+        .upload(&f.handle.operator_token, "logo.png", png.clone())
+        .await
+        .json()
+        .await
+        .unwrap();
+    assert!(up.added);
+    op.action(Action::SetAutoAcceptUploads { on: true })
+        .await
+        .unwrap();
+    let up: UploadResponse = f
+        .upload(&presenter, "slide.png", png)
+        .await
+        .json()
+        .await
+        .unwrap();
+    assert!(up.added);
+    let show = op
+        .wait(|m| match m {
+            ServerMessage::Show { show } if show.cues.len() == 2 => Some(show),
+            _ => None,
+        })
+        .await;
+    assert_eq!(show.cues[1].name, "slide");
+}

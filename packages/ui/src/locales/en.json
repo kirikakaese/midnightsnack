@@ -301,5 +301,17 @@
   "pointer.draw": "Draw",
   "pointer.color": "Pointer color",
   "pointer.clear": "Clear drawing",
-  "pointer.hint": "Touch the slide to point or draw on the screen. Drawings disappear when the slide changes."
+  "pointer.hint": "Touch the slide to point or draw on the screen. Drawings disappear when the slide changes.",
+  "upload.title": "Send a file",
+  "upload.send": "Send a file to the host",
+  "upload.progress": "Upload progress",
+  "upload.waiting": "Sent. The operator decides whether to add it.",
+  "upload.added": "{name} was added to the show.",
+  "error.file_too_large": "The file is too large for this host.",
+  "inbox.title": "Inbox",
+  "inbox.from": "{size} from {device}",
+  "inbox.add": "Add",
+  "inbox.add_next": "Add after current",
+  "inbox.reject": "Reject",
+  "inbox.auto_accept": "Add files from all devices without asking"
 }

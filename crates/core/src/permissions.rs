@@ -24,6 +24,7 @@ pub fn required_role(action: &Action) -> Role {
         SetStageMessage { .. } | SetOverlayVisible { .. } | ToggleOverlay { .. } => Role::Operator,
         SetTestPattern { .. } => Role::Operator,
         DrawStroke { .. } | ClearDrawing => Role::Presenter,
+        AcceptUpload { .. } | RejectUpload { .. } | SetAutoAcceptUploads { .. } => Role::Admin,
         PutOutput { .. }
         | RemoveOutput { .. }
         | SetCueTargets { .. }

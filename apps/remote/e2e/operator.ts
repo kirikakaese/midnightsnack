@@ -2,6 +2,7 @@
 // A minimal operator client used by tests to approve devices and inspect live state.
 import type {
   Action,
+  InboxItem,
   LiveState,
   PendingPairing,
   ServerMessage,
@@ -24,6 +25,7 @@ export class Operator {
   #listeners: Array<(m: ServerMessage) => void> = [];
   #id = 0;
   live: LiveState | null = null;
+  inbox: InboxItem[] = [];
   show: ShowSnapshot | null = null;
   pending: PendingPairing[] = [];
   pin = "";
@@ -37,6 +39,7 @@ export class Operator {
       const m = JSON.parse(String(ev.data)) as ServerMessage;
       if (m.type === "live") this.live = m.live;
       if (m.type === "show") this.show = m.show;
+      if (m.type === "inbox") this.inbox = m.items;
       if (m.type === "pointer") this.pointers.set(m.device_id, m);
       if (m.type === "devices") this.pending = m.pending;
       if (m.type === "pairing") {

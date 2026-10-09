@@ -9,6 +9,7 @@ import {
   type DeviceInfo,
   type ErrorCode,
   type HostInfo,
+  type InboxItem,
   type LiveState,
   type PairingInfo,
   type PendingPairing,
@@ -17,6 +18,7 @@ import {
   type ServerMessage,
   type SessionInfo,
   type ShowSnapshot,
+  type UploadResponse,
 } from "@midnightsnack/protocol";
 
 export type ConnectionStatus =
@@ -61,6 +63,9 @@ export class HostConnection {
   pending = $state<PendingPairing[]>([]);
   pairing = $state<PairingInfo | null>(null);
   renderQueued = $state(0);
+  /** Admins: uploaded files waiting for a decision. */
+  inbox = $state<InboxItem[]>([]);
+  autoAcceptUploads = $state(false);
   /** Pointers of other devices, by device id. */
   pointers = $state<Record<string, RemotePointer>>({});
   /** Round-trip time of the last ping, in ms. */
@@ -183,6 +188,10 @@ export class HostConnection {
         break;
       case "render_progress":
         this.renderQueued = msg.queued;
+        break;
+      case "inbox":
+        this.inbox = msg.items;
+        this.autoAcceptUploads = msg.auto_accept;
         break;
       case "pointer":
         this.#updatePointer(msg.device_id, msg.pos, msg.mode, msg.color);
@@ -320,6 +329,36 @@ export class HostConnection {
   requestCaptureTargets(): void {
     this.captureTargets = null;
     this.#send({ type: "list_capture_targets" });
+  }
+
+  /**
+   * Sends a file to the host's inbox. `onProgress` gets the fraction sent (0–1). Resolves with
+   * the host's answer or rejects with an error code.
+   */
+  upload(file: File, onProgress?: (fraction: number) => void): Promise<UploadResponse> {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open(
+        "POST",
+        `${this.#opts.httpBase}/api/v1/upload?name=${encodeURIComponent(file.name)}`,
+      );
+      xhr.setRequestHeader("Authorization", `Bearer ${this.#opts.token}`);
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) onProgress?.(e.loaded / e.total);
+      };
+      xhr.onload = () => {
+        let body: unknown = null;
+        try {
+          body = JSON.parse(xhr.responseText);
+        } catch {
+          // Not JSON (proxy error page); handled below.
+        }
+        if (xhr.status === 200) resolve(body as UploadResponse);
+        else reject(((body as { code?: ErrorCode } | null)?.code ?? "internal") as ErrorCode);
+      };
+      xhr.onerror = () => reject("io" as ErrorCode);
+      xhr.send(file);
+    });
   }
 
   /** URL of an image asset (logo, background, logo bug). */

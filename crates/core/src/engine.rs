@@ -1094,7 +1094,10 @@ impl Engine {
             | SetDeviceRole { .. }
             | RevokeDevice { .. }
             | DisconnectAll
-            | SetAutoApprove { .. } => return Err(ErrorCode::InvalidState),
+            | SetAutoApprove { .. }
+            | AcceptUpload { .. }
+            | RejectUpload { .. }
+            | SetAutoAcceptUploads { .. } => return Err(ErrorCode::InvalidState),
         })
     }
 

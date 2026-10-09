@@ -9,6 +9,7 @@ mod autosave;
 mod devices;
 pub mod discovery;
 mod host_actions;
+mod inbox;
 mod pairing;
 mod scheduler;
 pub mod state;
@@ -46,6 +47,8 @@ pub struct ServerConfig {
     pub pdfium_dirs: Vec<PathBuf>,
     pub mdns: bool,
     pub restore_autosave: bool,
+    /// Largest accepted upload.
+    pub max_upload_bytes: u64,
 }
 
 impl ServerConfig {
@@ -59,6 +62,7 @@ impl ServerConfig {
             pdfium_dirs: Vec::new(),
             mdns: true,
             restore_autosave: true,
+            max_upload_bytes: inbox::DEFAULT_MAX_UPLOAD_BYTES,
         }
     }
 }
@@ -114,6 +118,10 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/v1/media/file/{cue_id}", get(api::media_file))
         .route("/api/v1/media/asset/{asset_id}", get(api::asset))
         .route("/api/v1/media/capture/{cue_id}", get(api::capture))
+        .route(
+            "/api/v1/upload",
+            post(inbox::upload).layer(axum::extract::DefaultBodyLimit::disable()),
+        )
         .fallback(assets::serve)
         .layer(SetResponseHeaderLayer::overriding(
             header::X_CONTENT_TYPE_OPTIONS,
@@ -176,6 +184,11 @@ pub async fn start(config: ServerConfig) -> std::io::Result<ServerHandle> {
         protocol_version: PROTOCOL_VERSION,
     };
     let state = AppState::new(host, render, config.data_dir.clone(), engine);
+    state.max_upload.store(
+        config.max_upload_bytes,
+        std::sync::atomic::Ordering::Relaxed,
+    );
+    inbox::clear_pending(&state);
 
     let listener = match TcpListener::bind(config.bind).await {
         Ok(l) => l,

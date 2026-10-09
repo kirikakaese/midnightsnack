@@ -53,11 +53,16 @@ pub enum Event {
     /// A device's role changed.
     Session(String),
     Pointer(Arc<PointerUpdate>),
+    /// The upload inbox changed (admins).
+    Inbox,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
 pub struct Settings {
     pub auto_approve: Option<Role>,
+    /// Add uploads from every device without asking.
+    pub auto_accept_uploads: bool,
 }
 
 pub struct AppState {
@@ -68,6 +73,8 @@ pub struct AppState {
     pub settings: Mutex<Settings>,
     pub render: RenderService,
     pub capture: CaptureHub,
+    pub inbox: Mutex<crate::inbox::Inbox>,
+    pub max_upload: std::sync::atomic::AtomicU64,
     pub events: broadcast::Sender<Event>,
     /// media key -> device id
     pub media_keys: Mutex<HashMap<String, String>>,
@@ -107,6 +114,8 @@ impl AppState {
             settings: Mutex::new(settings),
             render,
             capture: CaptureHub::new(),
+            inbox: Mutex::new(Default::default()),
+            max_upload: std::sync::atomic::AtomicU64::new(crate::inbox::DEFAULT_MAX_UPLOAD_BYTES),
             events,
             media_keys: Mutex::new(HashMap::new()),
             output_size: Mutex::new(DEFAULT_OUTPUT_SIZE),
@@ -115,6 +124,10 @@ impl AppState {
             autosave: Notify::new(),
             schedule: Notify::new(),
         })
+    }
+
+    pub fn max_upload_bytes(&self) -> u64 {
+        self.max_upload.load(std::sync::atomic::Ordering::Relaxed)
     }
 
     pub fn emit(&self, event: Event) {

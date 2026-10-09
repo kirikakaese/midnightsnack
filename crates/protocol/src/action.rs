@@ -73,6 +73,21 @@ pub enum Action {
     /// Removes all drawings.
     ClearDrawing,
 
+    // --- upload inbox ---
+    /// Adds an uploaded file to the show.
+    AcceptUpload {
+        upload_id: String,
+        at_index: Option<u32>,
+    },
+    /// Deletes an uploaded file.
+    RejectUpload {
+        upload_id: String,
+    },
+    /// Add uploads from every device without asking.
+    SetAutoAcceptUploads {
+        on: bool,
+    },
+
     // --- outputs ---
     /// Shows a test pattern on every output, or hides it.
     SetTestPattern {

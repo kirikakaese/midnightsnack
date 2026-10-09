@@ -3,8 +3,8 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::{
-    Action, CaptureTarget, DeviceInfo, ErrorCode, LiveState, PairingInfo, PendingPairing,
-    PointerMode, Role, ShowSnapshot,
+    Action, CaptureTarget, DeviceInfo, ErrorCode, InboxItem, LiveState, PairingInfo,
+    PendingPairing, PointerMode, Role, ShowSnapshot,
 };
 
 /// Static information about a host, available before pairing (`GET /api/v1/info`).
@@ -90,6 +90,11 @@ pub enum ServerMessage {
     /// Admins only.
     Pairing {
         pairing: PairingInfo,
+    },
+    /// Admins only: uploaded files waiting for a decision.
+    Inbox {
+        items: Vec<InboxItem>,
+        auto_accept: bool,
     },
     /// Background rendering status (operator view progress bar).
     RenderProgress {
