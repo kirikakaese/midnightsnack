@@ -1,0 +1,47 @@
+# Phase 3 — Outputs & sources
+
+Goal: several screens at once, robust display handling, and every kind of source a show needs —
+live screen capture, web pages, office presentations and OpenSlides.
+
+## Tasks
+
+### Outputs
+- [ ] Output definitions in the show: name, feed (program or stage display), overlays on/off,
+      scaling (fit / fill / stretch) and safe margin. Display assignment and windowed mode are
+      host settings, remembered by display name.
+- [ ] Cue targets: a cue goes to all program outputs or to a chosen subset; an output keeps
+      showing its last targeted cue while others change.
+- [ ] One window per output; the operator view shows a monitor for every output.
+- [ ] Display hotplug: detect monitors appearing and disappearing; if an output's display is
+      gone, keep running and warn the operator; move the output back when the display returns.
+- [ ] Test patterns per show (grid, color bars, resolution text) for setup.
+
+### Sources
+- [ ] Screen and window capture (`xcap`): MJPEG stream from the embedded server, started on
+      demand and shared by all viewers; "capture lost" state for the operator while the output
+      holds the last frame; guided macOS Screen Recording permission.
+- [ ] Web page cues in an isolated child webview of the output window: zoom, optional blocking of
+      navigation away, next/prev forwarded as arrow keys, optional persistent session (login),
+      preloaded while the cue is next.
+- [ ] OpenSlides projector URL cue: a web cue preset with persistent session and zoom.
+- [ ] PPTX/ODP → PDF via headless LibreOffice (detected per OS, clear hint if missing), speaker
+      notes extracted from the file; Keynote → PDF via AppleScript on macOS, guidance elsewhere.
+      Conversions are cached by file identity and redone when the file changes.
+
+### Docs and tests
+- [ ] Engine tests for targets and per-output positions; server tests for conversion detection
+      and capture endpoint auth; E2E for multiple-output state on the remote.
+- [ ] User docs: outputs and displays, capture (incl. permissions), web/OpenSlides, office files.
+      ADRs for capture streaming and child webviews.
+
+## Acceptance criteria
+
+1. Two outputs (main + second room) show different cues when targets differ; a stage display
+   output shows the stage view.
+2. Unplugging the projector does not crash or move anything onto the laptop screen silently; the
+   operator sees a warning; re-plugging restores the output.
+3. A captured window appears on the output with under 150 ms latency on a typical laptop; if the
+   window closes, the last frame stays and the operator is told.
+4. A reveal.js URL cue advances with the clicker; navigation away is blocked when set.
+5. A PPTX with speaker notes becomes a PDF cue with the same notes; without LibreOffice the
+   operator gets an actionable hint.
