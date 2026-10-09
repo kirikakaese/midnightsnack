@@ -11,6 +11,7 @@
     type Ticker,
   } from "@midnightsnack/ui";
   import { open } from "@tauri-apps/plugin-dialog";
+  import { isController } from "../lib/mode";
 
   interface Props {
     conn: HostConnection;
@@ -222,7 +223,9 @@
               </label>
             {:else if o.kind.type === "logo_bug"}
               <div class="row">
-                <Button onclick={() => pickBug(o)}>{t("overlay.choose_image")}</Button>
+                {#if !isController()}
+                  <Button onclick={() => pickBug(o)}>{t("overlay.choose_image")}</Button>
+                {/if}
                 {#if o.kind.image}
                   <Button
                     variant="ghost"

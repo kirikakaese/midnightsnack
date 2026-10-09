@@ -6,6 +6,7 @@
   import { onDestroy } from "svelte";
   import { host, onMidiPress, type MidiSettings } from "../lib/host";
   import ApiKeysPanel from "./ApiKeysPanel.svelte";
+  import { isController } from "../lib/mode";
 
   interface Props {
     conn: HostConnection;
@@ -67,7 +68,7 @@
     [midi, ports] = await Promise.all([host.midiSettings(), host.midiPorts()]);
   }
   $effect(() => {
-    refresh();
+    if (!isController()) refresh();
   });
   const stop = onMidiPress((tr) => (lastPress = tr));
   onDestroy(stop);
@@ -109,71 +110,75 @@
 </script>
 
 <div class="control">
-  <section aria-label={t("control.midi")}>
-    <div class="head">
-      <h3>{t("control.midi")}</h3>
-      <Button variant="ghost" onclick={refresh} aria-label={t("control.refresh")}>⟳</Button>
-    </div>
-    <label class="check">
-      <input
-        type="checkbox"
-        checked={midi.enabled}
-        onchange={(e) => save({ ...midi, enabled: e.currentTarget.checked })}
-      />
-      {t("control.midi_enabled")}
-    </label>
-    <p class="muted">
-      {ports.length ? t("control.midi_ports", { ports: ports.join(", ") }) : t("control.midi_none")}
-    </p>
-    {#if lastPress}
-      <p class="muted" aria-live="polite">
-        {t("control.midi_last", { what: triggerLabel(lastPress) })}
+  {#if !isController()}
+    <section aria-label={t("control.midi")}>
+      <div class="head">
+        <h3>{t("control.midi")}</h3>
+        <Button variant="ghost" onclick={refresh} aria-label={t("control.refresh")}>⟳</Button>
+      </div>
+      <label class="check">
+        <input
+          type="checkbox"
+          checked={midi.enabled}
+          onchange={(e) => save({ ...midi, enabled: e.currentTarget.checked })}
+        />
+        {t("control.midi_enabled")}
+      </label>
+      <p class="muted">
+        {ports.length
+          ? t("control.midi_ports", { ports: ports.join(", ") })
+          : t("control.midi_none")}
       </p>
-    {/if}
+      {#if lastPress}
+        <p class="muted" aria-live="polite">
+          {t("control.midi_last", { what: triggerLabel(lastPress) })}
+        </p>
+      {/if}
 
-    {#if midi.bindings.length}
-      <ul class="list">
-        {#each midi.bindings as b, i (i)}
-          <li>
-            <span class="trigger">{triggerLabel(b.trigger)}</span>
-            <select
-              value={keyOf(b.action)}
-              aria-label={t("control.action_label")}
-              onchange={(e) =>
-                save({
-                  ...midi,
-                  bindings: midi.bindings.map((x, j) =>
-                    j === i ? { ...x, action: actionOf(e.currentTarget.value) } : x,
-                  ),
-                })}
-            >
-              {#each choices as c (c.key)}
-                <option value={c.key}>{c.label}</option>
-              {/each}
-            </select>
-            <Button
-              variant="ghost"
-              aria-label={t("control.remove_binding")}
-              onclick={() => save({ ...midi, bindings: midi.bindings.filter((_, j) => j !== i) })}
-              >✕</Button
-            >
-          </li>
-        {/each}
-      </ul>
-    {/if}
+      {#if midi.bindings.length}
+        <ul class="list">
+          {#each midi.bindings as b, i (i)}
+            <li>
+              <span class="trigger">{triggerLabel(b.trigger)}</span>
+              <select
+                value={keyOf(b.action)}
+                aria-label={t("control.action_label")}
+                onchange={(e) =>
+                  save({
+                    ...midi,
+                    bindings: midi.bindings.map((x, j) =>
+                      j === i ? { ...x, action: actionOf(e.currentTarget.value) } : x,
+                    ),
+                  })}
+              >
+                {#each choices as c (c.key)}
+                  <option value={c.key}>{c.label}</option>
+                {/each}
+              </select>
+              <Button
+                variant="ghost"
+                aria-label={t("control.remove_binding")}
+                onclick={() => save({ ...midi, bindings: midi.bindings.filter((_, j) => j !== i) })}
+                >✕</Button
+              >
+            </li>
+          {/each}
+        </ul>
+      {/if}
 
-    <div class="row">
-      <select bind:value={learnAction} aria-label={t("control.action_label")}>
-        {#each choices as c (c.key)}
-          <option value={c.key}>{c.label}</option>
-        {/each}
-      </select>
-      <Button variant="go" disabled={learning} onclick={learn}>
-        {learning ? t("control.learning") : t("control.learn")}
-      </Button>
-    </div>
-    {#if learnFailed}<p class="warn">{t("control.learn_timeout")}</p>{/if}
-  </section>
+      <div class="row">
+        <select bind:value={learnAction} aria-label={t("control.action_label")}>
+          {#each choices as c (c.key)}
+            <option value={c.key}>{c.label}</option>
+          {/each}
+        </select>
+        <Button variant="go" disabled={learning} onclick={learn}>
+          {learning ? t("control.learning") : t("control.learn")}
+        </Button>
+      </div>
+      {#if learnFailed}<p class="warn">{t("control.learn_timeout")}</p>{/if}
+    </section>
+  {/if}
 
   <section aria-label={t("control.osc")}>
     <h3>{t("control.osc")}</h3>

@@ -4,6 +4,8 @@
   import { Button, t, type HostConnection } from "@midnightsnack/ui";
   import { ask } from "@tauri-apps/plugin-dialog";
   import { host } from "../lib/host";
+  import { isController } from "../lib/mode";
+  import ControllerPanel from "./ControllerPanel.svelte";
 
   interface Props {
     conn: HostConnection;
@@ -156,6 +158,10 @@
         {/each}
       </ul>
       <Button variant="danger" onclick={disconnectAll}>{t("devices.disconnect_all")}</Button>
+    {/if}
+
+    {#if !isController()}
+      <ControllerPanel />
     {/if}
   </div>
 </div>

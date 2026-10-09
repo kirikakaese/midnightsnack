@@ -4,6 +4,7 @@
   import type { CaptureSource } from "@midnightsnack/protocol";
   import { Button, captureLabel, t, type HostConnection } from "@midnightsnack/ui";
   import { host } from "../lib/host";
+  import { isController } from "../lib/mode";
 
   interface Props {
     conn: HostConnection;
@@ -31,7 +32,7 @@
   </div>
   {#if conn.capturePermissionMissing}
     <p class="warn" role="alert">{t("capture.permission")}</p>
-    {#if isMac}
+    {#if isMac && !isController()}
       <Button onclick={() => host.openCaptureSettings()}>{t("capture.open_settings")}</Button>
     {/if}
   {:else if targets === null}

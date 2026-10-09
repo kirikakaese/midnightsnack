@@ -6,7 +6,8 @@
   interface Props {
     theme: TextTheme;
     onchange: (theme: TextTheme) => void;
-    onpickimage: () => void;
+    /** Omitted where the host's files are not reachable (controller mode). */
+    onpickimage?: () => void;
     onclearimage: () => void;
   }
   let { theme, onchange, onpickimage, onclearimage }: Props = $props();
@@ -87,7 +88,9 @@
     {/each}
   </div>
   <div class="row">
-    <Button onclick={onpickimage}>{t("theme.background_image")}</Button>
+    {#if onpickimage}
+      <Button onclick={onpickimage}>{t("theme.background_image")}</Button>
+    {/if}
     {#if theme.background_image}
       <Button variant="ghost" onclick={onclearimage}>{t("theme.clear_image")}</Button>
     {/if}

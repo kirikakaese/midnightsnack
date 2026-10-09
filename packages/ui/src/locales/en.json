@@ -365,5 +365,19 @@
   "control.osc_listening_local": "Listening on port {port} (this computer only).",
   "control.osc_listening": "Listening on port {port}. Senders on other computers must authenticate with an API key.",
   "control.osc_failed": "OSC could not start; the port may be in use.",
-  "control.osc_off": "Off."
+  "control.osc_off": "Off.",
+  "outputs.controller_hint": "Output windows are placed on the computer that runs the show.",
+  "controller.title": "Control another computer",
+  "controller.hint": "Run the show of another midnightsnack host from this computer. Its operator approves this computer like a phone.",
+  "controller.default_name": "Second computer",
+  "controller.open": "Open",
+  "controller.forget": "Forget {name}",
+  "controller.search": "Find hosts on the network",
+  "controller.searching": "Searching…",
+  "controller.none_found": "No host found. Type its address (shown in its Connect tab) instead.",
+  "controller.address": "Address or join link",
+  "controller.pin": "PIN",
+  "controller.device_name": "Name of this computer",
+  "controller.pair": "Pair",
+  "controller.waiting": "Waiting for approval…"
 }

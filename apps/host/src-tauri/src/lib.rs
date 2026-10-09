@@ -4,6 +4,7 @@
 //! The operator and output windows talk to the core through the same WebSocket protocol as
 //! remote devices (with loopback-only tokens), so every control path shares one dispatcher.
 
+mod controller;
 mod hotplug;
 mod midi;
 mod output;
@@ -44,6 +45,8 @@ struct ConnectionInfo {
     token: String,
     /// For output windows: the output this window shows.
     output_id: Option<String>,
+    /// This window controls another host (controller mode).
+    controller: bool,
 }
 
 #[tauri::command]
@@ -55,6 +58,17 @@ fn host_info(state: State<'_, HostState>) -> HostInfo {
 /// outputs a read-only one, the operator window an admin token. All only work from this machine.
 #[tauri::command]
 fn connection_info(webview: Webview, state: State<'_, HostState>) -> ConnectionInfo {
+    if let Some(remote) =
+        controller::remote_id(webview.label()).and_then(|id| controller::remote(&state, id))
+    {
+        return ConnectionInfo {
+            ws_url: remote.ws_url(),
+            http_base: remote.base_url.clone(),
+            token: remote.token,
+            output_id: None,
+            controller: true,
+        };
+    }
     let s = &state.server;
     let output_id = output::output_id(webview.label()).map(str::to_owned);
     let token = match &output_id {
@@ -78,6 +92,7 @@ fn connection_info(webview: Webview, state: State<'_, HostState>) -> ConnectionI
         http_base: s.local_http_url(),
         token,
         output_id,
+        controller: false,
     }
 }
 
@@ -401,6 +416,11 @@ pub fn run() {
             midi_settings,
             set_midi_settings,
             midi_learn,
+            controller::discover_hosts,
+            controller::remote_hosts,
+            controller::forget_remote,
+            controller::pair_remote,
+            controller::open_controller,
             ui_ready
         ])
         .run(tauri::generate_context!())
