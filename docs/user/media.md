@@ -40,7 +40,7 @@ playing while you prepare the next cue.
 
 ## Text and lyrics
 
-**+ Text** creates a text cue. Edit it in the **Cue** tab:
+**+ Add… → Text** creates a text cue. Edit it in the **Cue** tab:
 
 - **Lyrics** mode: every verse (separated by an empty line) becomes one slide.
 - Otherwise put a line containing only `---` between slides.
@@ -51,7 +51,7 @@ own.
 
 ## Timers
 
-**+ Timer** adds a timer slide: count down a duration (starts when the cue goes live), count down
+**+ Add… → Timer** adds a timer slide: count down a duration (starts when the cue goes live), count down
 to a time of day, count up, or show the clock. A countdown turns to the overtime color (and
 counts on with a `+`) once it passes zero.
 

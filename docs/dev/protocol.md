@@ -19,6 +19,7 @@ clock.
 | `GET /api/v1/media/slide/{cue_id}/{slide}?k=&w=&h=` | media key | Rendered slide image             |
 | `GET /api/v1/media/file/{cue_id}?k=`            | media key     | Original video/audio file (HTTP range requests) |
 | `GET /api/v1/media/asset/{asset_id}?k=`         | media key     | Image asset (logo, backgrounds, logo bug) |
+| `GET /api/v1/media/capture/{cue_id}?k=&fps=`    | media key     | Live capture as MJPEG (`multipart/x-mixed-replace`) |
 | `GET /*`                                        | none          | Web remote (single-page app)     |
 
 Errors are returned as `{"code": "<error_code>"}` with a matching status: `401` for bad tokens or
@@ -58,6 +59,7 @@ On failure the server sends `{"type":"error","code":"unauthorized" | "protocol_m
 | `action`   | `request_id`, `action`         | Answered by `action_result` with the same id    |
 | `viewport` | `width`, `height`              | Output windows only (ignored from remotes)      |
 | `ping`     | `nonce`                        | Answered by `pong`                              |
+| `list_capture_targets` |                    | Admins; answered by `capture_targets`           |
 
 ### Host → client
 
@@ -70,6 +72,7 @@ On failure the server sends `{"type":"error","code":"unauthorized" | "protocol_m
 | `pairing`         | `pairing` (PIN, join URLs)     | Admins; PIN/join token changed          |
 | `session`         | `session`                      | This device's role changed              |
 | `render_progress` | `queued`                       | Background render queue length          |
+| `capture_targets` | `targets`                      | Reply to `list_capture_targets` (`error` `capture_permission` if the OS denies capture) |
 | `action_result`   | `request_id`, `error \| null`  | Reply to `action`                       |
 | `pong`            | `nonce`                        | Reply to `ping`                         |
 | `error`           | `code`                         | Protocol-level error                    |
@@ -86,6 +89,13 @@ and trimming are applied by clients (`mediaPosition()` in `packages/ui`). `count
 global countdown, `overlays_visible` the ids of shown overlays, `stage_message` the operator's
 message to stage displays, and `auto_advance_at_ms` when the program will advance on its own.
 Master states are drawn on top in this order: content → logo → blackout.
+
+`ShowSnapshot.outputs` lists the show's outputs (`OutputDef`: feed, scaling, margin, overlays);
+`LiveState.outputs` holds the position each output shows. A cue with `targets` only moves the
+listed outputs; the others keep their position. `output` is the main output's position.
+`test_pattern` replaces the content on program outputs. `capture_lost` lists capture cues whose
+source is gone. `web_nav` counts next/prev steps forwarded to the live web page (`seq` increases
+with every step).
 Stopwatch elapsed time is `accumulated_ms + (now - running_since_ms)`; clients compute
 `now` as their clock plus `host_time_ms - Date.now()` from the last `live` message.
 
@@ -93,7 +103,7 @@ Stopwatch elapsed time is `accumulated_ms + (now - running_since_ms)`; clients c
 
 | Action                                                   | Minimum role | Local only |
 | -------------------------------------------------------- | ------------ | ---------- |
-| `go`, `next`, `prev` (presenters: within the live cue)   | presenter    |            |
+| `go`, `next`, `prev` (presenters: within the live cue, or forwarded to a live web page) | presenter | |
 | `next_cue`, `prev_cue`, `go_to`                          | operator     |            |
 | `set_/toggle_blackout`, `set_/toggle_freeze`, `set_/toggle_logo`, `panic` | operator |  |
 | `timer_start`, `timer_pause`, `timer_reset`              | operator     |            |
@@ -101,6 +111,8 @@ Stopwatch elapsed time is `accumulated_ms + (now - running_since_ms)`; clients c
 | `countdown_set`, `countdown_start`, `countdown_pause`, `countdown_reset`, `set_stage_message` | operator | |
 | `set_overlay_visible`, `toggle_overlay`                  | operator     |            |
 | `media_loaded`, `media_ended` (reports from output windows) | operator  | yes        |
+| `set_test_pattern`                                       | operator     |            |
+| `put_output`, `remove_output`, `set_cue_targets`, `add_web`, `set_web_options`, `add_capture`, `set_capture` | admin | |
 | `put_overlay`, `remove_overlay`, `add_text`, `set_cue_text`, `add_timer`, `set_cue_timer`, `set_cue_theme`, `set_default_theme`, `set_cue_transition`, `set_default_transition`, `set_cue_auto_advance`, `set_media_options` | admin | |
 | `set_logo_image`, `set_background_image`, `set_overlay_image` with a `path` | admin | yes |
 | `rename_show`, `rename_cue`, `set_cue_notes`, `set_cue_color`, `move_cue`, `remove_cue`, `add_blank` | admin | |

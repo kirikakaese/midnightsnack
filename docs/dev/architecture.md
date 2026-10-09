@@ -32,9 +32,12 @@
 | `apps/host`        | Windows, displays, OS integration, wiring of all services           |
 | `apps/remote`      | Browser remote served by the host                                    |
 | `packages/ui`      | Components, design tokens, i18n shared by all frontends              |
+| `crates/render`    | PDF (PDFium) and image rendering, render cache, office → PDF conversion |
+| `crates/server`    | Embedded axum HTTP + WebSocket server, pairing, devices, media, autosave |
+| `crates/capture`   | Screen and window capture, shared JPEG frame workers               |
 
-Later phases add `crates/render` (PDF/office rendering and cache), `crates/server` (axum HTTP +
-WebSocket, pairing), `crates/capture`, `crates/control` (MIDI/OSC/HTTP adapters),
-`crates/relay` and `integrations/companion`.
+Output windows hold child webviews: the output page and, for web page cues, the remote page
+([ADR 0010](../adr/0010-web-cues-in-child-webviews.md)). Later phases add `crates/control`
+(MIDI/OSC/HTTP adapters), `crates/relay` and `integrations/companion`.
 
 See the ADRs in [../adr](../adr) for the reasoning behind these choices.

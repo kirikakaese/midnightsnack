@@ -246,7 +246,7 @@
   "cue.add_capture": "Screen or window capture",
   "cue.web_url": "Page address",
   "cue.openslides_url": "OpenSlides projector address",
-  "cue.openslides_hint": "Open the projector in OpenSlides and copy its address (…/projector/1). Log in once in the output window if the projector is not public; the session is kept.",
+  "cue.openslides_hint": "Open the projector in OpenSlides and copy its address (…/projector/1). If it needs a login, open the output windowed once and log in there; the login is kept.",
   "cue.targets_n": "{n, plural, one {# output} other {# outputs}}",
   "outputs.title": "Outputs",
   "outputs.default_name": "Output {n}",
