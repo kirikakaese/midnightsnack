@@ -14,6 +14,10 @@ export type DeviceInfo = {
    */
   local: boolean;
   /**
+   * An API key for a control surface (Companion, scripts) rather than a paired device.
+   */
+  api_key: boolean;
+  /**
    * Round-trip latency of the last ping, if measured.
    */
   latency_ms: number | null;

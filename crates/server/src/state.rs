@@ -2,6 +2,7 @@
 //! Shared server state and the action entry point used by every transport.
 
 use std::collections::HashMap;
+use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard};
 
@@ -55,14 +56,28 @@ pub enum Event {
     Pointer(Arc<PointerUpdate>),
     /// The upload inbox changed (admins).
     Inbox,
+    /// API keys were restricted to this computer: drop remote API key connections.
+    ApiLocalOnly,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
     pub auto_approve: Option<Role>,
     /// Add uploads from every device without asking.
     pub auto_accept_uploads: bool,
+    /// API keys only work from this computer.
+    pub api_local_only: bool,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Settings {
+            auto_approve: None,
+            auto_accept_uploads: false,
+            api_local_only: true,
+        }
+    }
 }
 
 pub struct AppState {
@@ -124,6 +139,16 @@ impl AppState {
             autosave: Notify::new(),
             schedule: Notify::new(),
         })
+    }
+
+    /// Whether a device may connect from `addr` (host windows and, if restricted, API keys only
+    /// from this computer).
+    pub fn device_allowed_from(&self, device: &crate::devices::Device, addr: SocketAddr) -> bool {
+        allowed_from(
+            device,
+            addr.ip().is_loopback(),
+            lock(&self.settings).api_local_only,
+        )
     }
 
     pub fn max_upload_bytes(&self) -> u64 {
@@ -278,4 +303,38 @@ fn following(show: &Show, from: &Position, n: usize) -> Vec<Position> {
         slide = 0;
     }
     out
+}
+
+fn allowed_from(device: &crate::devices::Device, loopback: bool, api_local_only: bool) -> bool {
+    loopback || !(device.local || (device.api_key && api_local_only))
+}
+
+#[cfg(test)]
+mod address_tests {
+    use super::*;
+    use crate::devices::Device;
+
+    fn device(local: bool, api_key: bool) -> Device {
+        Device {
+            id: "d".into(),
+            name: "d".into(),
+            role: Role::Operator,
+            local,
+            api_key,
+        }
+    }
+
+    #[test]
+    fn host_windows_and_restricted_api_keys_stay_on_this_computer() {
+        let phone = device(false, false);
+        let window = device(true, false);
+        let key = device(false, true);
+        for d in [&phone, &window, &key] {
+            assert!(allowed_from(d, true, true), "loopback is always fine");
+        }
+        assert!(allowed_from(&phone, false, true));
+        assert!(!allowed_from(&window, false, false));
+        assert!(!allowed_from(&key, false, true));
+        assert!(allowed_from(&key, false, false));
+    }
 }

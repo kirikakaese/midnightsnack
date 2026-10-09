@@ -64,6 +64,8 @@ pub struct DeviceInfo {
     pub connected: bool,
     /// Built-in device (host windows). Cannot be revoked.
     pub local: bool,
+    /// An API key for a control surface (Companion, scripts) rather than a paired device.
+    pub api_key: bool,
     /// Round-trip latency of the last ping, if measured.
     pub latency_ms: Option<u32>,
     #[ts(type = "number | null")]

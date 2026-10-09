@@ -73,6 +73,11 @@ pub enum Action {
     /// Removes all drawings.
     ClearDrawing,
 
+    /// Restrict API keys (HTTP API, WebSocket, OSC) to this computer.
+    SetApiLocalOnly {
+        on: bool,
+    },
+
     // --- upload inbox ---
     /// Adds an uploaded file to the show.
     AcceptUpload {

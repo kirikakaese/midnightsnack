@@ -44,6 +44,7 @@ export type Action =
   | { action: "set_stage_message"; text: string | null }
   | { action: "draw_stroke"; stroke: Stroke }
   | { action: "clear_drawing" }
+  | { action: "set_api_local_only"; on: boolean }
   | { action: "accept_upload"; upload_id: string; at_index: number | null }
   | { action: "reject_upload"; upload_id: string }
   | { action: "set_auto_accept_uploads"; on: boolean }

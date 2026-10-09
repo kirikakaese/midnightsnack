@@ -313,5 +313,15 @@
   "inbox.add": "Add",
   "inbox.add_next": "Add after current",
   "inbox.reject": "Reject",
-  "inbox.auto_accept": "Add files from all devices without asking"
+  "inbox.auto_accept": "Add files from all devices without asking",
+  "apikeys.title": "API keys",
+  "apikeys.hint": "For Bitfocus Companion, OSC and scripts using the HTTP API. Each key has a role and can be revoked.",
+  "apikeys.name": "Name, e.g. Stream Deck",
+  "apikeys.create": "Create key",
+  "apikeys.created": "Key for {name} — copy it now, it is not shown again:",
+  "apikeys.copy": "Copy",
+  "apikeys.copied": "Copied",
+  "apikeys.done": "Done",
+  "apikeys.revoke": "Revoke {name}",
+  "apikeys.local_only": "Only from this computer"
 }

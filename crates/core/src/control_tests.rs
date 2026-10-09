@@ -100,3 +100,21 @@ fn presenters_draw_stage_viewers_do_not() {
         Err(ErrorCode::Forbidden)
     );
 }
+
+#[test]
+fn summary_describes_positions_for_control_surfaces() {
+    let mut e = two_cue_engine();
+    let s = e.summary(0);
+    assert!(s.program.is_none());
+    assert_eq!(s.cue_count, 2);
+    e.apply(&Action::Go, 1000).unwrap();
+    e.apply(&Action::SetBlackout { on: true }, 1000).unwrap();
+    let s = e.summary(4000);
+    let p = s.program.unwrap();
+    assert_eq!((p.cue_number, p.slide), (1, 1));
+    assert_eq!(s.next.unwrap().slide, 2);
+    assert!(s.masters.blackout);
+    assert_eq!(s.show_timer_ms, 3000);
+    assert_eq!(s.countdown_remaining_ms, 5 * 60 * 1000);
+    assert!(!s.countdown_running);
+}

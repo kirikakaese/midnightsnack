@@ -18,7 +18,16 @@ export type ServerMessage =
   | { type: "welcome"; host: HostInfo; session: SessionInfo }
   | { type: "show"; show: ShowSnapshot }
   | { type: "live"; live: LiveState }
-  | { type: "devices"; devices: Array<DeviceInfo>; pending: Array<PendingPairing> }
+  | {
+      type: "devices";
+      devices: Array<DeviceInfo>;
+      pending: Array<PendingPairing>;
+      /**
+       * API keys (HTTP API, WebSocket, OSC) only work from this computer.
+       */
+      api_local_only: boolean;
+    }
+  | { type: "api_key"; device_id: string; name: string; token: string }
   | { type: "pairing"; pairing: PairingInfo }
   | { type: "inbox"; items: Array<InboxItem>; auto_accept: boolean }
   | { type: "render_progress"; queued: number }

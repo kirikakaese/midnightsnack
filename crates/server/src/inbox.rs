@@ -111,7 +111,7 @@ pub fn authenticate(
     let device = lock(&state.devices)
         .authenticate(token.trim())
         .ok_or(ErrorCode::Unauthorized)?;
-    if device.local && !addr.ip().is_loopback() {
+    if !state.device_allowed_from(&device, addr) {
         return Err(ErrorCode::Unauthorized.into());
     }
     Ok(device)

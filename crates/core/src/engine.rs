@@ -7,9 +7,10 @@ use crate::model::{is_valid_color, new_id, split_text, Asset, Cue, CueContent, M
 use std::collections::BTreeMap;
 
 use crate::protocol::{
-    Action, CaptureSource, Countdown, Drawing, ErrorCode, LiveState, Masters, MediaOptions,
+    Action, CaptureSource, Countdown, CueRef, Drawing, ErrorCode, LiveState, Masters, MediaOptions,
     MediaPlayback, OutputDef, OutputFeed, OutputLive, Overlay, OverlayKind, Position, ShowSnapshot,
-    Stopwatch, Stroke, TestPattern, TextTheme, TimerCue, TimerMode, Transition, WebInfo,
+    StateSummary, Stopwatch, Stroke, TestPattern, TextTheme, TimerCue, TimerMode, Transition,
+    WebInfo,
 };
 
 /// Longest accepted duration for timers, countdowns and auto-advance (24 h).
@@ -337,6 +338,37 @@ impl Engine {
             overlays: self.show.overlays.clone(),
             logo: self.show.logo.clone(),
             outputs: self.show.outputs.clone(),
+        }
+    }
+
+    /// Compact state for control surfaces.
+    pub fn summary(&self, now_ms: i64) -> StateSummary {
+        let describe = |p: Option<&Position>| -> Option<CueRef> {
+            let p = p?;
+            let index = self.show.cues.iter().position(|c| c.id == p.cue_id)?;
+            let cue = &self.show.cues[index];
+            Some(CueRef {
+                cue_id: cue.id.clone(),
+                name: cue.name.clone(),
+                cue_number: index as u32 + 1,
+                slide: p.slide + 1,
+                slide_count: cue.slide_count(),
+            })
+        };
+        let countdown = &self.live.countdown;
+        StateSummary {
+            show_title: self.show.title.clone(),
+            cue_count: self.show.cues.len() as u32,
+            program: describe(self.live.program.as_ref()),
+            output: describe(self.output()),
+            next: describe(self.next_position().as_ref()),
+            masters: self.masters(),
+            show_timer_ms: self.live.show_timer.elapsed_ms(now_ms),
+            slide_timer_ms: self.live.slide_timer.elapsed_ms(now_ms),
+            countdown_remaining_ms: countdown.duration_ms as i64
+                - countdown.elapsed.elapsed_ms(now_ms),
+            countdown_running: countdown.elapsed.is_running(),
+            overlays_visible: self.live.overlays_visible.clone(),
         }
     }
 
@@ -1097,7 +1129,8 @@ impl Engine {
             | SetAutoApprove { .. }
             | AcceptUpload { .. }
             | RejectUpload { .. }
-            | SetAutoAcceptUploads { .. } => return Err(ErrorCode::InvalidState),
+            | SetAutoAcceptUploads { .. }
+            | SetApiLocalOnly { .. } => return Err(ErrorCode::InvalidState),
         })
     }
 

@@ -4,6 +4,7 @@
   import { Button, t, type HostConnection } from "@midnightsnack/ui";
   import { ask } from "@tauri-apps/plugin-dialog";
   import { host } from "../lib/host";
+  import ApiKeysPanel from "./ApiKeysPanel.svelte";
 
   interface Props {
     conn: HostConnection;
@@ -14,7 +15,7 @@
   const joinUrl = $derived(conn.pairing?.join_urls[0] ?? null);
   let qr = $state<string | null>(null);
   let approveRole = $state<Record<string, Role>>({});
-  const remotes = $derived(conn.devices.filter((d) => !d.local));
+  const remotes = $derived(conn.devices.filter((d) => !d.local && !d.api_key));
 
   $effect(() => {
     const url = joinUrl;
@@ -157,6 +158,8 @@
       </ul>
       <Button variant="danger" onclick={disconnectAll}>{t("devices.disconnect_all")}</Button>
     {/if}
+
+    <ApiKeysPanel {conn} />
   </div>
 </div>
 

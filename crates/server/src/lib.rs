@@ -6,6 +6,7 @@
 mod api;
 mod assets;
 mod autosave;
+mod control_api;
 mod devices;
 pub mod discovery;
 mod host_actions;
@@ -114,6 +115,8 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/v1/pair", post(api::pair))
         .route("/api/v1/pair/{request_id}", get(api::pair_status))
         .route("/api/v1/ws", get(ws::handler))
+        .route("/api/v1/action", post(control_api::action))
+        .route("/api/v1/state", get(control_api::summary))
         .route("/api/v1/media/slide/{cue_id}/{slide}", get(api::slide))
         .route("/api/v1/media/file/{cue_id}", get(api::media_file))
         .route("/api/v1/media/asset/{asset_id}", get(api::asset))

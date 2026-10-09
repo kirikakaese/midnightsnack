@@ -75,9 +75,9 @@ async fn handshake(
     let device = lock(&state.devices)
         .authenticate(&token)
         .ok_or(ErrorCode::Unauthorized)?;
-    // Host-window tokens are only valid on the host itself.
-    if device.local && !addr.ip().is_loopback() {
-        tracing::warn!(%addr, "local token used from remote address");
+    // Host-window tokens (and API keys, if restricted) are only valid on the host itself.
+    if !state.device_allowed_from(&device, addr) {
+        tracing::warn!(%addr, device = %device.name, "token not allowed from this address");
         return Err(ErrorCode::Unauthorized);
     }
     Ok(device)
@@ -86,6 +86,8 @@ async fn handshake(
 struct Conn {
     device_id: String,
     local: bool,
+    api_key: bool,
+    loopback: bool,
     media_key: String,
     /// Start of the current one-second window and pointer updates in it.
     pointer_window: std::sync::Mutex<(Instant, u32)>,
@@ -130,6 +132,8 @@ async fn run(mut socket: WebSocket, addr: SocketAddr, state: Arc<AppState>) -> W
     let conn = Conn {
         device_id: device.id.clone(),
         local: device.local,
+        api_key: device.api_key,
+        loopback: addr.ip().is_loopback(),
         media_key: random_token(),
         pointer_window: std::sync::Mutex::new((Instant::now(), 0)),
     };
@@ -181,7 +185,16 @@ async fn send_inbox(socket: &mut WebSocket, state: &AppState) -> WsResult {
 async fn send_devices(socket: &mut WebSocket, state: &AppState) -> WsResult {
     let devices = lock(&state.devices).list();
     let pending = lock(&state.pairing).pending();
-    send(socket, &ServerMessage::Devices { devices, pending }).await
+    let api_local_only = lock(&state.settings).api_local_only;
+    send(
+        socket,
+        &ServerMessage::Devices {
+            devices,
+            pending,
+            api_local_only,
+        },
+    )
+    .await
 }
 
 async fn session(
@@ -245,6 +258,10 @@ async fn session(
                     }
                     Ok(Event::Devices) if role == Role::Admin => send_devices(socket, state).await?,
                     Ok(Event::Inbox) if role == Role::Admin => send_inbox(socket, state).await?,
+                    Ok(Event::ApiLocalOnly) if conn.api_key && !conn.loopback => {
+                        send(socket, &ServerMessage::Error { code: ErrorCode::Unauthorized }).await?;
+                        return socket.send(Message::Close(None)).await;
+                    }
                     Ok(Event::Pairing) if role == Role::Admin => {
                         send(socket, &ServerMessage::Pairing { pairing: state.pairing_info() }).await?;
                     }
@@ -316,6 +333,26 @@ async fn handle_message(state: &Arc<AppState>, conn: &Conn, text: &str) -> Optio
                 _ => ServerMessage::CaptureTargets {
                     targets: Vec::new(),
                 },
+            })
+        }
+        ClientMessage::CreateApiKey { name, role } => {
+            if conn.role(state) != Some(Role::Admin) {
+                return Some(ServerMessage::Error {
+                    code: ErrorCode::Forbidden,
+                });
+            }
+            let name: String = name.trim().chars().take(60).collect();
+            if name.is_empty() {
+                return Some(ServerMessage::Error {
+                    code: ErrorCode::InvalidState,
+                });
+            }
+            let (device_id, token) = lock(&state.devices).add_api_key(&name, role);
+            state.emit(Event::Devices);
+            Some(ServerMessage::ApiKey {
+                device_id,
+                name,
+                token,
             })
         }
         ClientMessage::Pointer { pos, mode, color } => {

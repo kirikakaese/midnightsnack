@@ -54,6 +54,11 @@ pub enum ClientMessage {
     },
     /// Admins: list screens and windows available for capture.
     ListCaptureTargets,
+    /// Admins: create an API key with the given role (answered by `api_key`).
+    CreateApiKey {
+        name: String,
+        role: Role,
+    },
     /// Laser pointer or drawing in progress (presenters and up). `pos` is a fraction (0–1) of
     /// the content area; `null` hides the pointer. Not acknowledged; excess messages are dropped.
     Pointer {
@@ -86,6 +91,14 @@ pub enum ServerMessage {
     Devices {
         devices: Vec<DeviceInfo>,
         pending: Vec<PendingPairing>,
+        /// API keys (HTTP API, WebSocket, OSC) only work from this computer.
+        api_local_only: bool,
+    },
+    /// Reply to `create_api_key`: the token is shown once and never again.
+    ApiKey {
+        device_id: String,
+        name: String,
+        token: String,
     },
     /// Admins only.
     Pairing {

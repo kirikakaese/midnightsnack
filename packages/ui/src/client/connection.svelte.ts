@@ -15,6 +15,7 @@ import {
   type PendingPairing,
   type PointerMode,
   type Position,
+  type Role,
   type ServerMessage,
   type SessionInfo,
   type ShowSnapshot,
@@ -63,6 +64,10 @@ export class HostConnection {
   pending = $state<PendingPairing[]>([]);
   pairing = $state<PairingInfo | null>(null);
   renderQueued = $state(0);
+  /** Admins: API keys only work from this computer. */
+  apiLocalOnly = $state(true);
+  /** Admins: the API key just created (its token is shown once). */
+  newApiKey = $state<{ device_id: string; name: string; token: string } | null>(null);
   /** Admins: uploaded files waiting for a decision. */
   inbox = $state<InboxItem[]>([]);
   autoAcceptUploads = $state(false);
@@ -178,6 +183,10 @@ export class HostConnection {
       case "devices":
         this.devices = msg.devices;
         this.pending = msg.pending;
+        this.apiLocalOnly = msg.api_local_only;
+        break;
+      case "api_key":
+        this.newApiKey = { device_id: msg.device_id, name: msg.name, token: msg.token };
         break;
       case "pairing":
         this.pairing = msg.pairing;
@@ -325,6 +334,12 @@ export class HostConnection {
   /** Screens and windows available for capture (admins). */
   captureTargets = $state<CaptureTarget[] | null>(null);
   capturePermissionMissing = $state(false);
+
+  /** Admins: creates an API key; the token arrives in `newApiKey`. */
+  createApiKey(name: string, role: Role): void {
+    this.newApiKey = null;
+    this.#send({ type: "create_api_key", name, role });
+  }
 
   requestCaptureTargets(): void {
     this.captureTargets = null;

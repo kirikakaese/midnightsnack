@@ -1108,3 +1108,105 @@ async fn uploads_are_checked() {
         .await;
     assert_eq!(show.cues[1].name, "slide");
 }
+
+#[tokio::test]
+async fn api_keys_drive_the_http_api_until_revoked() {
+    let f = fixture().await;
+    let mut op = f.connect(&f.handle.operator_token).await;
+    op.welcome().await;
+    op.action(Action::AddFiles {
+        paths: vec![f.pdf("deck.pdf", 3)],
+        at_index: None,
+    })
+    .await
+    .unwrap();
+    op.send(&ClientMessage::CreateApiKey {
+        name: "Stream Deck".into(),
+        role: Role::Operator,
+    })
+    .await;
+    let (device_id, token) = op
+        .wait(|m| match m {
+            ServerMessage::ApiKey {
+                device_id, token, ..
+            } => Some((device_id, token)),
+            _ => None,
+        })
+        .await;
+    let (devices, local_only) = op
+        .wait(|m| match m {
+            ServerMessage::Devices {
+                devices,
+                api_local_only,
+                ..
+            } if devices.iter().any(|d| d.api_key) => Some((devices, api_local_only)),
+            _ => None,
+        })
+        .await;
+    assert!(local_only, "restricted to this computer by default");
+    assert_eq!(
+        devices.iter().find(|d| d.api_key).unwrap().name,
+        "Stream Deck"
+    );
+
+    let post = |action: serde_json::Value, token: &str| {
+        f.http
+            .post(f.url("/api/v1/action"))
+            .bearer_auth(token)
+            .json(&action)
+            .send()
+    };
+    let res = post(serde_json::json!({ "action": "go" }), &token)
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 200);
+    post(serde_json::json!({ "action": "next" }), &token)
+        .await
+        .unwrap();
+    post(
+        serde_json::json!({ "action": "set_blackout", "on": true }),
+        &token,
+    )
+    .await
+    .unwrap();
+    let summary: StateSummary = f
+        .http
+        .get(f.url("/api/v1/state"))
+        .bearer_auth(&token)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let program = summary.program.unwrap();
+    assert_eq!(
+        (program.name.as_str(), program.slide, program.slide_count),
+        ("deck", 2, 3)
+    );
+    assert!(summary.masters.blackout);
+
+    // Operators cannot edit; bad bodies are rejected.
+    let res = post(serde_json::json!({ "action": "new_show" }), &token)
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 403);
+    let res = post(serde_json::json!({ "action": "fly" }), &token)
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 400);
+
+    // "Disconnect all" keeps API keys; revoking one stops it.
+    op.action(Action::DisconnectAll).await.unwrap();
+    let res = post(serde_json::json!({ "action": "prev" }), &token)
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 200);
+    op.action(Action::RevokeDevice { device_id }).await.unwrap();
+    let res = post(serde_json::json!({ "action": "prev" }), &token)
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 401);
+    let res = f.http.get(f.url("/api/v1/state")).send().await.unwrap();
+    assert_eq!(res.status(), 401);
+}

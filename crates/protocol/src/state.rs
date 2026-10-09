@@ -505,6 +505,41 @@ pub enum PointerMode {
     Draw,
 }
 
+/// A cue position described for control surfaces (1-based slide numbers).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct CueRef {
+    pub cue_id: CueId,
+    pub name: String,
+    /// 1-based position of the cue in the list.
+    pub cue_number: u32,
+    /// 1-based slide number.
+    pub slide: u32,
+    pub slide_count: u32,
+}
+
+/// Compact live state for control surfaces (`GET /api/v1/state`, OSC feedback, Companion).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct StateSummary {
+    pub show_title: String,
+    pub cue_count: u32,
+    pub program: Option<CueRef>,
+    /// What the main output shows.
+    pub output: Option<CueRef>,
+    pub next: Option<CueRef>,
+    pub masters: Masters,
+    #[ts(type = "number")]
+    pub show_timer_ms: i64,
+    #[ts(type = "number")]
+    pub slide_timer_ms: i64,
+    /// Negative in overtime.
+    #[ts(type = "number")]
+    pub countdown_remaining_ms: i64,
+    pub countdown_running: bool,
+    pub overlays_visible: Vec<String>,
+}
+
 /// Live show state. Sent on every change.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export)]

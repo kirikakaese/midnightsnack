@@ -76,6 +76,15 @@ pub async fn run(state: &Arc<AppState>, action: Action) -> Result<(), ErrorCode>
             at_index,
         } => crate::inbox::accept(state, &upload_id, at_index).await,
         Action::RejectUpload { upload_id } => crate::inbox::reject(state, &upload_id).await,
+        Action::SetApiLocalOnly { on } => {
+            lock(&state.settings).api_local_only = on;
+            state.save_settings();
+            if on {
+                state.emit(Event::ApiLocalOnly);
+            }
+            state.emit(Event::Devices);
+            Ok(())
+        }
         Action::SetAutoAcceptUploads { on } => {
             lock(&state.settings).auto_accept_uploads = on;
             state.save_settings();
