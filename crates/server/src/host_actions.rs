@@ -69,9 +69,40 @@ pub async fn run(state: &Arc<AppState>, action: Action) -> Result<(), ErrorCode>
             state.emit(Event::Pairing);
             Ok(())
         }
+        Action::SetLogoImage { path } => {
+            let asset = image_asset(state, path)?;
+            let c = lock(&state.engine).set_logo_asset(asset);
+            state.after_change(c);
+            Ok(())
+        }
+        Action::SetBackgroundImage { cue_id, path } => {
+            let asset = image_asset(state, path)?;
+            let c = lock(&state.engine).set_background_asset(cue_id.as_deref(), asset)?;
+            state.after_change(c);
+            Ok(())
+        }
+        Action::SetOverlayImage { overlay_id, path } => {
+            let asset = image_asset(state, path)?;
+            let c = lock(&state.engine).set_overlay_asset(&overlay_id, asset)?;
+            state.after_change(c);
+            Ok(())
+        }
         _ => Err(ErrorCode::InvalidState),
     }
 }
+
+/// Registers an image file as a show asset; `None` passes through (clears the image).
+fn image_asset(state: &AppState, path: Option<String>) -> Result<Option<String>, ErrorCode> {
+    let Some(path) = path else { return Ok(None) };
+    let path = std::fs::canonicalize(path).map_err(|_| ErrorCode::NotFound)?;
+    if !path.is_file() || !is_supported_image(&path) {
+        return Err(ErrorCode::UnsupportedFile);
+    }
+    Ok(Some(lock(&state.engine).add_asset(MediaRef::linked(path))))
+}
+
+const VIDEO_EXTENSIONS: &[&str] = &["mp4", "m4v", "mov", "webm", "mkv", "ogv"];
+const AUDIO_EXTENSIONS: &[&str] = &["mp3", "m4a", "aac", "wav", "ogg", "oga", "opus", "flac"];
 
 async fn add_files(
     state: &Arc<AppState>,
@@ -146,6 +177,15 @@ async fn cue_for_path(state: &Arc<AppState>, path: &Path) -> Result<Cue, ErrorCo
             cue.slide_notes = info.notes;
             Ok(cue)
         }
+        Some(e) if VIDEO_EXTENSIONS.contains(&e) || AUDIO_EXTENSIONS.contains(&e) => Ok(Cue::new(
+            display_name(&path),
+            CueContent::Media {
+                file: MediaRef::linked(&path),
+                video: VIDEO_EXTENSIONS.contains(&e),
+                options: Default::default(),
+                duration_ms: None,
+            },
+        )),
         _ if is_supported_image(&path) => Ok(Cue::new(
             display_name(&path),
             CueContent::Image {

@@ -64,6 +64,8 @@ pub struct AppState {
     pub base_urls: Mutex<Vec<String>>,
     pub data_dir: Option<PathBuf>,
     pub autosave: Notify,
+    /// Wakes the auto-advance scheduler after any change.
+    pub schedule: Notify,
 }
 
 /// Locks a mutex, recovering from poisoning (a panicking connection task must not take the
@@ -98,6 +100,7 @@ impl AppState {
             base_urls: Mutex::new(Vec::new()),
             data_dir,
             autosave: Notify::new(),
+            schedule: Notify::new(),
         })
     }
 
@@ -146,7 +149,7 @@ impl AppState {
                 self.after_change(change);
                 Ok(())
             }
-            Dispatched::Host(action) => crate::host_actions::run(self, action).await,
+            Dispatched::Host(action) => crate::host_actions::run(self, *action).await,
         }
     }
 
@@ -161,6 +164,7 @@ impl AppState {
         if change.any() {
             self.prefetch();
             self.autosave.notify_one();
+            self.schedule.notify_one();
         }
     }
 
@@ -215,7 +219,8 @@ pub fn slide_source(show: &Show, cue_id: &str, slide: u32) -> Option<SlideSource
         ImageFolder { files } => Some(SlideSource::Image {
             path: show.resolve(files.get(slide as usize)?)?,
         }),
-        Blank { .. } => None,
+        // Rendered by the clients themselves (video element, text layout).
+        Blank { .. } | Media { .. } | Text { .. } | Timer { .. } => None,
     }
 }
 

@@ -226,6 +226,18 @@ export class HostConnection {
     );
   }
 
+  /** URL of a video/audio cue's file (supports range requests). */
+  mediaUrl(cueId: string): string | null {
+    if (!this.session) return null;
+    return `${this.#opts.httpBase}/api/v1/media/file/${encodeURIComponent(cueId)}?k=${this.session.media_key}`;
+  }
+
+  /** URL of an image asset (logo, background, logo bug). */
+  assetUrl(assetId: string | null | undefined): string | null {
+    if (!assetId || !this.session) return null;
+    return `${this.#opts.httpBase}/api/v1/media/asset/${encodeURIComponent(assetId)}?k=${this.session.media_key}`;
+  }
+
   cue(id: string | undefined | null) {
     return id ? (this.show?.cues.find((c) => c.id === id) ?? null) : null;
   }

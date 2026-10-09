@@ -1,0 +1,61 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
+/* Shared form styling for operator and remote. Opt in with class="ms-form". */
+.ms-form {
+  display: grid;
+  gap: 10px;
+}
+.ms-form label,
+.ms-form .field {
+  display: grid;
+  gap: 4px;
+  font-size: 0.85rem;
+  color: var(--ms-text-muted);
+}
+.ms-form .row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.ms-form .check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ms-text);
+}
+.ms-form input:not([type="checkbox"]):not([type="color"]):not([type="range"]),
+.ms-form select,
+.ms-form textarea {
+  font: inherit;
+  color: var(--ms-text);
+  background: var(--ms-surface-2);
+  border: 1px solid var(--ms-border);
+  border-radius: var(--ms-radius-sm);
+  padding: 8px;
+  min-width: 0;
+}
+.ms-form textarea {
+  resize: vertical;
+  min-height: 120px;
+  line-height: 1.4;
+}
+.ms-form input[type="color"] {
+  width: 44px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--ms-border);
+  border-radius: var(--ms-radius-sm);
+  background: none;
+}
+.ms-form h3 {
+  margin: 8px 0 0;
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ms-text-muted);
+}
+.ms-form .hint {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--ms-text-muted);
+}

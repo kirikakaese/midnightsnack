@@ -3,6 +3,7 @@
   import {
     Panel,
     Stage,
+    Tabs,
     Ticker,
     elapsedMs,
     formatDuration,
@@ -14,6 +15,10 @@
   import { buildKeymap, installKeyHandler, type KeyAction } from "../lib/keymap";
   import ConnectPanel from "../operator/ConnectPanel.svelte";
   import CueList from "../operator/CueList.svelte";
+  import Inspector from "../operator/Inspector.svelte";
+  import LivePanel from "../operator/LivePanel.svelte";
+  import MediaTransport from "../operator/MediaTransport.svelte";
+  import ShowPanel from "../operator/ShowPanel.svelte";
   import MasterBar from "../operator/MasterBar.svelte";
   import OutputPanel from "../operator/OutputPanel.svelte";
   import SlideStrip from "../operator/SlideStrip.svelte";
@@ -22,6 +27,24 @@
   let conn = $state<HostConnection | null>(null);
   let keymap = $state<Record<string, KeyAction>>(buildKeymap({}));
   let readySent = false;
+  let selected = $state<string | null>(null);
+  type TabId = "live" | "cue" | "show" | "outputs" | "connect";
+  let tab = $state<TabId>("live");
+  const tabs = $derived([
+    { id: "live" as const, label: t("tab.live") },
+    { id: "cue" as const, label: t("tab.cue") },
+    { id: "show" as const, label: t("tab.show") },
+    { id: "outputs" as const, label: t("tab.outputs") },
+    { id: "connect" as const, label: t("tab.connect"), badge: conn?.pending.length ?? 0 },
+  ]);
+  // Selecting a cue opens the inspector.
+  $effect(() => {
+    if (selected) tab = "cue";
+  });
+  // Pairing requests need attention.
+  $effect(() => {
+    if ((conn?.pending.length ?? 0) > 0) tab = "connect";
+  });
   const ticker = new Ticker(250);
 
   connectToHost().then((c) => (conn = c));
@@ -65,7 +88,7 @@
     <TopBar {conn} {ticker} />
 
     <aside class="left">
-      <CueList {conn} />
+      <CueList {conn} bind:selected />
     </aside>
 
     <main class="center">
@@ -88,6 +111,7 @@
             </span>
           </header>
           <div class="screen"><Stage {conn} /></div>
+          <MediaTransport {conn} {ticker} />
           {#if frozen}
             <div class="behind">
               <div class="screen small">
@@ -140,8 +164,19 @@
     </main>
 
     <aside class="right">
-      <OutputPanel />
-      <ConnectPanel {conn} />
+      <Tabs {tabs} bind:active={tab} label={t("tab.label")}>
+        {#if tab === "live"}
+          <LivePanel {conn} {ticker} />
+        {:else if tab === "cue"}
+          <Inspector {conn} cueId={selected} />
+        {:else if tab === "show"}
+          <ShowPanel {conn} />
+        {:else if tab === "outputs"}
+          <OutputPanel />
+        {:else}
+          <ConnectPanel {conn} />
+        {/if}
+      </Tabs>
     </aside>
 
     <MasterBar {conn} />
@@ -178,10 +213,7 @@
   .right {
     grid-area: right;
     display: grid;
-    grid-template-rows: auto 1fr;
-    gap: var(--ms-gap);
     min-height: 0;
-    overflow: auto;
     padding: var(--ms-gap) var(--ms-gap) var(--ms-gap) 0;
   }
   .center {

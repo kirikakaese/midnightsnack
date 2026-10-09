@@ -27,7 +27,7 @@ pub enum Dispatched {
     Applied(Change),
     /// The action is authorized but must be carried out by a host service
     /// (file system, devices). The caller performs it.
-    Host(Action),
+    Host(Box<Action>),
 }
 
 /// Checks permissions, then applies the action to the engine or hands it back for a host
@@ -40,7 +40,7 @@ pub fn dispatch(
 ) -> Result<Dispatched, ErrorCode> {
     permissions::check(origin.role, origin.local, &action, engine)?;
     if is_host_action(&action) {
-        return Ok(Dispatched::Host(action));
+        return Ok(Dispatched::Host(Box::new(action)));
     }
     engine.apply(&action, now_ms).map(Dispatched::Applied)
 }
@@ -51,6 +51,9 @@ pub fn is_host_action(action: &Action) -> bool {
     matches!(
         action,
         AddFiles { .. }
+            | SetLogoImage { .. }
+            | SetBackgroundImage { .. }
+            | SetOverlayImage { .. }
             | NewShow
             | OpenShow { .. }
             | SaveShow { .. }
@@ -80,7 +83,7 @@ mod tests {
     fn host_actions_are_returned() {
         let mut e = two_cue_engine();
         let r = dispatch(&mut e, Origin::LOCAL_ADMIN, Action::NewShow, 0).unwrap();
-        assert_eq!(r, Dispatched::Host(Action::NewShow));
+        assert_eq!(r, Dispatched::Host(Box::new(Action::NewShow)));
     }
 
     #[test]

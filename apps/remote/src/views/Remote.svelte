@@ -6,10 +6,12 @@
     HostConnection,
     Panel,
     Stage,
+    StageDisplay,
     StatusDot,
     Ticker,
     elapsedMs,
     formatDuration,
+    mediaPosition,
     t,
   } from "@midnightsnack/ui";
   import { onDestroy, untrack } from "svelte";
@@ -57,6 +59,30 @@
     conn.status === "connected" ? "ok" : conn.status === "connecting" ? "pending" : "error",
   );
 
+  const media = $derived(live?.media ?? null);
+  const mediaCue = $derived(conn.cue(media?.cue_id));
+  const mediaPlaying = $derived(
+    !!media && media.position.running_since_ms !== null && !media.ended,
+  );
+  const mediaTime = $derived(
+    media && mediaCue?.media
+      ? formatDuration(
+          mediaPosition(
+            media.position,
+            mediaCue.media.options,
+            mediaCue.media.duration_ms,
+            hostNow,
+          ),
+        )
+      : "",
+  );
+  const overlays = $derived(conn.show?.overlays ?? []);
+  const countdownRunning = $derived(live?.countdown.elapsed.running_since_ms != null);
+  const countdownLeft = $derived(
+    live ? live.countdown.duration_ms - elapsedMs(live.countdown.elapsed, hostNow) : 0,
+  );
+  let message = $state("");
+
   function send(action: Action) {
     tap();
     conn.action(action);
@@ -87,36 +113,40 @@
       <div class="banner" role="status">{t("remote.reconnecting")}</div>
     {/if}
 
-    <section class="screens">
-      <figure>
-        <div class="screen"><Stage {conn} /></div>
-        <figcaption>
-          {t("remote.current")}
-          {#if programCue && live?.program}
-            · {programCue.name} · {t("remote.slide_of", {
-              n: live.program.slide + 1,
-              total: programCue.slide_count,
-            })}
-          {/if}
-        </figcaption>
-      </figure>
-      <figure class="next">
-        <div class="screen"><Stage {conn} which="next" masters={false} /></div>
-        <figcaption>
-          {t("remote.next")}{#if nextCue}&nbsp;· {nextCue.name}{/if}
-        </figcaption>
-      </figure>
-    </section>
+    {#if showStage}
+      <StageDisplay {conn} />
+    {:else}
+      <section class="screens">
+        <figure>
+          <div class="screen"><Stage {conn} mode="thumb" /></div>
+          <figcaption>
+            {t("remote.current")}
+            {#if programCue && live?.program}
+              · {programCue.name} · {t("remote.slide_of", {
+                n: live.program.slide + 1,
+                total: programCue.slide_count,
+              })}
+            {/if}
+          </figcaption>
+        </figure>
+        <figure class="next">
+          <div class="screen"><Stage {conn} which="next" masters={false} mode="thumb" /></div>
+          <figcaption>
+            {t("remote.next")}{#if nextCue}&nbsp;· {nextCue.name}{/if}
+          </figcaption>
+        </figure>
+      </section>
 
-    <section class="timers" aria-label={t("timer.show")}>
-      <div><span>{t("timer.show")}</span><strong>{showTime}</strong></div>
-      <div><span>{t("timer.slide")}</span><strong>{slideTime}</strong></div>
-    </section>
+      <section class="timers" aria-label={t("timer.show")}>
+        <div><span>{t("timer.show")}</span><strong>{showTime}</strong></div>
+        <div><span>{t("timer.slide")}</span><strong>{slideTime}</strong></div>
+      </section>
 
-    {#if notes || showStage}
-      <Panel title={t("remote.notes")}>
-        <p class="notes">{notes || t("notes.none")}</p>
-      </Panel>
+      {#if notes}
+        <Panel title={t("remote.notes")}>
+          <p class="notes">{notes}</p>
+        </Panel>
+      {/if}
     {/if}
 
     {#if !showStage}
@@ -147,6 +177,78 @@
             {t("controls.logo")}
           </Button>
         </section>
+
+        {#if media && mediaCue}
+          <section class="row-panel" aria-label={t("media.transport")}>
+            <span class="label">{mediaCue.name} · {mediaTime}</span>
+            {#if mediaPlaying}
+              <Button onclick={() => send({ action: "media_pause" })}>{t("media.pause")}</Button>
+            {:else}
+              <Button variant="go" onclick={() => send({ action: "media_play" })}
+                >{t("media.play")}</Button
+              >
+            {/if}
+            <Button onclick={() => send({ action: "media_restart" })}>{t("media.restart")}</Button>
+          </section>
+        {/if}
+
+        {#if overlays.length}
+          <Panel title={t("overlay.title")}>
+            <div class="chips">
+              {#each overlays as o (o.id)}
+                <Button
+                  variant="go"
+                  active={live?.overlays_visible.includes(o.id)}
+                  onclick={() => send({ action: "toggle_overlay", overlay_id: o.id })}
+                >
+                  {o.name || t(`overlay.kind.${o.kind.type}`)}
+                </Button>
+              {/each}
+            </div>
+          </Panel>
+        {/if}
+
+        <Panel title={t("countdown.title")}>
+          <div class="row-panel">
+            <strong class="countdown" class:over={countdownLeft < 0}>
+              {countdownLeft < 0 ? "+" : ""}{formatDuration(
+                Math.abs(countdownLeft) + (countdownLeft > 0 ? 999 : 0),
+              )}
+            </strong>
+            {#if countdownRunning}
+              <Button onclick={() => send({ action: "countdown_pause" })}>{t("timer.pause")}</Button
+              >
+            {:else}
+              <Button variant="go" onclick={() => send({ action: "countdown_start" })}
+                >{t("timer.start")}</Button
+              >
+            {/if}
+            <Button onclick={() => send({ action: "countdown_reset" })}>{t("timer.reset")}</Button>
+          </div>
+          <form
+            class="row-panel message-form"
+            onsubmit={(e) => {
+              e.preventDefault();
+              send({ action: "set_stage_message", text: message });
+              message = "";
+            }}
+          >
+            <input
+              bind:value={message}
+              placeholder={t("stage_message.placeholder")}
+              aria-label={t("stage_message.title")}
+              maxlength="500"
+            />
+            <Button type="submit" disabled={!message.trim()}>{t("stage_message.send")}</Button>
+            {#if live?.stage_message}
+              <Button
+                variant="ghost"
+                onclick={() => send({ action: "set_stage_message", text: null })}
+                >{t("stage_message.clear")}</Button
+              >
+            {/if}
+          </form>
+        </Panel>
 
         <Panel title={t("remote.cues")}>
           <ol class="cues">
@@ -277,6 +379,46 @@
   }
   .stage .notes {
     font-size: 1.5rem;
+  }
+  .row-panel {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .row-panel .label {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .chips {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .countdown {
+    font-family: var(--ms-font-mono);
+    font-size: 1.6rem;
+    font-variant-numeric: tabular-nums;
+    margin-right: auto;
+  }
+  .countdown.over {
+    color: var(--ms-danger);
+  }
+  .message-form {
+    margin-top: 10px;
+  }
+  .message-form input {
+    flex: 1;
+    min-width: 0;
+    font: inherit;
+    padding: 10px;
+    color: var(--ms-text);
+    background: var(--ms-surface-2);
+    border: 1px solid var(--ms-border);
+    border-radius: var(--ms-radius-sm);
   }
   .masters {
     display: grid;

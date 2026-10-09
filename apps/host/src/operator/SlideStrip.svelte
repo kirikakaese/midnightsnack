@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 <!-- Thumbnails of every slide in the live cue; click to jump. -->
 <script lang="ts">
-  import { Panel, SlideImage, t, type HostConnection } from "@midnightsnack/ui";
+  import { Panel, SlidePreview, t, type HostConnection } from "@midnightsnack/ui";
 
   interface Props {
     conn: HostConnection;
@@ -31,10 +31,7 @@
           aria-current={slide === current ? "true" : undefined}
           onclick={() => conn.action({ action: "go_to", position: { cue_id: cue.id, slide } })}
         >
-          <SlideImage
-            src={conn.slideUrl({ cue_id: cue.id, slide })}
-            background={cue.background ?? "#000"}
-          />
+          <SlidePreview {conn} position={{ cue_id: cue.id, slide }} />
           <span class="n">{slide + 1}</span>
         </button>
       {/each}

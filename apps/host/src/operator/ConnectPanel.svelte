@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 <script lang="ts">
   import type { Role } from "@midnightsnack/protocol";
-  import { Button, Panel, t, type HostConnection } from "@midnightsnack/ui";
+  import { Button, t, type HostConnection } from "@midnightsnack/ui";
   import { ask } from "@tauri-apps/plugin-dialog";
   import { host } from "../lib/host";
 
@@ -46,7 +46,7 @@
   }
 </script>
 
-<Panel title={t("connect.title")}>
+<div class="connect-wrap">
   <div class="connect">
     {#if conn.pairing}
       <div class="pair">
@@ -149,7 +149,7 @@
       <Button variant="danger" onclick={disconnectAll}>{t("devices.disconnect_all")}</Button>
     {/if}
   </div>
-</Panel>
+</div>
 
 <style>
   .connect {

@@ -42,3 +42,15 @@ export function formatClock(epochMs: number, locale?: string): string {
     second: "2-digit",
   });
 }
+
+/**
+ * Parses `ss`, `m:ss` or `h:mm:ss` into milliseconds. Returns `null` if invalid.
+ */
+export function parseDuration(text: string): number | null {
+  const parts = text.trim().split(":");
+  if (parts.length === 0 || parts.length > 3 || parts.some((p) => !/^\d+$/.test(p))) return null;
+  const nums = parts.map(Number);
+  let seconds = 0;
+  for (const n of nums) seconds = seconds * 60 + n;
+  return seconds > 0 ? seconds * 1000 : null;
+}

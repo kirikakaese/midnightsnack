@@ -20,7 +20,9 @@ export interface DisplayInfo {
   primary: boolean;
 }
 
-export interface OutputState {
+export type WindowKind = "output" | "stage";
+
+export interface WindowState {
   open: boolean;
   display: string | null;
   windowed: boolean;
@@ -30,10 +32,10 @@ export const host = {
   info: () => invoke<HostInfo>("host_info"),
   connectionInfo: () => invoke<ConnectionInfo>("connection_info"),
   listDisplays: () => invoke<DisplayInfo[]>("list_displays"),
-  outputState: () => invoke<OutputState>("output_state"),
-  openOutput: (display: string | null, windowed: boolean) =>
-    invoke<void>("open_output", { display, windowed }),
-  closeOutput: () => invoke<void>("close_output"),
+  windowState: (kind: WindowKind) => invoke<WindowState>("window_state", { kind }),
+  openWindow: (kind: WindowKind, display: string | null, windowed: boolean) =>
+    invoke<void>("open_window", { kind, display, windowed }),
+  closeWindow: (kind: WindowKind) => invoke<void>("close_window", { kind }),
   keymap: () => invoke<Record<string, string>>("keymap"),
   qrSvg: (text: string) => invoke<string>("qr_svg", { text }),
   uiReady: () => invoke<void>("ui_ready"),

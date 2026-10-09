@@ -7,6 +7,8 @@
 pub mod bundle;
 pub mod dispatcher;
 pub mod engine;
+#[cfg(test)]
+mod live_tests;
 pub mod model;
 pub mod permissions;
 

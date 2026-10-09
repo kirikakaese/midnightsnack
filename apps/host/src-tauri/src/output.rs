@@ -9,6 +9,39 @@ use serde::Serialize;
 use tauri::{AppHandle, Manager, Monitor, WebviewUrl, WebviewWindowBuilder};
 
 pub const OUTPUT_LABEL: &str = "output-1";
+pub const STAGE_LABEL: &str = "stage-1";
+
+/// The two kinds of display windows the host opens.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DisplayWindow {
+    /// Audience output: borderless, no cursor.
+    Output,
+    /// Stage display for presenters: borderless on a display, cursor allowed.
+    Stage,
+}
+
+impl DisplayWindow {
+    pub fn label(self) -> &'static str {
+        match self {
+            DisplayWindow::Output => OUTPUT_LABEL,
+            DisplayWindow::Stage => STAGE_LABEL,
+        }
+    }
+
+    fn route(self) -> &'static str {
+        match self {
+            DisplayWindow::Output => "output",
+            DisplayWindow::Stage => "stage",
+        }
+    }
+
+    fn title(self) -> &'static str {
+        match self {
+            DisplayWindow::Output => "midnightsnack output",
+            DisplayWindow::Stage => "midnightsnack stage display",
+        }
+    }
+}
 
 #[derive(Debug, Clone, Serialize)]
 pub struct DisplayInfo {
@@ -51,7 +84,12 @@ pub fn list_displays(app: &AppHandle) -> Vec<DisplayInfo> {
 
 /// Opens (or moves) the output window. `display` is a name from [`list_displays`]; `None`
 /// picks the first non-primary display, falling back to a window.
-pub fn open(app: &AppHandle, display: Option<&str>, windowed: bool) -> tauri::Result<()> {
+pub fn open(
+    app: &AppHandle,
+    kind: DisplayWindow,
+    display: Option<&str>,
+    windowed: bool,
+) -> tauri::Result<()> {
     let monitors = app.available_monitors()?;
     let primary = app.primary_monitor()?.and_then(|m| m.name().cloned());
     let target = monitors
@@ -67,16 +105,16 @@ pub fn open(app: &AppHandle, display: Option<&str>, windowed: bool) -> tauri::Re
         .map(|(_, m)| m.clone());
     let windowed = windowed || target.is_none();
 
-    if let Some(w) = app.get_webview_window(OUTPUT_LABEL) {
+    if let Some(w) = app.get_webview_window(kind.label()) {
         w.close()?;
     }
 
     let mut builder = WebviewWindowBuilder::new(
         app,
-        OUTPUT_LABEL,
-        WebviewUrl::App(format!("index.html#/output/{OUTPUT_LABEL}").into()),
+        kind.label(),
+        WebviewUrl::App(format!("index.html#/{}/{}", kind.route(), kind.label()).into()),
     )
-    .title("midnightsnack output")
+    .title(kind.title())
     .focused(false)
     .background_color(tauri::window::Color(0, 0, 0, 255));
 
@@ -103,18 +141,20 @@ pub fn open(app: &AppHandle, display: Option<&str>, windowed: bool) -> tauri::Re
             let _ = window.set_position(*m.position());
             let _ = window.set_size(*m.size());
         }
-        let _ = window.set_cursor_visible(false);
+        if kind == DisplayWindow::Output {
+            let _ = window.set_cursor_visible(false);
+        }
     }
     Ok(())
 }
 
-pub fn close(app: &AppHandle) -> tauri::Result<()> {
-    if let Some(w) = app.get_webview_window(OUTPUT_LABEL) {
+pub fn close(app: &AppHandle, kind: DisplayWindow) -> tauri::Result<()> {
+    if let Some(w) = app.get_webview_window(kind.label()) {
         w.close()?;
     }
     Ok(())
 }
 
-pub fn is_open(app: &AppHandle) -> bool {
-    app.get_webview_window(OUTPUT_LABEL).is_some()
+pub fn is_open(app: &AppHandle, kind: DisplayWindow) -> bool {
+    app.get_webview_window(kind.label()).is_some()
 }

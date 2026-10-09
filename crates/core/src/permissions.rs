@@ -18,6 +18,25 @@ pub fn required_role(action: &Action) -> Role {
         | ToggleLogo
         | Panic => Role::Operator,
         TimerStart | TimerPause | TimerReset => Role::Operator,
+        MediaPlay | MediaPause | MediaSeek { .. } | MediaRestart => Role::Operator,
+        MediaLoaded { .. } | MediaEnded { .. } => Role::Operator,
+        CountdownSet { .. } | CountdownStart | CountdownPause | CountdownReset => Role::Operator,
+        SetStageMessage { .. } | SetOverlayVisible { .. } | ToggleOverlay { .. } => Role::Operator,
+        PutOverlay { .. }
+        | RemoveOverlay { .. }
+        | AddText { .. }
+        | SetCueText { .. }
+        | AddTimer { .. }
+        | SetCueTimer { .. }
+        | SetCueTheme { .. }
+        | SetDefaultTheme { .. }
+        | SetCueTransition { .. }
+        | SetDefaultTransition { .. }
+        | SetCueAutoAdvance { .. }
+        | SetMediaOptions { .. }
+        | SetLogoImage { .. }
+        | SetBackgroundImage { .. }
+        | SetOverlayImage { .. } => Role::Admin,
         RenameShow { .. }
         | RenameCue { .. }
         | SetCueNotes { .. }
@@ -43,7 +62,15 @@ pub fn required_role(action: &Action) -> Role {
 pub fn is_local_only(action: &Action) -> bool {
     matches!(
         action,
-        Action::AddFiles { .. } | Action::OpenShow { .. } | Action::SaveShow { path: Some(_), .. }
+        Action::AddFiles { .. }
+            | Action::OpenShow { .. }
+            | Action::SaveShow { path: Some(_), .. }
+            | Action::SetLogoImage { path: Some(_) }
+            | Action::SetBackgroundImage { path: Some(_), .. }
+            | Action::SetOverlayImage { path: Some(_), .. }
+            // Playback reports come from the host's own output windows.
+            | Action::MediaLoaded { .. }
+            | Action::MediaEnded { .. }
     )
 }
 

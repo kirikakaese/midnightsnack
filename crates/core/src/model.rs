@@ -5,7 +5,10 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-use crate::protocol::{CueKind, CueSummary};
+use crate::protocol::{
+    CueKind, CueSummary, MediaInfo, MediaOptions, Overlay, TextInfo, TextTheme, TimerCue,
+    Transition,
+};
 
 /// Version of the `show.json` format.
 pub const SHOW_FORMAT_VERSION: u32 = 1;
@@ -48,10 +51,37 @@ impl MediaRef {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum CueContent {
-    Pdf { file: MediaRef, page_count: u32 },
-    Image { file: MediaRef },
-    ImageFolder { files: Vec<MediaRef> },
-    Blank { color: String },
+    Pdf {
+        file: MediaRef,
+        page_count: u32,
+    },
+    Image {
+        file: MediaRef,
+    },
+    ImageFolder {
+        files: Vec<MediaRef>,
+    },
+    Blank {
+        color: String,
+    },
+    Media {
+        file: MediaRef,
+        video: bool,
+        #[serde(default)]
+        options: MediaOptions,
+        #[serde(default)]
+        duration_ms: Option<u32>,
+    },
+    Text {
+        source: String,
+        lyrics: bool,
+        slides: Vec<String>,
+        #[serde(default)]
+        theme: Option<TextTheme>,
+    },
+    Timer {
+        timer: TimerCue,
+    },
 }
 
 impl CueContent {
@@ -61,33 +91,82 @@ impl CueContent {
             CueContent::Image { .. } => CueKind::Image,
             CueContent::ImageFolder { .. } => CueKind::ImageFolder,
             CueContent::Blank { .. } => CueKind::Blank,
+            CueContent::Media { video: true, .. } => CueKind::Video,
+            CueContent::Media { video: false, .. } => CueKind::Audio,
+            CueContent::Text { .. } => CueKind::Text,
+            CueContent::Timer { .. } => CueKind::Timer,
         }
     }
 
     pub fn slide_count(&self) -> u32 {
         match self {
             CueContent::Pdf { page_count, .. } => *page_count,
-            CueContent::Image { .. } | CueContent::Blank { .. } => 1,
+            CueContent::Image { .. }
+            | CueContent::Blank { .. }
+            | CueContent::Media { .. }
+            | CueContent::Timer { .. } => 1,
             CueContent::ImageFolder { files } => files.len() as u32,
+            CueContent::Text { slides, .. } => slides.len() as u32,
         }
     }
 
-    /// All media referenced by this cue.
+    /// Media files referenced by this cue (not counting theme assets).
     pub fn media(&self) -> Vec<&MediaRef> {
         match self {
-            CueContent::Pdf { file, .. } | CueContent::Image { file } => vec![file],
+            CueContent::Pdf { file, .. }
+            | CueContent::Image { file }
+            | CueContent::Media { file, .. } => vec![file],
             CueContent::ImageFolder { files } => files.iter().collect(),
-            CueContent::Blank { .. } => vec![],
+            CueContent::Blank { .. } | CueContent::Text { .. } | CueContent::Timer { .. } => vec![],
         }
     }
 
     pub fn media_mut(&mut self) -> Vec<&mut MediaRef> {
         match self {
-            CueContent::Pdf { file, .. } | CueContent::Image { file } => vec![file],
+            CueContent::Pdf { file, .. }
+            | CueContent::Image { file }
+            | CueContent::Media { file, .. } => vec![file],
             CueContent::ImageFolder { files } => files.iter_mut().collect(),
-            CueContent::Blank { .. } => vec![],
+            CueContent::Blank { .. } | CueContent::Text { .. } | CueContent::Timer { .. } => vec![],
         }
     }
+
+    /// The cue's own theme override, for cues that have one.
+    pub fn theme_mut(&mut self) -> Option<&mut Option<TextTheme>> {
+        match self {
+            CueContent::Text { theme, .. } => Some(theme),
+            CueContent::Timer { timer } => Some(&mut timer.theme),
+            _ => None,
+        }
+    }
+}
+
+/// Splits text into slides. Lyrics: verses separated by blank lines. Otherwise: slides
+/// separated by lines containing only `---`. Empty slides are dropped.
+pub fn split_text(source: &str, lyrics: bool) -> Vec<String> {
+    let mut slides = Vec::new();
+    let mut cur: Vec<&str> = Vec::new();
+    let flush = |cur: &mut Vec<&str>, slides: &mut Vec<String>| {
+        let s = cur.join("\n").trim().to_owned();
+        if !s.is_empty() {
+            slides.push(s);
+        }
+        cur.clear();
+    };
+    for line in source.lines() {
+        let boundary = if lyrics {
+            line.trim().is_empty()
+        } else {
+            line.trim() == "---"
+        };
+        if boundary {
+            flush(&mut cur, &mut slides);
+        } else {
+            cur.push(line.trim_end());
+        }
+    }
+    flush(&mut cur, &mut slides);
+    slides
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -102,6 +181,10 @@ pub struct Cue {
     /// Speaker notes per slide.
     #[serde(default)]
     pub slide_notes: Vec<String>,
+    #[serde(default)]
+    pub transition: Option<Transition>,
+    #[serde(default)]
+    pub auto_advance_ms: Option<u32>,
 }
 
 impl Cue {
@@ -113,6 +196,8 @@ impl Cue {
             notes: String::new(),
             color: None,
             slide_notes: Vec::new(),
+            transition: None,
+            auto_advance_ms: None,
         }
     }
 
@@ -133,8 +218,46 @@ impl Cue {
                 CueContent::Blank { color } => Some(color.clone()),
                 _ => None,
             },
+            transition: self.transition,
+            auto_advance_ms: self.auto_advance_ms,
+            media: match &self.content {
+                CueContent::Media {
+                    options,
+                    duration_ms,
+                    ..
+                } => Some(MediaInfo {
+                    options: *options,
+                    duration_ms: *duration_ms,
+                }),
+                _ => None,
+            },
+            text: match &self.content {
+                CueContent::Text {
+                    source,
+                    lyrics,
+                    slides,
+                    theme,
+                } => Some(TextInfo {
+                    source: source.clone(),
+                    lyrics: *lyrics,
+                    slides: slides.clone(),
+                    theme: theme.clone(),
+                }),
+                _ => None,
+            },
+            timer: match &self.content {
+                CueContent::Timer { timer } => Some(timer.clone()),
+                _ => None,
+            },
         }
     }
+}
+
+/// A file used by the show outside of cue content (logo, backgrounds, logo bugs).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Asset {
+    pub id: String,
+    pub file: MediaRef,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -143,6 +266,17 @@ pub struct Show {
     pub id: String,
     pub title: String,
     pub cues: Vec<Cue>,
+    #[serde(default)]
+    pub default_transition: Transition,
+    #[serde(default)]
+    pub default_theme: TextTheme,
+    #[serde(default)]
+    pub overlays: Vec<Overlay>,
+    /// Asset id of the logo screen image.
+    #[serde(default)]
+    pub logo: Option<String>,
+    #[serde(default)]
+    pub assets: Vec<Asset>,
     /// Directory bundled media was extracted to. Runtime only.
     #[serde(skip)]
     pub media_dir: Option<PathBuf>,
@@ -155,6 +289,11 @@ impl Default for Show {
             id: new_id(),
             title: String::new(),
             cues: Vec::new(),
+            default_transition: Transition::default(),
+            default_theme: TextTheme::default(),
+            overlays: Vec::new(),
+            logo: None,
+            assets: Vec::new(),
             media_dir: None,
         }
     }
@@ -172,6 +311,56 @@ impl Show {
     pub fn resolve(&self, media: &MediaRef) -> Option<PathBuf> {
         media.resolve(self.media_dir.as_deref())
     }
+
+    pub fn asset(&self, id: &str) -> Option<&Asset> {
+        self.assets.iter().find(|a| a.id == id)
+    }
+
+    /// Every media reference in the show, including assets.
+    pub fn all_media(&self) -> Vec<&MediaRef> {
+        let mut v: Vec<&MediaRef> = self.cues.iter().flat_map(|c| c.content.media()).collect();
+        v.extend(self.assets.iter().map(|a| &a.file));
+        v
+    }
+
+    /// Every media reference in the show, including assets (for bundling).
+    pub fn all_media_mut(&mut self) -> Vec<&mut MediaRef> {
+        let mut v: Vec<&mut MediaRef> = self
+            .cues
+            .iter_mut()
+            .flat_map(|c| c.content.media_mut())
+            .collect();
+        v.extend(self.assets.iter_mut().map(|a| &mut a.file));
+        v
+    }
+
+    /// Asset ids still referenced by the logo, themes or overlays.
+    pub fn referenced_assets(&self) -> Vec<String> {
+        use crate::protocol::OverlayKind;
+        let mut ids: Vec<String> = Vec::new();
+        ids.extend(self.logo.clone());
+        ids.extend(self.default_theme.background_image.clone());
+        for c in &self.cues {
+            let theme = match &c.content {
+                CueContent::Text { theme, .. } => theme.as_ref(),
+                CueContent::Timer { timer } => timer.theme.as_ref(),
+                _ => None,
+            };
+            ids.extend(theme.and_then(|t| t.background_image.clone()));
+        }
+        for o in &self.overlays {
+            if let OverlayKind::LogoBug { image: Some(id) } = &o.kind {
+                ids.push(id.clone());
+            }
+        }
+        ids
+    }
+
+    /// Drops assets nothing refers to any more.
+    pub fn prune_assets(&mut self) {
+        let used = self.referenced_assets();
+        self.assets.retain(|a| used.contains(&a.id));
+    }
 }
 
 /// Generates a new random identifier.
@@ -185,4 +374,38 @@ pub fn is_valid_color(color: &str) -> bool {
         return false;
     };
     (hex.len() == 3 || hex.len() == 6) && hex.chars().all(|c| c.is_ascii_hexdigit())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn splits_lyrics_on_blank_lines() {
+        let text = "Verse one line one\nline two\n\n\n  \nChorus\n\nVerse two\n";
+        assert_eq!(
+            split_text(text, true),
+            vec!["Verse one line one\nline two", "Chorus", "Verse two"]
+        );
+    }
+
+    #[test]
+    fn splits_announcements_on_separators() {
+        let text = "Welcome\n\nto the gala\n---\nDinner at 8\n---\n---\n";
+        assert_eq!(
+            split_text(text, false),
+            vec!["Welcome\n\nto the gala", "Dinner at 8"]
+        );
+        assert!(split_text("   \n", false).is_empty());
+    }
+
+    #[test]
+    fn old_show_files_still_load() {
+        // A phase-1 show.json without the newer fields.
+        let json = r##"{"format_version":1,"id":"s","title":"t","cues":[
+            {"id":"c","name":"n","content":{"type":"blank","color":"#000"}}]}"##;
+        let show: Show = serde_json::from_str(json).unwrap();
+        assert_eq!(show.default_transition, Transition::default());
+        assert!(show.cues[0].transition.is_none());
+    }
 }

@@ -3,8 +3,16 @@
 
 use std::path::PathBuf;
 
-use crate::model::{is_valid_color, Cue, CueContent, Show};
-use crate::protocol::{Action, ErrorCode, LiveState, Masters, Position, ShowSnapshot, Stopwatch};
+use crate::model::{is_valid_color, new_id, split_text, Asset, Cue, CueContent, MediaRef, Show};
+use crate::protocol::{
+    Action, Countdown, ErrorCode, LiveState, Masters, MediaOptions, MediaPlayback, Overlay,
+    OverlayKind, Position, ShowSnapshot, Stopwatch, TextTheme, TimerCue, TimerMode, Transition,
+};
+
+/// Longest accepted duration for timers, countdowns and auto-advance (24 h).
+const MAX_DURATION_MS: u32 = 24 * 60 * 60 * 1000;
+/// Longest accepted text cue source.
+const MAX_TEXT_CHARS: usize = 100_000;
 
 /// What an applied action changed, so callers only broadcast what is needed.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -52,6 +60,10 @@ struct Live {
     logo: bool,
     show_timer: Stopwatch,
     slide_timer: Stopwatch,
+    media: Option<MediaPlayback>,
+    countdown: Countdown,
+    overlays_visible: Vec<String>,
+    stage_message: Option<String>,
 }
 
 /// Show + live state. All mutation goes through [`Engine::apply`] or the explicit helpers used
@@ -252,6 +264,10 @@ impl Engine {
             },
             dirty: self.dirty,
             revision: self.show_revision,
+            default_transition: self.show.default_transition,
+            default_theme: self.show.default_theme.clone(),
+            overlays: self.show.overlays.clone(),
+            logo: self.show.logo.clone(),
         }
     }
 
@@ -264,6 +280,11 @@ impl Engine {
             masters: self.masters(),
             show_timer: self.live.show_timer,
             slide_timer: self.live.slide_timer,
+            media: self.live.media.clone(),
+            countdown: self.live.countdown.clone(),
+            overlays_visible: self.live.overlays_visible.clone(),
+            stage_message: self.live.stage_message.clone(),
+            auto_advance_at_ms: self.auto_advance_at(),
             host_time_ms: now_ms,
             revision: self.live_revision,
         }
@@ -285,8 +306,150 @@ impl Engine {
     /// Applies an engine-level action. Host-level actions (files, devices) return
     /// `InvalidState`; the dispatcher routes those to host services instead.
     pub fn apply(&mut self, action: &Action, now_ms: i64) -> Result<Change, ErrorCode> {
-        let change = self.apply_inner(action, now_ms)?;
-        Ok(self.bump(change))
+        let mut change = self.apply_inner(action, now_ms)?;
+        if change.show && self.revalidate(now_ms) {
+            change.live = true;
+        }
+        if self.sync_media(now_ms) {
+            change.live = true;
+        }
+        // Metadata reported by the output is not an edit by the user.
+        let was_dirty = self.dirty;
+        let change = self.bump(change);
+        if matches!(action, Action::MediaLoaded { .. }) {
+            self.dirty = was_dirty;
+        }
+        Ok(change)
+    }
+
+    /// Keeps positions valid after the cue list changed (e.g. a text cue lost slides).
+    fn revalidate(&mut self, now_ms: i64) -> bool {
+        let fix = |show: &Show, p: &Position| -> Option<Position> {
+            let count = show.cue(&p.cue_id)?.slide_count();
+            (count > 0).then(|| Position {
+                cue_id: p.cue_id.clone(),
+                slide: p.slide.min(count - 1),
+            })
+        };
+        let mut changed = false;
+        if let Some(p) = self.live.program.clone() {
+            let fixed = fix(&self.show, &p);
+            if fixed.as_ref() != Some(&p) {
+                self.live.program = None;
+                self.set_program(fixed, now_ms);
+                changed = true;
+            }
+        }
+        if let Some(Some(p)) = self.live.frozen_output.clone() {
+            let fixed = fix(&self.show, &p);
+            if fixed.as_ref() != Some(&p) {
+                self.live.frozen_output = Some(fixed);
+                changed = true;
+            }
+        }
+        changed
+    }
+
+    /// Media playback follows the cue on the output. Returns true if it changed.
+    fn sync_media(&mut self, now_ms: i64) -> bool {
+        let output_cue = self.output().and_then(|p| self.show.cue(&p.cue_id));
+        let wanted = match output_cue.map(|c| (&c.id, &c.content)) {
+            Some((id, CueContent::Media { options, .. })) => Some((id.clone(), *options)),
+            _ => None,
+        };
+        match (wanted, &self.live.media) {
+            (None, None) => false,
+            (None, Some(_)) => {
+                self.live.media = None;
+                true
+            }
+            (Some((id, _)), Some(m)) if m.cue_id == id => false,
+            (Some((id, options)), _) => {
+                self.live.media = Some(MediaPlayback {
+                    cue_id: id,
+                    position: Stopwatch {
+                        accumulated_ms: options.start_ms as i64,
+                        running_since_ms: Some(now_ms),
+                    },
+                    ended: false,
+                });
+                true
+            }
+        }
+    }
+
+    fn media_cue(&self) -> Option<(&MediaPlayback, MediaOptions, Option<u32>)> {
+        let m = self.live.media.as_ref()?;
+        match &self.show.cue(&m.cue_id)?.content {
+            CueContent::Media {
+                options,
+                duration_ms,
+                ..
+            } => Some((m, *options, *duration_ms)),
+            _ => None,
+        }
+    }
+
+    /// When the program should advance on its own, if ever.
+    pub fn auto_advance_at(&self) -> Option<i64> {
+        let p = self.live.program.as_ref()?;
+        let cue = self.show.cue(&p.cue_id)?;
+        let mut due: Option<i64> = None;
+        if let (Some(ms), Some(since)) =
+            (cue.auto_advance_ms, self.live.slide_timer.running_since_ms)
+        {
+            due = Some(since - self.live.slide_timer.accumulated_ms + ms as i64);
+        }
+        if let Some((m, options, duration)) = self.media_cue() {
+            let end = options.end_ms.or(duration);
+            if m.cue_id == cue.id && options.auto_advance && !options.loop_playback && !m.ended {
+                if let (Some(end), Some(since)) = (end, m.position.running_since_ms) {
+                    let at = since + (end as i64 - m.position.accumulated_ms).max(0);
+                    due = Some(due.map_or(at, |d| d.min(at)));
+                }
+            }
+        }
+        due
+    }
+
+    /// Advances the program if an auto-advance is due. Called periodically by the host.
+    pub fn tick(&mut self, now_ms: i64) -> Change {
+        match self.auto_advance_at() {
+            Some(at) if at <= now_ms => {
+                let target = self.next_position();
+                let mut c = match target {
+                    Some(t) => self.set_program(Some(t), now_ms),
+                    // End of show: stop trying.
+                    None => {
+                        self.live.slide_timer.running_since_ms = None;
+                        self.stop_media_at_end();
+                        Change::LIVE
+                    }
+                };
+                if self.sync_media(now_ms) {
+                    c.live = true;
+                }
+                self.bump(c)
+            }
+            _ => Change::NONE,
+        }
+    }
+
+    fn stop_media_at_end(&mut self) {
+        let end = self
+            .media_cue()
+            .map(|(m, o, d)| (o.end_ms.or(d), m.position));
+        if let (Some(m), Some((end, pos))) = (self.live.media.as_mut(), end) {
+            m.position = Stopwatch {
+                accumulated_ms: end.map_or(pos.accumulated_ms, |e| e as i64),
+                running_since_ms: None,
+            };
+            m.ended = true;
+        }
+    }
+
+    fn media_mut(&mut self) -> Result<&mut MediaPlayback, ErrorCode> {
+        self.live.media.as_mut().ok_or(ErrorCode::InvalidState)
     }
 
     fn apply_inner(&mut self, action: &Action, now_ms: i64) -> Result<Change, ErrorCode> {
@@ -358,6 +521,252 @@ impl Engine {
                 Change::LIVE
             }
 
+            MediaPlay => {
+                let m = self.media_mut()?;
+                if m.position.is_running() {
+                    Change::NONE
+                } else {
+                    if m.ended {
+                        m.ended = false;
+                    }
+                    m.position.running_since_ms = Some(now_ms);
+                    Change::LIVE
+                }
+            }
+            MediaPause => {
+                let m = self.media_mut()?;
+                match m.position.running_since_ms.take() {
+                    Some(since) => {
+                        m.position.accumulated_ms += (now_ms - since).max(0);
+                        Change::LIVE
+                    }
+                    None => Change::NONE,
+                }
+            }
+            MediaSeek { position_ms } => {
+                let m = self.media_mut()?;
+                m.position.accumulated_ms = *position_ms as i64;
+                if m.position.is_running() || m.ended {
+                    m.position.running_since_ms = Some(now_ms);
+                }
+                m.ended = false;
+                Change::LIVE
+            }
+            MediaRestart => {
+                let start = self.media_cue().ok_or(ErrorCode::InvalidState)?.1.start_ms;
+                let m = self.media_mut()?;
+                m.position = Stopwatch {
+                    accumulated_ms: start as i64,
+                    running_since_ms: Some(now_ms),
+                };
+                m.ended = false;
+                Change::LIVE
+            }
+            MediaLoaded {
+                cue_id,
+                duration_ms,
+            } => match &mut self.cue_mut(cue_id)?.content {
+                CueContent::Media { duration_ms: d, .. } if *d != Some(*duration_ms) => {
+                    *d = Some(*duration_ms);
+                    Change::BOTH
+                }
+                CueContent::Media { .. } => Change::NONE,
+                _ => return Err(ErrorCode::InvalidState),
+            },
+            MediaEnded { cue_id } => {
+                let Some((m, options, _)) = self.media_cue() else {
+                    return Ok(Change::NONE);
+                };
+                if m.cue_id != *cue_id || options.loop_playback || m.ended {
+                    return Ok(Change::NONE);
+                }
+                self.stop_media_at_end();
+                let on_program = self
+                    .live
+                    .program
+                    .as_ref()
+                    .is_some_and(|p| p.cue_id == *cue_id);
+                if options.auto_advance && on_program {
+                    if let Some(t) = self.next_position() {
+                        self.set_program(Some(t), now_ms);
+                    }
+                }
+                Change::LIVE
+            }
+
+            CountdownSet { duration_ms, label } => {
+                if *duration_ms == 0 || *duration_ms > MAX_DURATION_MS {
+                    return Err(ErrorCode::InvalidState);
+                }
+                self.live.countdown = Countdown {
+                    duration_ms: *duration_ms,
+                    label: clean_text(label, 100),
+                    elapsed: Stopwatch::default(),
+                };
+                Change::LIVE
+            }
+            CountdownStart => {
+                let sw = &mut self.live.countdown.elapsed;
+                if sw.is_running() {
+                    Change::NONE
+                } else {
+                    sw.running_since_ms = Some(now_ms);
+                    Change::LIVE
+                }
+            }
+            CountdownPause => {
+                let sw = &mut self.live.countdown.elapsed;
+                match sw.running_since_ms.take() {
+                    Some(since) => {
+                        sw.accumulated_ms += (now_ms - since).max(0);
+                        Change::LIVE
+                    }
+                    None => Change::NONE,
+                }
+            }
+            CountdownReset => {
+                self.live.countdown.elapsed = Stopwatch::default();
+                Change::LIVE
+            }
+            SetStageMessage { text } => {
+                let text = text
+                    .as_deref()
+                    .map(|t| clean_multiline(t, 500))
+                    .filter(|t| !t.is_empty());
+                if text == self.live.stage_message {
+                    Change::NONE
+                } else {
+                    self.live.stage_message = text;
+                    Change::LIVE
+                }
+            }
+
+            SetOverlayVisible {
+                overlay_id,
+                visible,
+            } => self.set_overlay_visible(overlay_id, *visible)?,
+            ToggleOverlay { overlay_id } => {
+                let visible = !self.live.overlays_visible.contains(overlay_id);
+                self.set_overlay_visible(overlay_id, visible)?
+            }
+            PutOverlay { overlay } => {
+                let overlay = self.validate_overlay(overlay)?;
+                match self.show.overlays.iter_mut().find(|o| o.id == overlay.id) {
+                    Some(o) => *o = overlay,
+                    None => self.show.overlays.push(overlay),
+                }
+                self.show.prune_assets();
+                Change::SHOW
+            }
+            RemoveOverlay { overlay_id } => {
+                let before = self.show.overlays.len();
+                self.show.overlays.retain(|o| o.id != *overlay_id);
+                if before == self.show.overlays.len() {
+                    return Err(ErrorCode::NotFound);
+                }
+                self.live.overlays_visible.retain(|id| id != overlay_id);
+                self.show.prune_assets();
+                Change::BOTH
+            }
+
+            AddText {
+                name,
+                text,
+                lyrics,
+                at_index,
+            } => {
+                let content = text_content(text, *lyrics, None)?;
+                let name = clean_text(name, 200);
+                let cue = Cue::new(if name.is_empty() { "Text".into() } else { name }, content);
+                self.insert_cues_inner(vec![cue], at_index.map(|i| i as usize))
+            }
+            SetCueText {
+                cue_id,
+                text,
+                lyrics,
+            } => {
+                let cue = self.cue_mut(cue_id)?;
+                let CueContent::Text { theme, .. } = &cue.content else {
+                    return Err(ErrorCode::InvalidState);
+                };
+                cue.content = text_content(text, *lyrics, theme.clone())?;
+                Change::SHOW
+            }
+            AddTimer {
+                name,
+                timer,
+                at_index,
+            } => {
+                let timer = validate_timer(timer, &self.show)?;
+                let name = clean_text(name, 200);
+                let cue = Cue::new(
+                    if name.is_empty() {
+                        "Timer".into()
+                    } else {
+                        name
+                    },
+                    CueContent::Timer { timer },
+                );
+                self.insert_cues_inner(vec![cue], at_index.map(|i| i as usize))
+            }
+            SetCueTimer { cue_id, timer } => {
+                let timer = validate_timer(timer, &self.show)?;
+                let cue = self.cue_mut(cue_id)?;
+                if !matches!(cue.content, CueContent::Timer { .. }) {
+                    return Err(ErrorCode::InvalidState);
+                }
+                cue.content = CueContent::Timer { timer };
+                self.show.prune_assets();
+                Change::SHOW
+            }
+            SetCueTheme { cue_id, theme } => {
+                let theme = theme
+                    .as_ref()
+                    .map(|t| validate_theme(t, &self.show))
+                    .transpose()?;
+                let slot = self
+                    .cue_mut(cue_id)?
+                    .content
+                    .theme_mut()
+                    .ok_or(ErrorCode::InvalidState)?;
+                *slot = theme;
+                self.show.prune_assets();
+                Change::SHOW
+            }
+            SetDefaultTheme { theme } => {
+                self.show.default_theme = validate_theme(theme, &self.show)?;
+                self.show.prune_assets();
+                Change::SHOW
+            }
+            SetCueTransition { cue_id, transition } => {
+                let t = transition.map(validate_transition).transpose()?;
+                self.cue_mut(cue_id)?.transition = t;
+                Change::SHOW
+            }
+            SetDefaultTransition { transition } => {
+                self.show.default_transition = validate_transition(*transition)?;
+                Change::SHOW
+            }
+            SetCueAutoAdvance { cue_id, after_ms } => {
+                if after_ms.is_some_and(|ms| !(100..=MAX_DURATION_MS).contains(&ms)) {
+                    return Err(ErrorCode::InvalidState);
+                }
+                self.cue_mut(cue_id)?.auto_advance_ms = *after_ms;
+                Change::BOTH
+            }
+            SetMediaOptions { cue_id, options } => {
+                let valid_volume = (0.0..=1.0).contains(&options.volume);
+                let valid_trim = options.end_ms.is_none_or(|e| e > options.start_ms);
+                if !valid_volume || !valid_trim {
+                    return Err(ErrorCode::InvalidState);
+                }
+                match &mut self.cue_mut(cue_id)?.content {
+                    CueContent::Media { options: o, .. } => *o = *options,
+                    _ => return Err(ErrorCode::InvalidState),
+                }
+                Change::BOTH
+            }
+
             RenameShow { title } => {
                 self.show.title = clean_text(title, 200);
                 Change::SHOW
@@ -402,6 +811,9 @@ impl Engine {
             }
 
             AddFiles { .. }
+            | SetLogoImage { .. }
+            | SetBackgroundImage { .. }
+            | SetOverlayImage { .. }
             | NewShow
             | OpenShow { .. }
             | SaveShow { .. }
@@ -436,6 +848,125 @@ impl Engine {
             }
             _ => Change::NONE,
         }
+    }
+
+    fn set_overlay_visible(&mut self, id: &str, visible: bool) -> Result<Change, ErrorCode> {
+        if !self.show.overlays.iter().any(|o| o.id == id) {
+            return Err(ErrorCode::NotFound);
+        }
+        let shown = self.live.overlays_visible.iter().any(|v| v == id);
+        Ok(match (visible, shown) {
+            (true, false) => {
+                self.live.overlays_visible.push(id.to_owned());
+                Change::LIVE
+            }
+            (false, true) => {
+                self.live.overlays_visible.retain(|v| v != id);
+                Change::LIVE
+            }
+            _ => Change::NONE,
+        })
+    }
+
+    fn validate_overlay(&self, o: &Overlay) -> Result<Overlay, ErrorCode> {
+        if !is_valid_color(&o.color)
+            || !is_valid_color(&o.background)
+            || !(10..=400).contains(&o.scale)
+        {
+            return Err(ErrorCode::InvalidState);
+        }
+        let kind = match &o.kind {
+            OverlayKind::LowerThird { title, subtitle } => OverlayKind::LowerThird {
+                title: clean_text(title, 200),
+                subtitle: clean_text(subtitle, 200),
+            },
+            OverlayKind::LogoBug { image } => {
+                if image
+                    .as_ref()
+                    .is_some_and(|id| self.show.asset(id).is_none())
+                {
+                    return Err(ErrorCode::NotFound);
+                }
+                OverlayKind::LogoBug {
+                    image: image.clone(),
+                }
+            }
+            OverlayKind::Ticker { text, speed } => OverlayKind::Ticker {
+                text: clean_text(text, 2000),
+                speed: (*speed).clamp(1, 100),
+            },
+            other => other.clone(),
+        };
+        let id = if o.id.trim().is_empty() {
+            new_id()
+        } else {
+            clean_text(&o.id, 64)
+        };
+        Ok(Overlay {
+            id,
+            name: clean_text(&o.name, 100),
+            kind,
+            ..o.clone()
+        })
+    }
+
+    /// Registers a file as a show asset and returns its id.
+    pub fn add_asset(&mut self, file: MediaRef) -> String {
+        let id = new_id();
+        self.show.assets.push(Asset {
+            id: id.clone(),
+            file,
+        });
+        id
+    }
+
+    /// Sets (or clears) the logo screen image. Used by host services after checking the file.
+    pub fn set_logo_asset(&mut self, asset: Option<String>) -> Change {
+        self.show.logo = asset;
+        self.show.prune_assets();
+        self.bump(Change::SHOW)
+    }
+
+    /// Sets (or clears) a background image on a cue's theme or the default theme.
+    pub fn set_background_asset(
+        &mut self,
+        cue_id: Option<&str>,
+        asset: Option<String>,
+    ) -> Result<Change, ErrorCode> {
+        match cue_id {
+            None => self.show.default_theme.background_image = asset,
+            Some(id) => {
+                let default = self.show.default_theme.clone();
+                let slot = self
+                    .cue_mut(id)?
+                    .content
+                    .theme_mut()
+                    .ok_or(ErrorCode::InvalidState)?;
+                slot.get_or_insert(default).background_image = asset;
+            }
+        }
+        self.show.prune_assets();
+        Ok(self.bump(Change::SHOW))
+    }
+
+    /// Sets (or clears) the image of a logo-bug overlay.
+    pub fn set_overlay_asset(
+        &mut self,
+        overlay_id: &str,
+        asset: Option<String>,
+    ) -> Result<Change, ErrorCode> {
+        let o = self
+            .show
+            .overlays
+            .iter_mut()
+            .find(|o| o.id == overlay_id)
+            .ok_or(ErrorCode::NotFound)?;
+        match &mut o.kind {
+            OverlayKind::LogoBug { image } => *image = asset,
+            _ => return Err(ErrorCode::InvalidState),
+        }
+        self.show.prune_assets();
+        Ok(self.bump(Change::SHOW))
     }
 
     fn cue_mut(&mut self, id: &str) -> Result<&mut Cue, ErrorCode> {
@@ -486,6 +1017,15 @@ impl Engine {
         self.bump(c)
     }
 
+    /// Like [`Engine::restore_position`] but also starts media; used by tests and services.
+    pub fn sync(&mut self, now_ms: i64) -> Change {
+        if self.sync_media(now_ms) {
+            self.bump(Change::LIVE)
+        } else {
+            Change::NONE
+        }
+    }
+
     /// Replaces the whole show (new / open). Master states are kept so a blackout survives
     /// loading a show; position and timers reset.
     pub fn replace_show(&mut self, show: Show, path: Option<PathBuf>) -> Change {
@@ -497,6 +1037,8 @@ impl Engine {
         }
         self.live.show_timer = Stopwatch::default();
         self.live.slide_timer = Stopwatch::default();
+        self.live.media = None;
+        self.live.overlays_visible.clear();
         let c = self.bump(Change::BOTH);
         self.dirty = false;
         c
@@ -519,7 +1061,10 @@ impl Engine {
     pub fn restore_position(&mut self, position: Option<Position>, now_ms: i64) -> Change {
         match position.filter(|p| self.is_valid(p)) {
             Some(p) => {
-                let c = self.set_program(Some(p), now_ms);
+                let mut c = self.set_program(Some(p), now_ms);
+                if self.sync_media(now_ms) {
+                    c.live = true;
+                }
                 self.bump(c)
             }
             None => Change::NONE,
@@ -530,6 +1075,97 @@ impl Engine {
     pub fn show_mut_untracked(&mut self) -> &mut Show {
         &mut self.show
     }
+}
+
+fn clean_multiline(s: &str, max: usize) -> String {
+    s.chars()
+        .filter(|c| *c == '\n' || !c.is_control())
+        .take(max)
+        .collect::<String>()
+        .trim()
+        .to_owned()
+}
+
+fn text_content(
+    text: &str,
+    lyrics: bool,
+    theme: Option<TextTheme>,
+) -> Result<CueContent, ErrorCode> {
+    if text.chars().count() > MAX_TEXT_CHARS {
+        return Err(ErrorCode::InvalidState);
+    }
+    let source = clean_multiline(text, MAX_TEXT_CHARS);
+    Ok(CueContent::Text {
+        slides: split_text(&source, lyrics),
+        source,
+        lyrics,
+        theme,
+    })
+}
+
+fn validate_transition(t: Transition) -> Result<Transition, ErrorCode> {
+    if t.duration_ms > Transition::MAX_DURATION_MS {
+        return Err(ErrorCode::InvalidState);
+    }
+    Ok(t)
+}
+
+fn validate_theme(t: &TextTheme, show: &Show) -> Result<TextTheme, ErrorCode> {
+    let font_ok = !t.font_family.trim().is_empty()
+        && t.font_family.len() <= 200
+        && !t.font_family.contains(['{', '}', ';', '<', '>', '\\']);
+    if !font_ok
+        || !is_valid_color(&t.color)
+        || !is_valid_color(&t.background)
+        || t.font_size.is_some_and(|s| !(1..=100).contains(&s))
+    {
+        return Err(ErrorCode::InvalidState);
+    }
+    if t.background_image
+        .as_ref()
+        .is_some_and(|id| show.asset(id).is_none())
+    {
+        return Err(ErrorCode::NotFound);
+    }
+    Ok(t.clone())
+}
+
+fn validate_timer(t: &TimerCue, show: &Show) -> Result<TimerCue, ErrorCode> {
+    match &t.mode {
+        TimerMode::Countdown { duration_ms }
+            if *duration_ms == 0 || *duration_ms > MAX_DURATION_MS =>
+        {
+            return Err(ErrorCode::InvalidState)
+        }
+        TimerMode::CountdownTo { time } if !is_valid_clock_time(time) => {
+            return Err(ErrorCode::InvalidState)
+        }
+        _ => {}
+    }
+    if !is_valid_color(&t.overtime_color) {
+        return Err(ErrorCode::InvalidState);
+    }
+    let theme = t
+        .theme
+        .as_ref()
+        .map(|th| validate_theme(th, show))
+        .transpose()?;
+    Ok(TimerCue {
+        label: clean_text(&t.label, 200),
+        theme,
+        ..t.clone()
+    })
+}
+
+/// `HH:MM`, 24-hour clock.
+fn is_valid_clock_time(s: &str) -> bool {
+    let Some((h, m)) = s.split_once(':') else {
+        return false;
+    };
+    h.len() == 2
+        && m.len() == 2
+        && h.parse::<u8>().is_ok_and(|h| h < 24)
+        && m.parse::<u8>().is_ok_and(|m| m < 60)
 }
 
 fn clean_text(s: &str, max: usize) -> String {

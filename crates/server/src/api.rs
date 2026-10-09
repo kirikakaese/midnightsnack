@@ -5,13 +5,15 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use axum::body::Body;
-use axum::extract::{ConnectInfo, Path, Query, State};
+use axum::extract::{ConnectInfo, Path, Query, Request, State};
 use axum::http::{header, HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use midnightsnack_protocol::{ApiError, ErrorCode, HostInfo, PairRequest, PairResponse};
 use midnightsnack_render::TargetSize;
 use serde::Deserialize;
+use tower::ServiceExt;
+use tower_http::services::ServeFile;
 
 use crate::pairing::Submitted;
 use crate::state::{lock, AppState, Event, THUMB_SIZE};
@@ -139,4 +141,68 @@ pub async fn slide(
         Body::from(bytes),
     )
         .into_response())
+}
+
+#[derive(Debug, Deserialize)]
+pub struct KeyQuery {
+    k: String,
+}
+
+/// Serves a file with HTTP range support (needed for seeking in videos).
+async fn serve_file(path: std::path::PathBuf, req: Request) -> Result<Response, ApiFailure> {
+    let res = ServeFile::new(path)
+        .oneshot(req)
+        .await
+        .map_err(|_| ErrorCode::Io)?;
+    if res.status() == StatusCode::NOT_FOUND {
+        return Err(ErrorCode::NotFound.into());
+    }
+    let mut res = res.map(Body::new);
+    res.headers_mut().insert(
+        header::CACHE_CONTROL,
+        header::HeaderValue::from_static("private, no-cache"),
+    );
+    Ok(res)
+}
+
+/// The original file of a video or audio cue.
+pub async fn media_file(
+    State(state): State<Arc<AppState>>,
+    Path(cue_id): Path<String>,
+    Query(q): Query<KeyQuery>,
+    req: Request,
+) -> Result<Response, ApiFailure> {
+    if !lock(&state.media_keys).contains_key(&q.k) {
+        return Err(ErrorCode::Unauthorized.into());
+    }
+    let path = {
+        let engine = lock(&state.engine);
+        let show = engine.show();
+        match &show.cue(&cue_id).ok_or(ErrorCode::NotFound)?.content {
+            midnightsnack_core::CueContent::Media { file, .. } => show.resolve(file),
+            _ => None,
+        }
+        .ok_or(ErrorCode::NotFound)?
+    };
+    serve_file(path, req).await
+}
+
+/// An image asset (logo, background, logo bug).
+pub async fn asset(
+    State(state): State<Arc<AppState>>,
+    Path(asset_id): Path<String>,
+    Query(q): Query<KeyQuery>,
+    req: Request,
+) -> Result<Response, ApiFailure> {
+    if !lock(&state.media_keys).contains_key(&q.k) {
+        return Err(ErrorCode::Unauthorized.into());
+    }
+    let path = {
+        let engine = lock(&state.engine);
+        let show = engine.show();
+        show.asset(&asset_id)
+            .and_then(|a| show.resolve(&a.file))
+            .ok_or(ErrorCode::NotFound)?
+    };
+    serve_file(path, req).await
 }

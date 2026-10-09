@@ -17,6 +17,8 @@ clock.
 | `GET /api/v1/pair/{request_id}`                 | request id    | `PairStatus`                     |
 | `GET /api/v1/ws`                                | token (hello) | Realtime WebSocket               |
 | `GET /api/v1/media/slide/{cue_id}/{slide}?k=&w=&h=` | media key | Rendered slide image             |
+| `GET /api/v1/media/file/{cue_id}?k=`            | media key     | Original video/audio file (HTTP range requests) |
+| `GET /api/v1/media/asset/{asset_id}?k=`         | media key     | Image asset (logo, backgrounds, logo bug) |
 | `GET /*`                                        | none          | Web remote (single-page app)     |
 
 Errors are returned as `{"code": "<error_code>"}` with a matching status: `401` for bad tokens or
@@ -78,6 +80,11 @@ list).
 ### State
 
 `LiveState.output` is what the audience sees; it differs from `program` only while frozen.
+`LiveState.media` is the playback timeline of the media cue on the output (it follows `output`,
+so a frozen video keeps playing): `position` is a stopwatch of the file position in ms. Looping
+and trimming are applied by clients (`mediaPosition()` in `packages/ui`). `countdown` is the
+global countdown, `overlays_visible` the ids of shown overlays, `stage_message` the operator's
+message to stage displays, and `auto_advance_at_ms` when the program will advance on its own.
 Master states are drawn on top in this order: content → logo → blackout.
 Stopwatch elapsed time is `accumulated_ms + (now - running_since_ms)`; clients compute
 `now` as their clock plus `host_time_ms - Date.now()` from the last `live` message.
@@ -90,6 +97,12 @@ Stopwatch elapsed time is `accumulated_ms + (now - running_since_ms)`; clients c
 | `next_cue`, `prev_cue`, `go_to`                          | operator     |            |
 | `set_/toggle_blackout`, `set_/toggle_freeze`, `set_/toggle_logo`, `panic` | operator |  |
 | `timer_start`, `timer_pause`, `timer_reset`              | operator     |            |
+| `media_play`, `media_pause`, `media_seek`, `media_restart` | operator   |            |
+| `countdown_set`, `countdown_start`, `countdown_pause`, `countdown_reset`, `set_stage_message` | operator | |
+| `set_overlay_visible`, `toggle_overlay`                  | operator     |            |
+| `media_loaded`, `media_ended` (reports from output windows) | operator  | yes        |
+| `put_overlay`, `remove_overlay`, `add_text`, `set_cue_text`, `add_timer`, `set_cue_timer`, `set_cue_theme`, `set_default_theme`, `set_cue_transition`, `set_default_transition`, `set_cue_auto_advance`, `set_media_options` | admin | |
+| `set_logo_image`, `set_background_image`, `set_overlay_image` with a `path` | admin | yes |
 | `rename_show`, `rename_cue`, `set_cue_notes`, `set_cue_color`, `move_cue`, `remove_cue`, `add_blank` | admin | |
 | `add_files`, `open_show`, `save_show` with a `path`      | admin        | yes        |
 | `new_show`, `save_show` without `path`                   | admin        |            |

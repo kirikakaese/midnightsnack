@@ -6,8 +6,10 @@
 
   interface Props {
     conn: HostConnection;
+    /** Selected cue (shown in the inspector). */
+    selected: string | null;
   }
-  let { conn }: Props = $props();
+  let { conn, selected = $bindable() }: Props = $props();
 
   const cues = $derived(conn.show?.cues ?? []);
   const programCue = $derived(conn.live?.program?.cue_id);
@@ -22,11 +24,77 @@
   const mediaFilter = [
     {
       name: t("cue.filter_media"),
-      extensions: ["pdf", "png", "jpg", "jpeg", "gif", "webp", "bmp", "tif", "tiff"],
+      extensions: [
+        "pdf",
+        "png",
+        "jpg",
+        "jpeg",
+        "gif",
+        "webp",
+        "bmp",
+        "tif",
+        "tiff",
+        "mp4",
+        "m4v",
+        "mov",
+        "webm",
+        "mkv",
+        "ogv",
+        "mp3",
+        "m4a",
+        "aac",
+        "wav",
+        "ogg",
+        "oga",
+        "opus",
+        "flac",
+      ],
     },
   ];
 
+  // After adding a cue, select it so the inspector shows it.
+  let known: Set<string> | null = null;
+  function expectNewCue() {
+    known = new Set(cues.map((c) => c.id));
+  }
+  $effect(() => {
+    const ids = cues.map((c) => c.id);
+    if (!known) return;
+    const added = ids.find((id) => !known!.has(id));
+    if (added) {
+      selected = added;
+      known = null;
+    }
+  });
+
+  function addText() {
+    expectNewCue();
+    conn.action({
+      action: "add_text",
+      name: t("cue.new_text_name"),
+      text: t("cue.new_text_body"),
+      lyrics: true,
+      at_index: null,
+    });
+  }
+
+  function addTimer() {
+    expectNewCue();
+    conn.action({
+      action: "add_timer",
+      name: t("cue.new_timer_name"),
+      timer: {
+        mode: { mode: "countdown", duration_ms: 5 * 60_000 },
+        label: "",
+        overtime_color: "#ef4444",
+        theme: null,
+      },
+      at_index: null,
+    });
+  }
+
   async function addFiles() {
+    expectNewCue();
     const paths = await open({ multiple: true, filters: mediaFilter });
     if (paths?.length) conn.action({ action: "add_files", paths, at_index: null });
   }
@@ -79,6 +147,8 @@
   {#snippet actions()}
     <Button onclick={addFiles}>{t("cue.add_files")}</Button>
     <Button onclick={addFolder}>{t("cue.add_folder")}</Button>
+    <Button onclick={addText}>{t("cue.add_text")}</Button>
+    <Button onclick={addTimer}>{t("cue.add_timer")}</Button>
     <Button onclick={() => conn.action({ action: "add_blank", color: "#000000", at_index: null })}>
       {t("cue.add_blank")}
     </Button>
@@ -94,6 +164,7 @@
           class:program={cue.id === programCue}
           class:output={cue.id === outputCue}
           class:next={cue.id === nextCue && cue.id !== programCue}
+          class:selected={cue.id === selected}
           draggable="true"
           ondragstart={() => (dragId = cue.id)}
           ondragover={(e) => e.preventDefault()}
@@ -120,7 +191,12 @@
               }}
             />
           {:else}
-            <button class="name" onclick={() => go(cue)} ondblclick={() => startRename(cue)}>
+            <button
+              class="name"
+              aria-pressed={cue.id === selected}
+              onclick={() => (selected = cue.id)}
+              ondblclick={() => go(cue)}
+            >
               <span class="title">{cue.name || t("cue.unnamed")}</span>
               <span class="meta">
                 {t(`cue.kind.${cue.kind}`)} · {t("cue.slides", { n: cue.slide_count })}
@@ -128,6 +204,12 @@
             </button>
           {/if}
           <span class="tools">
+            <button
+              class="go"
+              aria-label={t("cue.go_live")}
+              disabled={cue.slide_count === 0}
+              onclick={() => go(cue)}>▶</button
+            >
             <button aria-label={t("cue.rename")} onclick={() => startRename(cue)}>✎</button>
             <button aria-label={t("cue.move_up")} disabled={i === 0} onclick={() => move(cue, -1)}
               >↑</button
@@ -174,6 +256,12 @@
   }
   .cue.program {
     border-color: var(--ms-go);
+  }
+  .cue.selected {
+    background: var(--ms-surface-3);
+  }
+  .tools .go {
+    color: var(--ms-go);
   }
   .cue.output:not(.program) {
     border-color: var(--ms-freeze);
