@@ -10,6 +10,7 @@
 mod cache;
 mod images;
 mod notes;
+pub mod office;
 pub mod pdf;
 mod service;
 #[doc(hidden)]
