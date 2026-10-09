@@ -40,6 +40,12 @@
     ],
     "resources": {
       "resources/pdfium/*": "pdfium/"
+    },
+    "linux": {
+      "deb": {
+        "depends": ["libgbm1", "libxcb1"],
+        "recommends": ["libreoffice-impress"]
+      }
     }
   }
 }
