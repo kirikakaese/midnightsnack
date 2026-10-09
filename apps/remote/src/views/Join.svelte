@@ -1,32 +1,37 @@
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 <script lang="ts">
-  import type { ErrorCode } from "@midnightsnack/protocol";
   import { Button, Panel, t } from "@midnightsnack/ui";
-  import { onDestroy } from "svelte";
-  import { pairingStatus, requestPairing } from "../lib/api";
-  import { guessDeviceName, storage } from "../lib/storage";
+  import { onDestroy, untrack } from "svelte";
+  import { pairingStatus, requestPairing, type PairingFailure } from "../lib/api";
+  import { guessDeviceName, makeTransport, storage, type HostLink } from "../lib/storage";
 
   interface Props {
+    link: HostLink;
     joinToken: string;
     onpaired: (token: string) => void;
   }
-  let { joinToken, onpaired }: Props = $props();
+  let { link, joinToken, onpaired }: Props = $props();
+  // The parent only shows this view for usable links.
+  const transport = makeTransport(untrack(() => link))!;
 
   let name = $state(storage.deviceName() ?? guessDeviceName(t("remote.default_device_name")));
   let pin = $state("");
-  let error = $state<ErrorCode | null>(null);
+  let error = $state<PairingFailure | null>(null);
   let phase = $state<"form" | "waiting" | "denied">("form");
   let busy = $state(false);
   let poll: ReturnType<typeof setTimeout> | undefined;
 
-  onDestroy(() => clearTimeout(poll));
+  onDestroy(() => {
+    clearTimeout(poll);
+    transport.dispose();
+  });
 
   async function submit(e: SubmitEvent) {
     e.preventDefault();
     busy = true;
     error = null;
     storage.setDeviceName(name);
-    const res = await requestPairing(joinToken, pin, name);
+    const res = await requestPairing(transport, joinToken, pin, name);
     busy = false;
     if (!res.ok) {
       error = res.code;
@@ -37,13 +42,12 @@
   }
 
   async function wait(id: string) {
-    const status = await pairingStatus(id);
-    if (status?.status === "approved") {
-      storage.setToken(status.token);
+    const status = await pairingStatus(transport, id);
+    if (status !== "retry" && status?.status === "approved") {
       onpaired(status.token);
       return;
     }
-    if (status?.status === "denied" || status === null) {
+    if (status !== "retry" && (status === null || status.status === "denied")) {
       phase = "denied";
       return;
     }
@@ -54,6 +58,9 @@
 <main class="join">
   <h1>{t("remote.join_title")}</h1>
   <Panel>
+    {#if link.kind === "relay"}
+      <p class="via">{t("remote.via_relay_hint")}</p>
+    {/if}
     {#if phase === "form"}
       <form onsubmit={submit}>
         <label>
@@ -128,5 +135,10 @@
   }
   .waiting {
     font-size: 1.1rem;
+  }
+  .via {
+    margin: 0 0 12px;
+    font-size: 0.9rem;
+    color: var(--ms-text-muted);
   }
 </style>

@@ -2,7 +2,7 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::Role;
+use crate::{ConnectionPath, JoinLink, Role};
 
 /// `POST /api/v1/pair` body.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -50,6 +50,8 @@ pub struct PendingPairing {
     pub request_id: String,
     pub device_name: String,
     pub address: String,
+    /// The request came through the relay (`address` is then meaningless).
+    pub via_relay: bool,
     #[ts(type = "number")]
     pub requested_at_ms: i64,
 }
@@ -68,6 +70,10 @@ pub struct DeviceInfo {
     pub api_key: bool,
     /// Round-trip latency of the last ping, if measured.
     pub latency_ms: Option<u32>,
+    /// How the device is connected (while connected).
+    pub path: Option<ConnectionPath>,
+    /// Network address of the connection (LAN and HTTPS only).
+    pub address: Option<String>,
     #[ts(type = "number | null")]
     pub last_seen_ms: Option<i64>,
 }
@@ -100,7 +106,8 @@ pub struct UploadResponse {
 #[ts(export)]
 pub struct PairingInfo {
     pub pin: String,
-    /// One join URL per usable network interface; the first is preferred.
-    pub join_urls: Vec<String>,
+    /// One join link per usable interface (plain HTTP and, if enabled, HTTPS) and the relay,
+    /// the preferred one first.
+    pub links: Vec<JoinLink>,
     pub auto_approve: Option<Role>,
 }

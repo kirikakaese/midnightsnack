@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use midnightsnack_core::now_ms;
-use midnightsnack_protocol::{DeviceInfo, Role};
+use midnightsnack_protocol::{ConnectionPath, DeviceInfo, Role};
 use serde::{Deserialize, Serialize};
 
 use crate::util::{random_id, random_token, read_json, sha256_hex, write_json_atomic};
@@ -41,6 +41,22 @@ pub struct DeviceStore {
     local: Vec<(String, Device)>, // (token hash, device)
     connected: HashMap<String, usize>,
     latency: HashMap<String, u32>,
+    /// How the latest connection of each connected device reached the host.
+    paths: HashMap<String, (ConnectionPath, Option<String>)>,
+}
+
+/// Longest device name kept.
+pub const MAX_NAME_CHARS: usize = 64;
+
+/// A device name as shown in lists: trimmed, without control characters, limited length.
+pub fn clean_name(name: &str) -> String {
+    name.chars()
+        .filter(|c| !c.is_control())
+        .collect::<String>()
+        .trim()
+        .chars()
+        .take(MAX_NAME_CHARS)
+        .collect()
 }
 
 impl DeviceStore {
@@ -52,6 +68,7 @@ impl DeviceStore {
             local: Vec::new(),
             connected: HashMap::new(),
             latency: HashMap::new(),
+            paths: HashMap::new(),
         }
     }
 
@@ -143,6 +160,32 @@ impl DeviceStore {
         true
     }
 
+    pub fn rename(&mut self, id: &str, name: &str) -> bool {
+        let name = clean_name(name);
+        let Some(d) = self.devices.iter_mut().find(|d| d.id == id) else {
+            return false;
+        };
+        if name.is_empty() {
+            return false;
+        }
+        d.name = name;
+        self.persist();
+        true
+    }
+
+    /// Forgets paired devices that are not connected (not API keys). Returns how many.
+    pub fn forget_offline(&mut self) -> usize {
+        let before = self.devices.len();
+        let connected = &self.connected;
+        self.devices
+            .retain(|d| d.api_key || connected.contains_key(&d.id));
+        let removed = before - self.devices.len();
+        if removed > 0 {
+            self.persist();
+        }
+        removed
+    }
+
     pub fn revoke(&mut self, id: &str) -> bool {
         let before = self.devices.len();
         self.devices.retain(|d| d.id != id);
@@ -166,10 +209,15 @@ impl DeviceStore {
         if *n == 0 {
             self.connected.remove(id);
             self.latency.remove(id);
+            self.paths.remove(id);
         }
         if let Some(d) = self.devices.iter_mut().find(|d| d.id == id) {
             d.last_seen_ms = Some(now_ms());
         }
+    }
+
+    pub fn set_path(&mut self, id: &str, path: ConnectionPath, address: Option<String>) {
+        self.paths.insert(id.to_owned(), (path, address));
     }
 
     pub fn set_latency(&mut self, id: &str, ms: u32) {
@@ -186,6 +234,8 @@ impl DeviceStore {
             api_key: false,
             latency_ms: self.latency.get(&d.id).copied(),
             last_seen_ms: None,
+            path: self.paths.get(&d.id).map(|p| p.0),
+            address: None,
         });
         let remote = self.devices.iter().map(|d| DeviceInfo {
             id: d.id.clone(),
@@ -196,6 +246,8 @@ impl DeviceStore {
             api_key: d.api_key,
             latency_ms: self.latency.get(&d.id).copied(),
             last_seen_ms: d.last_seen_ms,
+            path: self.paths.get(&d.id).map(|p| p.0),
+            address: self.paths.get(&d.id).and_then(|p| p.1.clone()),
         });
         local.chain(remote).collect()
     }
@@ -234,5 +286,32 @@ mod tests {
         let local = store.add_local("Operator", Role::Admin);
         store.revoke_all();
         assert!(store.authenticate(&local).unwrap().local);
+    }
+
+    #[test]
+    fn rename_and_forget_offline() {
+        let mut store = DeviceStore::load(None);
+        let (online, _) = store.add("Phone", Role::Presenter);
+        let (offline, _) = store.add("Tablet", Role::Presenter);
+        let (key, _) = store.add_api_key("Stream Deck", Role::Operator);
+        assert!(store.rename(&online, "  Ada's\u{7} phone  "));
+        assert_eq!(store.get(&online).unwrap().name, "Ada's phone");
+        assert!(!store.rename(&online, "   "), "empty names are refused");
+        assert!(store.rename(&online, &"x".repeat(200)));
+        assert_eq!(
+            store.get(&online).unwrap().name.chars().count(),
+            MAX_NAME_CHARS
+        );
+
+        store.mark_connected(&online, 1);
+        store.set_path(&online, ConnectionPath::Relay, None);
+        assert_eq!(store.forget_offline(), 1);
+        assert!(store.get(&offline).is_none());
+        assert!(store.get(&key).is_some(), "API keys are kept");
+        let info = store.list().into_iter().find(|d| d.id == online).unwrap();
+        assert_eq!(info.path, Some(ConnectionPath::Relay));
+        store.mark_connected(&online, -1);
+        let info = store.list().into_iter().find(|d| d.id == online).unwrap();
+        assert_eq!(info.path, None);
     }
 }

@@ -7,13 +7,16 @@
 //!
 //! Prints the operator token, PIN and join URL. Options:
 //! `--port N`, `--data DIR` (persist devices/settings), `--demo` (load a generated demo show),
-//! `--pin-file FILE` / `--info-file FILE` (write pairing info as JSON, used by E2E tests).
+//! `--info-file FILE` (write pairing info as JSON, used by E2E tests), `--relay URL` (connect to
+//! a relay and wait for it), `--https` (serve HTTPS too).
 
 use std::path::PathBuf;
 
 use midnightsnack_core::model::split_text;
-use midnightsnack_core::{Cue, CueContent, MediaRef, Show};
-use midnightsnack_protocol::{Overlay, OverlayKind, OverlayPosition, TimerCue, TimerMode};
+use midnightsnack_core::{Cue, CueContent, MediaRef, Origin, Show};
+use midnightsnack_protocol::{
+    Action, JoinKind, Overlay, OverlayKind, OverlayPosition, RelayState, TimerCue, TimerMode,
+};
 use midnightsnack_render::test_support::{build_pdf, TestPage};
 use midnightsnack_server::{start, state::lock, ServerConfig};
 
@@ -29,6 +32,8 @@ async fn main() -> std::io::Result<()> {
     let mut data_dir = None;
     let mut demo = false;
     let mut info_file = None;
+    let mut relay = None;
+    let mut https = false;
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
         match a.as_str() {
@@ -36,6 +41,8 @@ async fn main() -> std::io::Result<()> {
             "--data" => data_dir = args.next().map(PathBuf::from),
             "--demo" => demo = true,
             "--info-file" => info_file = args.next().map(PathBuf::from),
+            "--relay" => relay = args.next(),
+            "--https" => https = true,
             other => {
                 eprintln!("unknown argument {other}");
                 std::process::exit(2);
@@ -61,12 +68,41 @@ async fn main() -> std::io::Result<()> {
         handle.state.after_change(c);
     }
 
+    if https {
+        let _ = handle
+            .state
+            .perform(Origin::LOCAL_ADMIN, Action::SetHttps { on: true })
+            .await;
+        wait_for(|| lock(&handle.state.https_runtime).0.is_some()).await;
+    }
+    if let Some(url) = relay {
+        let action = Action::ConfigureRelay {
+            enabled: true,
+            url,
+            access_token: std::env::var("MIDNIGHTSNACK_RELAY_TOKEN").ok(),
+        };
+        if let Err(e) = handle.state.perform(Origin::LOCAL_ADMIN, action).await {
+            eprintln!("invalid relay URL: {e:?}");
+            std::process::exit(2);
+        }
+        wait_for(|| lock(&handle.state.relay_runtime).state == RelayState::Connected).await;
+    }
+
     let pairing = handle.state.pairing_info();
+    let link = |kind: JoinKind| {
+        pairing
+            .links
+            .iter()
+            .find(|l| l.kind == kind)
+            .map(|l| l.url.clone())
+    };
     let info = serde_json::json!({
         "port": handle.addr.port(),
         "operator_token": handle.operator_token,
         "pin": pairing.pin,
-        "join_url": pairing.join_urls.first(),
+        "join_url": link(JoinKind::Lan),
+        "https_join_url": link(JoinKind::Https),
+        "relay_join_url": link(JoinKind::Relay),
     });
     println!("{}", serde_json::to_string_pretty(&info).expect("json"));
     if let Some(f) = info_file {
@@ -75,6 +111,17 @@ async fn main() -> std::io::Result<()> {
     tokio::signal::ctrl_c().await?;
     let _ = std::fs::remove_dir_all(&work);
     Ok(())
+}
+
+/// Waits up to 15 s for a condition (relay connected, HTTPS listening).
+async fn wait_for(cond: impl Fn() -> bool) {
+    for _ in 0..150 {
+        if cond() {
+            return;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    eprintln!("gave up waiting; continuing without it");
 }
 
 fn demo_show(dir: &std::path::Path) -> std::io::Result<Show> {

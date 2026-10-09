@@ -53,6 +53,14 @@ export interface MidiSettings {
   bindings: MidiBinding[];
 }
 
+export interface HotspotStatus {
+  os: string;
+  /** The app can start a hotspot itself (Linux with NetworkManager). */
+  can_start: boolean;
+  active: boolean;
+  ssid: string | null;
+}
+
 export interface DisplayStatus {
   displays: DisplayInfo[];
   /** Output ids whose remembered display is not connected. */
@@ -84,6 +92,12 @@ export const host = {
   pairRemote: (address: string, pin: string, deviceName: string) =>
     invoke<RemoteHost>("pair_remote", { address, pin, deviceName }),
   openController: (id: string) => invoke<void>("open_controller", { id }),
+  hotspotStatus: () => invoke<HotspotStatus>("hotspot_status"),
+  /** Rejects with `invalid_ssid`, `invalid_password`, `unsupported` or nmcli's message. */
+  hotspotStart: (ssid: string, password: string) =>
+    invoke<HotspotStatus>("hotspot_start", { ssid, password }),
+  hotspotStop: () => invoke<HotspotStatus>("hotspot_stop"),
+  openHotspotSettings: () => invoke<void>("open_hotspot_settings"),
 };
 
 /** Fired for every MIDI press (activity indicator). */

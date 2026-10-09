@@ -13,10 +13,12 @@ MIDI controllers, OSC and Stream Deck via Bitfocus Companion.
   dialogs, cursors or spinners on the audience screen.
 - **Fast** — live actions react in under 100 ms on LAN; upcoming slides are pre-rendered.
 
-> **Status:** early development (phase 4). PDF, PowerPoint/Keynote, image, video, audio,
+> **Status:** early development (phase 5). PDF, PowerPoint/Keynote, image, video, audio,
 > text/lyrics, timer, web page and screen capture cues, transitions, overlays, several outputs
 > and stage displays, phone remotes with laser pointer, drawing and file upload, a second
-> computer as controller, MIDI, OSC, an HTTP API and Bitfocus Companion work today. See the
+> computer as controller, MIDI, OSC, an HTTP API and Bitfocus Companion work today. Remotes
+> connect over the local network, the laptop's hotspot, optional HTTPS, or a self-hosted,
+> end-to-end encrypted relay. See the
 > [roadmap](#roadmap) and the [user guide](docs/user/README.md).
 
 ## Quick start (development)
@@ -62,13 +64,13 @@ More in [docs/dev/setup.md](docs/dev/setup.md).
 | `crates/server`      | Embedded HTTP/WebSocket server: pairing, devices, media, autosave |
 | `crates/capture`     | Screen and window capture                                       |
 | `crates/control`     | MIDI and OSC control surfaces                                   |
+| `crates/relay`       | Optional self-hosted relay (Docker image: `deploy/relay`)       |
 | `integrations/companion` | Bitfocus Companion (Stream Deck) module                      |
 | `packages/ui`        | Shared Svelte component library, design tokens and i18n         |
 | `packages/protocol`  | Generated TypeScript protocol types                             |
 | `docs/`              | User guides, developer docs, ADRs and phase plans               |
 
-Further crates (e.g. `relay`) are added in the phase that needs them; see
-[docs/dev/architecture.md](docs/dev/architecture.md).
+See [docs/dev/architecture.md](docs/dev/architecture.md) for how the parts fit together.
 
 ## Roadmap
 
@@ -79,7 +81,7 @@ Further crates (e.g. `relay`) are added in the phase that needs them; see
 | 2     | Media & live content: video, text/lyrics, timers, transitions, overlays     | 0.2.0   |
 | 3     | Outputs & sources: multi-output, capture, web, office formats, OpenSlides URL | 0.3.0 |
 | 4     | Control surfaces: pointer/drawing, upload inbox, MIDI, OSC, Companion       | 0.4.0   |
-| 5     | Connectivity: hotspot guidance, E2E-encrypted relay                         | 0.5.0   |
+| 5     | Connectivity: hotspot, HTTPS, E2E-encrypted relay + Docker image, fallback  | 0.5.0   |
 | 6     | OpenSlides native integration                                               | 0.6.0   |
 | 7     | 1.0 polish                                                                  | 1.0.0   |
 

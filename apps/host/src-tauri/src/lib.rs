@@ -6,6 +6,7 @@
 
 mod controller;
 mod hotplug;
+mod hotspot;
 mod midi;
 mod output;
 mod settings;
@@ -421,6 +422,10 @@ pub fn run() {
             controller::forget_remote,
             controller::pair_remote,
             controller::open_controller,
+            hotspot::hotspot_status,
+            hotspot::hotspot_start,
+            hotspot::hotspot_stop,
+            hotspot::open_hotspot_settings,
             ui_ready
         ])
         .run(tauri::generate_context!())

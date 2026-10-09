@@ -7,5 +7,9 @@ export type PendingPairing = {
   request_id: string;
   device_name: string;
   address: string;
+  /**
+   * The request came through the relay (`address` is then meaningless).
+   */
+  via_relay: boolean;
   requested_at_ms: number;
 };

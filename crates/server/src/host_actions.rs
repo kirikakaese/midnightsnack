@@ -56,6 +56,21 @@ pub async fn run(state: &Arc<AppState>, action: Action) -> Result<(), ErrorCode>
             state.emit(Event::Devices);
             Ok(())
         }
+        Action::RenameDevice { device_id, name } => {
+            if crate::devices::clean_name(&name).is_empty() {
+                return Err(ErrorCode::InvalidState);
+            }
+            if !lock(&state.devices).rename(&device_id, &name) {
+                return Err(ErrorCode::NotFound);
+            }
+            state.emit(Event::Devices);
+            Ok(())
+        }
+        Action::ForgetOfflineDevices => {
+            lock(&state.devices).forget_offline();
+            state.emit(Event::Devices);
+            Ok(())
+        }
         Action::DisconnectAll => {
             lock(&state.devices).revoke_all();
             lock(&state.pairing).rotate();
@@ -95,6 +110,57 @@ pub async fn run(state: &Arc<AppState>, action: Action) -> Result<(), ErrorCode>
             state.save_settings();
             state.osc_restart.notify_one();
             state.emit(Event::Devices);
+            Ok(())
+        }
+        Action::ConfigureRelay {
+            enabled,
+            url,
+            access_token,
+        } => {
+            let url = if url.trim().is_empty() {
+                String::new()
+            } else {
+                crate::relay_link::normalize_url(&url).map_err(|_| ErrorCode::InvalidState)?
+            };
+            if enabled && url.is_empty() {
+                return Err(ErrorCode::InvalidState);
+            }
+            {
+                let mut s = lock(&state.settings);
+                s.relay.enabled = enabled;
+                s.relay.url = url;
+                match access_token {
+                    Some(t) if t.trim().is_empty() => s.relay.access_token = None,
+                    Some(t) => s.relay.access_token = Some(t.trim().to_owned()),
+                    None => {}
+                }
+            }
+            state.save_settings();
+            state.relay_restart.notify_one();
+            state.emit(Event::Connectivity);
+            Ok(())
+        }
+        Action::ResetRelayIdentity => {
+            let id = crate::relay_link::RelayIdentity::generate();
+            if let Some(dir) = &state.data_dir {
+                id.save(dir);
+            }
+            *lock(&state.relay_identity) = id;
+            state.relay_restart.notify_one();
+            state.emit(Event::Connectivity);
+            Ok(())
+        }
+        Action::SetHttps { on } => {
+            lock(&state.settings).https = on;
+            state.save_settings();
+            state.https_restart.notify_one();
+            state.emit(Event::Connectivity);
+            Ok(())
+        }
+        Action::RenewCertificate => {
+            crate::https::renew(state);
+            state.https_restart.notify_one();
+            state.emit(Event::Connectivity);
             Ok(())
         }
         Action::SetAutoAcceptUploads { on } => {

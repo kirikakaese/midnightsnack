@@ -57,7 +57,8 @@ The first client message must be `hello` within 10 seconds:
 
 On failure the server sends `{"type":"error","code":"unauthorized" | "protocol_mismatch" |
 "malformed_message"}` and closes. On success it sends, in order: `welcome`, `show`, `live`,
-(admins: `devices`, `pairing`), `render_progress`.
+(admins: `devices`, `inbox`, `pairing`, `connectivity`), (paired remotes: `routes`),
+`render_progress`.
 
 ### Client → host
 
@@ -79,7 +80,9 @@ On failure the server sends `{"type":"error","code":"unauthorized" | "protocol_m
 | `show`            | `show` (`ShowSnapshot`)        | Cue list or show metadata changed       |
 | `live`            | `live` (`LiveState`)           | Position, masters or timers changed     |
 | `devices`         | `devices`, `pending`, `control` | Admins; device list, pairing requests, API/OSC settings |
-| `pairing`         | `pairing` (PIN, join URLs)     | Admins; PIN/join token changed          |
+| `pairing`         | `pairing` (PIN, join `links` with `kind` `lan`/`https`/`relay`) | Admins; PIN/join token or links changed |
+| `connectivity`    | `connectivity` (`ConnectivityInfo`) | Admins; interfaces, HTTPS, relay status changed |
+| `routes`          | `routes` (`lan` base URLs, `relay` `{url, key}`) | Paired remotes (not host windows or API keys); for falling back to the relay and back |
 | `session`         | `session`                      | This device's role changed              |
 | `render_progress` | `queued`                       | Background render queue length          |
 | `capture_targets` | `targets`                      | Reply to `list_capture_targets` (`error` `capture_permission` if the OS denies capture) |
@@ -91,7 +94,7 @@ On failure the server sends `{"type":"error","code":"unauthorized" | "protocol_m
 | `error`           | `code`                         | Protocol-level error                    |
 
 The server also sends WebSocket ping frames every 5 s to measure latency (shown in the device
-list).
+list). Over the relay these are tunnel `PING` frames.
 
 ### State
 
@@ -146,6 +149,67 @@ even with the admin role. Stage viewers cannot send any action.
 Slide images require the per-connection `media_key` from `welcome.session` (image elements
 cannot send headers). Without `w`/`h` a 640×360 thumbnail is returned; output windows request
 their native pixel size. Responses carry an `ETag`; send `If-None-Match` to get `304`.
+
+## HTTPS
+
+With HTTPS enabled the same API is served over TLS on its own port (default **4749**) with a
+self-signed certificate (ECDSA P-256, all LAN addresses, `localhost` and `<name>.local` as
+names, valid 820 days). Join links of kind `https` point there; `ConnectivityInfo.https`
+carries the port and the certificate's SHA-256 fingerprint.
+
+## Relay
+
+The relay ([`crates/relay`](../../crates/relay/src/lib.rs)) forwards opaque binary messages;
+protocol version `/relay/v1`.
+
+| Path                           | Who     | Purpose                                              |
+| ------------------------------ | ------- | ---------------------------------------------------- |
+| `GET /relay/v1/host` (WS)      | host    | The host's link. `Authorization: Bearer <base64url secret, 32 bytes>`, `X-Relay-Token` if the relay requires one (`401` otherwise, `503` when full) |
+| `GET /relay/v1/remote/{id}` (WS) | remote | One remote channel. Closed with `4404` if the host is offline, `4429` if it has too many remotes, `4000` when the host closed the channel |
+| `GET /relay/v1/info`           | anyone  | `{name, version, protocol, access_token_required}`   |
+| `GET /healthz`                 | anyone  | `ok`                                                 |
+| `GET /r/{id}`, `/assets/*`     | phones  | The web remote                                       |
+
+The host id is `base64url(SHA-256("midnightsnack relay host id" ‖ secret)[..16])`, computed by
+the relay from the secret, so ids cannot be claimed without the secret. A second link with the
+same secret replaces the first.
+
+On the host link every binary message is `[op u8][channel u32 BE][payload]`: `1` OPEN (relay →
+host, a remote connected), `2` DATA (a remote's message, either direction), `3` CLOSE (either
+direction). Remote WebSockets carry the payloads directly.
+
+### End-to-end encryption
+
+Each channel is a [Noise](https://noiseprotocol.org/noise.html)
+`Noise_NK_25519_ChaChaPoly_BLAKE2s` session: the remote is the initiator and knows the host's
+static key from the join link, the host is the responder. The prologue is
+`"midnightsnack relay 1\n" + host id`. Message 1 (`e, es`) and message 2 (`e, ee`) carry
+empty payloads; every later message is one transport message (at most 65535 bytes). The relay
+join link is `https://<relay>/r/<host id>#t=<join token>&k=<base64url static key>`; the fragment
+never reaches the relay's server. Fixed test vectors shared by both implementations are in
+`packages/ui/src/client/relay/noise-vectors.json`.
+
+### Tunnel framing
+
+Each decrypted message is one frame `[kind u8][stream u32 BE][flags u8][payload]`, flag `1` =
+FIN (last fragment), payload at most 65513 bytes.
+
+| Kind | Name            | Stream | Payload                                                  |
+| ---- | --------------- | ------ | -------------------------------------------------------- |
+| 1    | `WS_MESSAGE`    | 0      | Fragment of a WebSocket text message (FIN on the last)   |
+| 2    | `REQUEST_HEAD`  | ≥ 1    | `{"method","path","headers":[[k,v]…]}`; FIN = no body    |
+| 3    | `REQUEST_BODY`  | ≥ 1    | Body bytes; FIN on the last                              |
+| 4    | `RESPONSE_HEAD` | ≥ 1    | `{"status","headers":[[k,v]…]}`; FIN = no body           |
+| 5    | `RESPONSE_BODY` | ≥ 1    | Body bytes; FIN on the last                              |
+| 6    | `RESET`         | ≥ 1    | Abort the exchange                                       |
+| 7/8  | `PING`/`PONG`   | 0      | Echoed payload                                           |
+| 9    | `WS_CLOSE`      | 0      | The WebSocket session ended                              |
+
+Stream 0 is the WebSocket session: the first `WS_MESSAGE` after the handshake (or after a
+`WS_CLOSE`) starts a new session, which begins with `hello` as usual. Streams ≥ 1 are HTTP
+exchanges chosen by the remote (at most 32 at once). The host answers them with its own router
+for `/api/v1/*` (except the WebSocket, video/audio files and capture streams), with a synthetic
+client address from `100::/64` that is never treated as local.
 
 ## OSC
 

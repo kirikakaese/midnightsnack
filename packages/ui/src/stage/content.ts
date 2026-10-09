@@ -35,7 +35,9 @@ export type Content =
       backgroundSrc: string | null;
     }
   | { kind: "web"; key: string; cueId: string; url: string; openslides: boolean; name: string }
-  | { kind: "capture"; key: string; cueId: string; src: string; name: string };
+  | { kind: "capture"; key: string; cueId: string; src: string; name: string }
+  /** Content that cannot be shown on this device (video and capture through the relay). */
+  | { kind: "unavailable"; key: string; icon: string; name: string };
 
 export function effectiveTheme(show: ShowSnapshot, cue: CueSummary): TextTheme {
   return cue.text?.theme ?? cue.timer?.theme ?? show.default_theme;
@@ -63,8 +65,12 @@ export function describe(
       return { kind: "blank", key, background: cue.background ?? "#000" };
     case "video":
     case "audio": {
+      if (!cue.media) return null;
       const src = conn.mediaUrl(cue.id);
-      if (!src || !cue.media) return null;
+      if (!src) {
+        const icon = cue.kind === "video" ? "🎬" : "🔊";
+        return conn.session ? { kind: "unavailable", key, icon, name: cue.name } : null;
+      }
       return {
         kind: "media",
         key,
@@ -111,7 +117,8 @@ export function describe(
     }
     case "capture": {
       const src = conn.captureUrl(cue.id, captureFps);
-      return src ? { kind: "capture", key, cueId: cue.id, src, name: cue.name } : null;
+      if (src) return { kind: "capture", key, cueId: cue.id, src, name: cue.name };
+      return conn.session ? { kind: "unavailable", key, icon: "🖥", name: cue.name } : null;
     }
     default: {
       const src = conn.slideUrl(pos, width, height);

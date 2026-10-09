@@ -13,3 +13,6 @@ export * from "./client/connection.svelte";
 export * from "./client/time.svelte";
 export * from "./stage/content";
 export * from "./i18n/index.svelte";
+export * from "./client/transport";
+export { RelayTransport, type RelayTarget } from "./client/relay/tunnel.svelte";
+export { base64urlDecode } from "./client/relay/noise";

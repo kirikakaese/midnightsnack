@@ -1,38 +1,41 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import type { ApiError, ErrorCode, PairResponse, PairStatus } from "@midnightsnack/protocol";
+import { jsonBody, type HostTransport, type TransportFailure } from "@midnightsnack/ui";
 
-async function errorCode(res: Response): Promise<ErrorCode> {
-  try {
-    return ((await res.json()) as ApiError).code;
-  } catch {
-    return "internal";
-  }
-}
+export type PairingFailure = ErrorCode | TransportFailure;
 
 export async function requestPairing(
+  transport: HostTransport,
   join_token: string,
   pin: string,
   device_name: string,
-): Promise<{ ok: true; requestId: string } | { ok: false; code: ErrorCode }> {
+): Promise<{ ok: true; requestId: string } | { ok: false; code: PairingFailure }> {
   try {
-    const res = await fetch("/api/v1/pair", {
-      method: "POST",
+    const res = await transport.request("POST", "/api/v1/pair", {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ join_token, pin, device_name }),
     });
-    if (!res.ok) return { ok: false, code: await errorCode(res) };
-    return { ok: true, requestId: ((await res.json()) as PairResponse).request_id };
-  } catch {
-    return { ok: false, code: "internal" };
+    if (res.status !== 200) {
+      return { ok: false, code: jsonBody<ApiError>(res)?.code ?? "internal" };
+    }
+    const body = jsonBody<PairResponse>(res);
+    return body ? { ok: true, requestId: body.request_id } : { ok: false, code: "internal" };
+  } catch (e) {
+    // Relay failures arrive as their reason.
+    return { ok: false, code: typeof e === "string" ? (e as TransportFailure) : "internal" };
   }
 }
 
-export async function pairingStatus(requestId: string): Promise<PairStatus | null> {
+export async function pairingStatus(
+  transport: HostTransport,
+  requestId: string,
+): Promise<PairStatus | null | "retry"> {
   try {
-    const res = await fetch(`/api/v1/pair/${encodeURIComponent(requestId)}`);
-    if (!res.ok) return null;
-    return (await res.json()) as PairStatus;
+    const res = await transport.request("GET", `/api/v1/pair/${encodeURIComponent(requestId)}`);
+    if (res.status !== 200) return null;
+    return jsonBody<PairStatus>(res);
   } catch {
-    return null;
+    // The connection dropped; keep waiting.
+    return "retry";
   }
 }

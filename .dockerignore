@@ -1,0 +1,7 @@
+# Build context for deploy/relay/Dockerfile: sources only.
+target
+**/node_modules
+**/dist
+**/test-results
+apps/host/src-tauri/resources/pdfium
+.git

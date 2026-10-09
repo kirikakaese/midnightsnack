@@ -1,0 +1,35 @@
+[package]
+name = "midnightsnack-relay"
+description = "Optional, self-hostable relay for midnightsnack remotes (forwards end-to-end encrypted traffic)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "midnightsnack-relay"
+path = "src/main.rs"
+
+[dependencies]
+axum = { version = "0.8", features = ["ws"] }
+base64 = "0.22"
+futures-util = "0.3"
+mime_guess = "2"
+midnightsnack-protocol.workspace = true
+rust-embed = { version = "8", features = ["mime-guess"] }
+serde.workspace = true
+serde_json.workspace = true
+sha2 = "0.10"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "sync", "time", "signal", "io-util"] }
+tokio-util = "0.7"
+tower-http = { version = "0.6", features = ["set-header"] }
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+[dev-dependencies]
+tokio-tungstenite = "0.26"
+
+[lints]
+workspace = true

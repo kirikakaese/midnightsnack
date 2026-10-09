@@ -1,0 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Caddy terminates TLS and passes WebSockets through unchanged.
+{$RELAY_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy relay:8080
+}
