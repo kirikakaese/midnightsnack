@@ -5,6 +5,7 @@ export const DEFAULT_HTTPS_PORT = 4749;
 export const RELAY_NOISE_PATTERN = "Noise_NK_25519_ChaChaPoly_BLAKE2s";
 export const RELAY_PROLOGUE = "midnightsnack relay 1\n";
 export const TUNNEL_HEADER = 6;
+export const OS_AGENDA_PAGE_SIZE = 12;
 export const TUNNEL_MAX_PAYLOAD = 65513;
 export const TUNNEL = {
   WS_MESSAGE: 1,

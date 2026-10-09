@@ -6,8 +6,8 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use crate::protocol::{
-    CaptureInfo, CueKind, CueSummary, MediaInfo, MediaOptions, OutputDef, Overlay, TextInfo,
-    TextTheme, TimerCue, Transition, WebInfo,
+    CaptureInfo, CueKind, CueSummary, MediaInfo, MediaOptions, OpenSlidesCue, OpenSlidesSlide,
+    OutputDef, Overlay, TextInfo, TextTheme, TimerCue, Transition, WebInfo,
 };
 
 /// Version of the `show.json` format.
@@ -91,6 +91,19 @@ pub enum CueContent {
     Capture {
         capture: CaptureInfo,
     },
+    /// Agenda, motion, topic, list of speakers or a followed projector of an OpenSlides
+    /// meeting, drawn by the clients. `pages` is maintained by the host from the live data.
+    OpenSlides {
+        slide: OpenSlidesSlide,
+        #[serde(default = "one_page")]
+        pages: u32,
+        #[serde(default)]
+        theme: Option<TextTheme>,
+    },
+}
+
+fn one_page() -> u32 {
+    1
 }
 
 impl CueContent {
@@ -106,6 +119,7 @@ impl CueContent {
             CueContent::Timer { .. } => CueKind::Timer,
             CueContent::Web { .. } => CueKind::Web,
             CueContent::Capture { .. } => CueKind::Capture,
+            CueContent::OpenSlides { .. } => CueKind::OpenSlides,
         }
     }
 
@@ -120,6 +134,7 @@ impl CueContent {
             | CueContent::Capture { .. } => 1,
             CueContent::ImageFolder { files } => files.len() as u32,
             CueContent::Text { slides, .. } => slides.len() as u32,
+            CueContent::OpenSlides { pages, .. } => (*pages).max(1),
         }
     }
 
@@ -133,7 +148,8 @@ impl CueContent {
             | CueContent::Text { .. }
             | CueContent::Timer { .. }
             | CueContent::Web { .. }
-            | CueContent::Capture { .. } => vec![],
+            | CueContent::Capture { .. }
+            | CueContent::OpenSlides { .. } => vec![],
         }
     }
 
@@ -148,7 +164,8 @@ impl CueContent {
             | CueContent::Text { .. }
             | CueContent::Timer { .. }
             | CueContent::Web { .. }
-            | CueContent::Capture { .. } => vec![],
+            | CueContent::Capture { .. }
+            | CueContent::OpenSlides { .. } => vec![],
         }
     }
 
@@ -157,6 +174,7 @@ impl CueContent {
         match self {
             CueContent::Text { theme, .. } => Some(theme),
             CueContent::Timer { timer } => Some(&mut timer.theme),
+            CueContent::OpenSlides { theme, .. } => Some(theme),
             _ => None,
         }
     }
@@ -280,6 +298,13 @@ impl Cue {
             },
             capture: match &self.content {
                 CueContent::Capture { capture } => Some(capture.clone()),
+                _ => None,
+            },
+            openslides: match &self.content {
+                CueContent::OpenSlides { slide, theme, .. } => Some(OpenSlidesCue {
+                    slide: slide.clone(),
+                    theme: theme.clone(),
+                }),
                 _ => None,
             },
             targets: self.targets.clone(),

@@ -10,4 +10,5 @@ export type CueKind =
   | "text"
   | "timer"
   | "web"
-  | "capture";
+  | "capture"
+  | "open_slides";

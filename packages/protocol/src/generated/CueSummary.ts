@@ -2,6 +2,7 @@
 import type { CaptureInfo } from "./CaptureInfo";
 import type { CueKind } from "./CueKind";
 import type { MediaInfo } from "./MediaInfo";
+import type { OpenSlidesCue } from "./OpenSlidesCue";
 import type { TextInfo } from "./TextInfo";
 import type { TimerCue } from "./TimerCue";
 import type { Transition } from "./Transition";
@@ -44,6 +45,7 @@ export type CueSummary = {
   timer: TimerCue | null;
   web: WebInfo | null;
   capture: CaptureInfo | null;
+  openslides: OpenSlidesCue | null;
   /**
    * Output ids this cue is shown on; `None` = all program outputs.
    */

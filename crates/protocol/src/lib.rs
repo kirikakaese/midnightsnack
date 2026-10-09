@@ -10,6 +10,7 @@ mod connectivity;
 mod control;
 mod error;
 mod messages;
+mod openslides;
 mod pairing;
 mod state;
 
@@ -18,6 +19,7 @@ pub use connectivity::*;
 pub use control::*;
 pub use error::*;
 pub use messages::*;
+pub use openslides::*;
 pub use pairing::*;
 pub use state::*;
 
@@ -45,6 +47,7 @@ fn export_bindings_constants() {
          export const RELAY_NOISE_PATTERN = \"{RELAY_NOISE_PATTERN}\";\n\
          export const RELAY_PROLOGUE = {prologue};\n\
          export const TUNNEL_HEADER = {TUNNEL_HEADER};\n\
+         export const OS_AGENDA_PAGE_SIZE = {OS_AGENDA_PAGE_SIZE};\n\
          export const TUNNEL_MAX_PAYLOAD = {TUNNEL_MAX_PAYLOAD};\n\
          export const TUNNEL = {{\n  WS_MESSAGE: {},\n  REQUEST_HEAD: {},\n  REQUEST_BODY: {},\n  \
          RESPONSE_HEAD: {},\n  RESPONSE_BODY: {},\n  RESET: {},\n  PING: {},\n  PONG: {},\n  \

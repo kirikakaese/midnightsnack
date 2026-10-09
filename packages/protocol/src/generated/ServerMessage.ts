@@ -7,6 +7,8 @@ import type { ErrorCode } from "./ErrorCode";
 import type { HostInfo } from "./HostInfo";
 import type { InboxItem } from "./InboxItem";
 import type { LiveState } from "./LiveState";
+import type { OpenSlidesStatus } from "./OpenSlidesStatus";
+import type { OsMeetingData } from "./OsMeetingData";
 import type { PairingInfo } from "./PairingInfo";
 import type { PendingPairing } from "./PendingPairing";
 import type { PointerMode } from "./PointerMode";
@@ -31,6 +33,8 @@ export type ServerMessage =
   | { type: "pairing"; pairing: PairingInfo }
   | { type: "connectivity"; connectivity: ConnectivityInfo }
   | { type: "routes"; routes: Routes }
+  | { type: "open_slides"; data: OsMeetingData | null }
+  | { type: "open_slides_status"; status: OpenSlidesStatus }
   | { type: "inbox"; items: Array<InboxItem>; auto_accept: boolean }
   | { type: "render_progress"; queued: number }
   | { type: "capture_targets"; targets: Array<CaptureTarget> }

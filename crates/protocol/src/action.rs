@@ -3,8 +3,8 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::{
-    CaptureSource, CueId, MediaOptions, OscSettings, OutputDef, Overlay, Position, Role, Stroke,
-    TestPattern, TextTheme, TimerCue, Transition, WebInfo,
+    CaptureSource, CueId, MediaOptions, OpenSlidesSlide, OscSettings, OutputDef, Overlay, Position,
+    Role, Stroke, TestPattern, TextTheme, TimerCue, Transition, WebInfo,
 };
 
 /// Everything any input source can ask the host to do. Every action passes through the single
@@ -99,6 +99,23 @@ pub enum Action {
     },
     /// Replaces the HTTPS certificate with a new one.
     RenewCertificate,
+
+    // --- OpenSlides ---
+    /// Connects to an OpenSlides instance (or stops). An empty `username` uses public access;
+    /// `password: None` keeps the stored one.
+    ConfigureOpenSlides {
+        enabled: bool,
+        url: String,
+        username: String,
+        password: Option<String>,
+        meeting_id: Option<u32>,
+    },
+    /// Adds a cue showing OpenSlides data natively.
+    AddOpenSlides {
+        name: String,
+        slide: OpenSlidesSlide,
+        at_index: Option<u32>,
+    },
 
     // --- upload inbox ---
     /// Adds an uploaded file to the show.

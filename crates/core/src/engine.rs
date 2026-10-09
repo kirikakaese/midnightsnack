@@ -8,9 +8,9 @@ use std::collections::BTreeMap;
 
 use crate::protocol::{
     Action, CaptureSource, Countdown, CueRef, Drawing, ErrorCode, LiveState, Masters, MediaOptions,
-    MediaPlayback, OutputDef, OutputFeed, OutputLive, Overlay, OverlayKind, Position, ShowSnapshot,
-    StateSummary, Stopwatch, Stroke, TestPattern, TextTheme, TimerCue, TimerMode, Transition,
-    WebInfo,
+    MediaPlayback, OpenSlidesSlide, OutputDef, OutputFeed, OutputLive, Overlay, OverlayKind,
+    Position, ShowSnapshot, StateSummary, Stopwatch, Stroke, TestPattern, TextTheme, TimerCue,
+    TimerMode, Transition, WebInfo,
 };
 
 /// Longest accepted duration for timers, countdowns and auto-advance (24 h).
@@ -824,6 +824,27 @@ impl Engine {
                 cue.content = text_content(text, *lyrics, theme.clone())?;
                 Change::SHOW
             }
+            AddOpenSlides {
+                name,
+                slide,
+                at_index,
+            } => {
+                let name = clean_text(name, 200);
+                let name = if name.is_empty() {
+                    default_openslides_name(slide)
+                } else {
+                    name
+                };
+                let cue = Cue::new(
+                    name,
+                    CueContent::OpenSlides {
+                        slide: slide.clone(),
+                        pages: 1,
+                        theme: None,
+                    },
+                );
+                self.insert_cues_inner(vec![cue], at_index.map(|i| i as usize))
+            }
             AddTimer {
                 name,
                 timer,
@@ -1132,6 +1153,7 @@ impl Engine {
             | SetAutoAcceptUploads { .. }
             | SetApiLocalOnly { .. }
             | ConfigureOsc { .. }
+            | ConfigureOpenSlides { .. }
             | ConfigureRelay { .. }
             | ResetRelayIdentity
             | SetHttps { .. }
@@ -1247,6 +1269,39 @@ impl Engine {
     }
 
     /// Records which capture cues have lost their source. Called by the capture service.
+    /// Updates the page counts of OpenSlides cues from the live OpenSlides data. Not an edit:
+    /// the show is not marked as changed.
+    pub fn set_openslides_pages(
+        &mut self,
+        now_ms: i64,
+        pages: impl Fn(&OpenSlidesSlide) -> u32,
+    ) -> Change {
+        let mut changed = false;
+        for cue in &mut self.show.cues {
+            if let CueContent::OpenSlides {
+                slide, pages: p, ..
+            } = &mut cue.content
+            {
+                let n = pages(slide).max(1);
+                if *p != n {
+                    *p = n;
+                    changed = true;
+                }
+            }
+        }
+        if !changed {
+            return Change::NONE;
+        }
+        let mut change = Change::SHOW;
+        if self.revalidate(now_ms) {
+            change.live = true;
+        }
+        let was_dirty = self.dirty;
+        let change = self.bump(change);
+        self.dirty = was_dirty;
+        change
+    }
+
     pub fn set_capture_lost(&mut self, mut lost: Vec<String>) -> Change {
         lost.sort();
         lost.dedup();
@@ -1590,6 +1645,17 @@ fn is_valid_clock_time(s: &str) -> bool {
         && m.len() == 2
         && h.parse::<u8>().is_ok_and(|h| h < 24)
         && m.parse::<u8>().is_ok_and(|m| m < 60)
+}
+
+fn default_openslides_name(slide: &OpenSlidesSlide) -> String {
+    match slide {
+        OpenSlidesSlide::Agenda => "Agenda".into(),
+        OpenSlidesSlide::Motion { motion_id } => format!("Motion {motion_id}"),
+        OpenSlidesSlide::Topic { topic_id } => format!("Topic {topic_id}"),
+        OpenSlidesSlide::Speakers { list_id: None } => "List of speakers".into(),
+        OpenSlidesSlide::Speakers { list_id: Some(id) } => format!("List of speakers {id}"),
+        OpenSlidesSlide::Follow { .. } => "OpenSlides projector".into(),
+    }
 }
 
 fn clean_text(s: &str, max: usize) -> String {

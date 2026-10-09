@@ -38,6 +38,7 @@ pub enum CueKind {
     Timer,
     Web,
     Capture,
+    OpenSlides,
 }
 
 /// What an output window shows.
@@ -357,6 +358,7 @@ pub struct CueSummary {
     pub timer: Option<TimerCue>,
     pub web: Option<WebInfo>,
     pub capture: Option<CaptureInfo>,
+    pub openslides: Option<crate::OpenSlidesCue>,
     /// Output ids this cue is shown on; `None` = all program outputs.
     pub targets: Option<Vec<String>>,
     /// File name of the office document a PDF cue was converted from.
