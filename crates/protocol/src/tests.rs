@@ -130,6 +130,10 @@ fn server_messages_round_trip() {
                         },
                         fps: 30,
                     }),
+                    openslides: Some(OpenSlidesCue {
+                        slide: OpenSlidesSlide::Speakers { list_id: Some(2) },
+                        theme: None,
+                    }),
                     targets: Some(vec!["main".into()]),
                     converted_from: Some("talk.pptx".into()),
                 }],

@@ -1,10 +1,11 @@
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 <script lang="ts">
-  import type { CaptureSource, CueSummary } from "@midnightsnack/protocol";
+  import type { CaptureSource, CueSummary, OpenSlidesSlide } from "@midnightsnack/protocol";
   import { Button, Panel, captureLabel, t, type HostConnection } from "@midnightsnack/ui";
   import { open } from "@tauri-apps/plugin-dialog";
   import CapturePicker from "./CapturePicker.svelte";
   import InboxPanel from "./InboxPanel.svelte";
+  import OpenSlidesPicker from "./OpenSlidesPicker.svelte";
   import { isController } from "../lib/mode";
 
   interface Props {
@@ -101,11 +102,11 @@
   }
 
   // Inline forms for cues that need a URL or a capture source first.
-  let adding = $state<"web" | "openslides" | "capture" | null>(null);
+  let adding = $state<"web" | "openslides" | "capture" | "os_native" | null>(null);
   let webUrl = $state("https://");
   const webUrlValid = $derived(/^https?:\/\/[^\s/?#]+/i.test(webUrl.trim()));
 
-  function startAdding(kind: "web" | "openslides" | "capture") {
+  function startAdding(kind: "web" | "openslides" | "capture" | "os_native") {
     adding = kind;
     webUrl = "https://";
   }
@@ -146,6 +147,12 @@
     adding = null;
   }
 
+  function addOpenSlides(slide: OpenSlidesSlide, name: string) {
+    expectNewCue();
+    conn.action({ action: "add_open_slides", name, slide, at_index: null });
+    adding = null;
+  }
+
   function meta(cue: CueSummary): string {
     if (cue.web)
       return `${t(cue.web.openslides ? "cue.kind.openslides" : "cue.kind.web")} · ${hostName(cue.web.url)}`;
@@ -161,7 +168,8 @@
     else if (kind === "timer") addTimer();
     else if (kind === "blank")
       conn.action({ action: "add_blank", color: "#000000", at_index: null });
-    else if (kind === "web" || kind === "openslides" || kind === "capture") startAdding(kind);
+    else if (kind === "web" || kind === "openslides" || kind === "capture" || kind === "os_native")
+      startAdding(kind);
   }
 
   // Controller mode: the other host cannot read this computer's files, so they are uploaded.
@@ -256,6 +264,7 @@
       <option value="timer">{t("cue.add_timer")}</option>
       <option value="blank">{t("cue.add_blank")}</option>
       <option value="web">{t("cue.add_web")}</option>
+      <option value="os_native">{t("cue.add_openslides_native")}</option>
       <option value="openslides">{t("cue.add_openslides")}</option>
       <option value="capture">{t("cue.add_capture")}</option>
     </select>
@@ -282,6 +291,10 @@
         </Button>
       </div>
     </form>
+  {:else if adding === "os_native"}
+    <div class="add-form">
+      <OpenSlidesPicker {conn} onpick={addOpenSlides} oncancel={() => (adding = null)} />
+    </div>
   {:else if adding === "capture"}
     <div class="add-form">
       <CapturePicker {conn} onpick={addCapture} oncancel={() => (adding = null)} />

@@ -6,6 +6,8 @@ export interface FitParams {
   text: string;
   /** Fixed size in percent of the parent's height; `null` fits automatically. */
   size: number | null;
+  /** Largest automatic size, in percent of the parent's height. */
+  max?: number;
 }
 
 export function fitText(node: HTMLElement, params: FitParams) {
@@ -20,7 +22,7 @@ export function fitText(node: HTMLElement, params: FitParams) {
     }
     // Binary search for the largest size that fits.
     let lo = 4;
-    let hi = Math.max(8, h);
+    let hi = Math.max(8, current.max !== undefined ? (current.max / 100) * h : h);
     while (hi - lo > 0.5) {
       const mid = (lo + hi) / 2;
       node.style.fontSize = `${mid}px`;

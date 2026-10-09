@@ -62,6 +62,10 @@ pub enum Event {
     ApiLocalOnly,
     /// Interfaces, HTTPS or relay status changed (connectivity, pairing links, routes).
     Connectivity,
+    /// The OpenSlides meeting data changed (every client).
+    OpenSlides,
+    /// The OpenSlides connection status changed (admins).
+    OpenSlidesStatus,
 }
 
 /// Live state of the relay link.
@@ -84,6 +88,7 @@ pub struct Settings {
     /// Serve HTTPS (self-signed certificate) next to plain HTTP.
     pub https: bool,
     pub relay: RelaySettings,
+    pub openslides: crate::openslides_service::OpenSlidesSettings,
 }
 
 impl Default for Settings {
@@ -95,6 +100,7 @@ impl Default for Settings {
             osc: Default::default(),
             https: false,
             relay: RelaySettings::default(),
+            openslides: Default::default(),
         }
     }
 }
@@ -131,6 +137,12 @@ pub struct AppState {
     pub relay_runtime: Mutex<RelayRuntime>,
     /// Reconnects the relay link after its settings changed.
     pub relay_restart: Notify,
+    pub openslides_password: Mutex<String>,
+    pub openslides_runtime: Mutex<crate::openslides_service::OpenSlidesRuntime>,
+    /// The selected meeting, as shown by OpenSlides cues.
+    pub openslides_data: Mutex<Option<Arc<midnightsnack_protocol::OsMeetingData>>>,
+    /// Reconnects to OpenSlides after its settings changed.
+    pub openslides_restart: Notify,
     pub data_dir: Option<PathBuf>,
     pub autosave: Notify,
     /// Wakes the auto-advance scheduler after any change.
@@ -186,6 +198,12 @@ impl AppState {
                 remotes: 0,
             }),
             relay_restart: Notify::new(),
+            openslides_password: Mutex::new(crate::openslides_service::load_password(
+                data_dir.as_deref(),
+            )),
+            openslides_runtime: Mutex::new(Default::default()),
+            openslides_data: Mutex::new(None),
+            openslides_restart: Notify::new(),
             data_dir,
             autosave: Notify::new(),
             schedule: Notify::new(),
@@ -436,9 +454,13 @@ pub fn slide_source(show: &Show, cue_id: &str, slide: u32) -> Option<SlideSource
             path: show.resolve(files.get(slide as usize)?)?,
         }),
         // Rendered by the clients themselves (video element, text layout).
-        Blank { .. } | Media { .. } | Text { .. } | Timer { .. } | Web { .. } | Capture { .. } => {
-            None
-        }
+        Blank { .. }
+        | Media { .. }
+        | Text { .. }
+        | Timer { .. }
+        | Web { .. }
+        | Capture { .. }
+        | OpenSlides { .. } => None,
     }
 }
 

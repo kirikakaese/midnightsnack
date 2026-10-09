@@ -1,0 +1,36 @@
+[package]
+name = "midnightsnack-openslides"
+description = "OpenSlides 4 adapter for midnightsnack: session, autoupdate subscription and meeting views"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[features]
+# A fake OpenSlides server speaking the same endpoints, for tests and the development server.
+mock = ["dep:axum"]
+
+[dependencies]
+axum = { version = "0.8", optional = true }
+base64 = "0.22"
+bytes = "1"
+futures-util = "0.3"
+midnightsnack-protocol.workspace = true
+reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls-native-roots"] }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { version = "1", features = ["rt", "macros", "sync", "time", "net"] }
+tracing.workspace = true
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+
+[lints]
+workspace = true
+
+[[test]]
+name = "mock"
+required-features = ["mock"]

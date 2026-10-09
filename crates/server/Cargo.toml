@@ -25,6 +25,8 @@ midnightsnack-protocol.workspace = true
 midnightsnack-render = { path = "../render" }
 midnightsnack-capture = { path = "../capture" }
 midnightsnack-control.workspace = true
+# The mock server is used by the development server (`--openslides-mock`).
+midnightsnack-openslides = { workspace = true, features = ["mock"] }
 bytes = "1"
 mime_guess = "2"
 rand = "0.9"

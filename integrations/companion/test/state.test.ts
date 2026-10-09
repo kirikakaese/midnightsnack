@@ -30,6 +30,7 @@ function cue(id: string, name: string, slides: number): CueSummary {
     timer: null,
     web: null,
     capture: null,
+    openslides: null,
     targets: null,
     converted_from: null,
   };

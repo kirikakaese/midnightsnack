@@ -13,6 +13,8 @@ pub mod engine;
 mod live_tests;
 pub mod model;
 #[cfg(test)]
+mod openslides_tests;
+#[cfg(test)]
 mod output_tests;
 pub mod permissions;
 

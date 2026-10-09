@@ -69,6 +69,7 @@ pub fn is_host_action(action: &Action) -> bool {
             | SetApiLocalOnly { .. }
             | ConfigureOsc { .. }
             | ConfigureRelay { .. }
+            | ConfigureOpenSlides { .. }
             | ResetRelayIdentity
             | SetHttps { .. }
             | RenewCertificate

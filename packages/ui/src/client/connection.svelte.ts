@@ -12,6 +12,8 @@ import {
   type ErrorCode,
   type HostInfo,
   type InboxItem,
+  type OpenSlidesStatus,
+  type OsMeetingData,
   type LiveState,
   type PairingInfo,
   type PendingPairing,
@@ -87,6 +89,10 @@ export class HostConnection {
   pointers = $state<Record<string, RemotePointer>>({});
   /** Admins: interfaces, HTTPS and relay status. */
   connectivity = $state<ConnectivityInfo | null>(null);
+  /** The OpenSlides meeting shown by OpenSlides cues. */
+  openslides = $state<OsMeetingData | null>(null);
+  /** Admins: the OpenSlides connection. */
+  openslidesStatus = $state<OpenSlidesStatus | null>(null);
   /** Paired remotes: the host's other routes (LAN addresses, relay). */
   routes = $state<Routes | null>(null);
   /** Why the transport failed last (relay: host offline, wrong key…). */
@@ -218,6 +224,12 @@ export class HostConnection {
         break;
       case "routes":
         this.routes = msg.routes;
+        break;
+      case "open_slides":
+        this.openslides = msg.data;
+        break;
+      case "open_slides_status":
+        this.openslidesStatus = msg.status;
         break;
       case "capture_targets":
         this.captureTargets = msg.targets;

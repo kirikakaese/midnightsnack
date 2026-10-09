@@ -41,7 +41,8 @@ monitors in the operator window and on phones show a placeholder with the addres
 
 ## OpenSlides projector
 
-**+ Add… → OpenSlides projector** is a web page cue preset for an
+To show agenda, motions and lists of speakers in the show's own look, see
+[OpenSlides](openslides.md). **+ Add… → OpenSlides projector** is a web page cue preset for an
 [OpenSlides](https://openslides.com) projector: paste the projector's address
 (`https://…/<meeting>/projector/1`). The projector updates itself, so next/previous are not sent
 to the page; logins are kept. If the projector is not public, open the output **windowed** once

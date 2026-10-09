@@ -9,6 +9,7 @@
   import CaptureContent from "./CaptureContent.svelte";
   import WebPlaceholder from "./WebPlaceholder.svelte";
   import Placeholder from "./Placeholder.svelte";
+  import OpenSlidesContent from "./OpenSlidesContent.svelte";
   import { t } from "../i18n/index.svelte";
 
   interface Props {
@@ -70,6 +71,16 @@
       {onready}
     />
   {/if}
+{:else if content.kind === "openslides"}
+  <OpenSlidesContent
+    data={conn.openslides}
+    slide={content.slide}
+    page={content.page}
+    theme={content.theme}
+    backgroundSrc={content.backgroundSrc}
+    {hostNow}
+    {onready}
+  />
 {:else if content.kind === "unavailable"}
   <Placeholder
     icon={content.icon}

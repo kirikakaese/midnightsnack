@@ -16,6 +16,8 @@ export interface DevInfo {
   pin: string;
   join_url: string;
   relay_join_url: string | null;
+  /** The mock OpenSlides server the devserver is connected to. */
+  openslides_url: string | null;
 }
 
 export function devInfo(): DevInfo {

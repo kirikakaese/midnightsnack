@@ -4,7 +4,8 @@ use ts_rs::TS;
 
 use crate::{
     Action, CaptureTarget, ConnectivityInfo, ControlSettings, DeviceInfo, ErrorCode, InboxItem,
-    LiveState, PairingInfo, PendingPairing, PointerMode, Role, Routes, ShowSnapshot,
+    LiveState, OpenSlidesStatus, OsMeetingData, PairingInfo, PendingPairing, PointerMode, Role,
+    Routes, ShowSnapshot,
 };
 
 /// Static information about a host, available before pairing (`GET /api/v1/info`).
@@ -110,6 +111,14 @@ pub enum ServerMessage {
     /// Paired remotes: other ways to reach the host (fallback to the relay and back).
     Routes {
         routes: Routes,
+    },
+    /// The OpenSlides meeting shown by OpenSlides cues (`None` while not connected).
+    OpenSlides {
+        data: Option<OsMeetingData>,
+    },
+    /// Admins: the OpenSlides connection.
+    OpenSlidesStatus {
+        status: OpenSlidesStatus,
     },
     /// Admins only: uploaded files waiting for a decision.
     Inbox {

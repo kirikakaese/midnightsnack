@@ -28,7 +28,16 @@ export default async function globalSetup(): Promise<() => void> {
   );
   const child = spawn(
     binary("midnightsnack-devserver", "midnightsnack-server"),
-    ["--demo", "--port", port, "--info-file", infoFile, "--relay", `http://127.0.0.1:${relayPort}`],
+    [
+      "--demo",
+      "--port",
+      port,
+      "--info-file",
+      infoFile,
+      "--relay",
+      `http://127.0.0.1:${relayPort}`,
+      "--openslides-mock",
+    ],
     {
       stdio: ["ignore", "ignore", "inherit"],
       env: { ...process.env, RUST_LOG: "warn" },

@@ -26,6 +26,7 @@ pub fn required_role(action: &Action) -> Role {
         DrawStroke { .. } | ClearDrawing => Role::Presenter,
         AcceptUpload { .. } | RejectUpload { .. } | SetAutoAcceptUploads { .. } => Role::Admin,
         SetApiLocalOnly { .. } | ConfigureOsc { .. } => Role::Admin,
+        ConfigureOpenSlides { .. } | AddOpenSlides { .. } => Role::Admin,
         ConfigureRelay { .. } | ResetRelayIdentity | SetHttps { .. } | RenewCertificate => {
             Role::Admin
         }
