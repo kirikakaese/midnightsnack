@@ -1366,8 +1366,14 @@ fn text_content(
 }
 
 fn validate_output(o: &OutputDef) -> Result<OutputDef, ErrorCode> {
-    let id = clean_text(&o.id, 64);
-    if id.is_empty() || o.margin > 20 {
+    // Ids name host windows, so keep them simple.
+    let id = o.id.trim().to_owned();
+    let id_ok = !id.is_empty()
+        && id.len() <= 64
+        && id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
+    if !id_ok || o.margin > 20 {
         return Err(ErrorCode::InvalidState);
     }
     let name = clean_text(&o.name, 100);
