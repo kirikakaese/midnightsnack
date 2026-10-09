@@ -154,6 +154,11 @@ pub async fn upload(
         .map_err(|_| ErrorCode::Io)?;
     let path = dir.join(&name);
     let size = match receive(body, &path, max).await {
+        // A body shorter than announced was cut off (connection or tunnel stream lost).
+        Ok(n) if declared.is_some_and(|d| d != n) => {
+            let _ = tokio::fs::remove_dir_all(&dir).await;
+            return Err(ErrorCode::Io.into());
+        }
         Ok(n) => n,
         Err(e) => {
             let _ = tokio::fs::remove_dir_all(&dir).await;

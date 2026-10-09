@@ -9,7 +9,9 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use midnightsnack_capture::CaptureHub;
 use midnightsnack_core::{dispatch, now_ms, Change, Dispatched, Engine, Origin, Show};
 use midnightsnack_protocol::{
-    Action, ErrorCode, HostInfo, PairingInfo, Position, Role, ShowSnapshot,
+    Action, ConnectivityInfo, ErrorCode, HostInfo, HttpsStatus, JoinKind, JoinLink,
+    NetworkInterface, PairingInfo, Position, RelayError, RelayRoute, RelaySettings, RelayState,
+    RelayStatus, Role, Routes, ShowSnapshot,
 };
 use midnightsnack_render::{RenderService, SlideSource, TargetSize};
 use serde::{Deserialize, Serialize};
@@ -58,6 +60,16 @@ pub enum Event {
     Inbox,
     /// API keys were restricted to this computer: drop remote API key connections.
     ApiLocalOnly,
+    /// Interfaces, HTTPS or relay status changed (connectivity, pairing links, routes).
+    Connectivity,
+}
+
+/// Live state of the relay link.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RelayRuntime {
+    pub state: RelayState,
+    pub error: Option<RelayError>,
+    pub remotes: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -69,6 +81,9 @@ pub struct Settings {
     /// API keys only work from this computer.
     pub api_local_only: bool,
     pub osc: midnightsnack_protocol::OscSettings,
+    /// Serve HTTPS (self-signed certificate) next to plain HTTP.
+    pub https: bool,
+    pub relay: RelaySettings,
 }
 
 impl Default for Settings {
@@ -78,6 +93,8 @@ impl Default for Settings {
             auto_accept_uploads: false,
             api_local_only: true,
             osc: Default::default(),
+            https: false,
+            relay: RelaySettings::default(),
         }
     }
 }
@@ -100,8 +117,20 @@ pub struct AppState {
     /// media key -> device id
     pub media_keys: Mutex<HashMap<String, String>>,
     pub output_size: Mutex<TargetSize>,
-    /// `http://<ip>:<port>` for each usable interface.
+    /// `http://<ip>:<port>` (and `https://…` while HTTPS runs) for each usable interface.
     pub base_urls: Mutex<Vec<String>>,
+    /// Usable network interfaces, best first.
+    pub interfaces: Mutex<Vec<NetworkInterface>>,
+    /// Port of the plain HTTP server.
+    pub http_port: std::sync::atomic::AtomicU16,
+    pub https_cert: Mutex<Option<crate::https::CertBundle>>,
+    /// HTTPS port and certificate fingerprint while it runs.
+    pub https_runtime: Mutex<(Option<u16>, Option<String>)>,
+    pub https_restart: Notify,
+    pub relay_identity: Mutex<crate::relay_link::RelayIdentity>,
+    pub relay_runtime: Mutex<RelayRuntime>,
+    /// Reconnects the relay link after its settings changed.
+    pub relay_restart: Notify,
     pub data_dir: Option<PathBuf>,
     pub autosave: Notify,
     /// Wakes the auto-advance scheduler after any change.
@@ -143,6 +172,20 @@ impl AppState {
             media_keys: Mutex::new(HashMap::new()),
             output_size: Mutex::new(DEFAULT_OUTPUT_SIZE),
             base_urls: Mutex::new(Vec::new()),
+            interfaces: Mutex::new(Vec::new()),
+            http_port: std::sync::atomic::AtomicU16::new(0),
+            https_cert: Mutex::new(None),
+            https_runtime: Mutex::new((None, None)),
+            https_restart: Notify::new(),
+            relay_identity: Mutex::new(crate::relay_link::RelayIdentity::load_or_create(
+                data_dir.as_deref(),
+            )),
+            relay_runtime: Mutex::new(RelayRuntime {
+                state: RelayState::Off,
+                error: None,
+                remotes: 0,
+            }),
+            relay_restart: Notify::new(),
             data_dir,
             autosave: Notify::new(),
             schedule: Notify::new(),
@@ -188,13 +231,94 @@ impl AppState {
     pub fn pairing_info(&self) -> PairingInfo {
         let p = lock(&self.pairing);
         let token = p.join_token().to_owned();
+        let interfaces = lock(&self.interfaces).clone();
+        let http_port = self.http_port.load(std::sync::atomic::Ordering::Relaxed);
+        let https_port = lock(&self.https_runtime).0;
+        let mut links: Vec<JoinLink> = interfaces
+            .iter()
+            .map(|i| JoinLink {
+                kind: JoinKind::Lan,
+                url: format!("http://{}:{http_port}/join#t={token}", i.address),
+                label: i.name.clone(),
+            })
+            .collect();
+        if let Some(port) = https_port {
+            links.extend(interfaces.iter().map(|i| JoinLink {
+                kind: JoinKind::Https,
+                url: format!("https://{}:{port}/join#t={token}", i.address),
+                label: i.name.clone(),
+            }));
+        }
+        if lock(&self.relay_runtime).state == RelayState::Connected {
+            if let Some(route) = self.relay_route() {
+                let label = route
+                    .url
+                    .split("://")
+                    .nth(1)
+                    .and_then(|r| r.split('/').next())
+                    .unwrap_or_default()
+                    .to_owned();
+                links.push(JoinLink {
+                    kind: JoinKind::Relay,
+                    url: format!("{}#t={token}&k={}", route.url, route.key),
+                    label,
+                });
+            }
+        }
         PairingInfo {
             pin: p.pin().to_owned(),
-            join_urls: lock(&self.base_urls)
-                .iter()
-                .map(|b| format!("{b}/join#t={token}"))
-                .collect(),
+            links,
             auto_approve: p.auto_approve,
+        }
+    }
+
+    /// The relay page and key remotes use, while a relay is configured.
+    pub fn relay_route(&self) -> Option<RelayRoute> {
+        let settings = lock(&self.settings).relay.clone();
+        if !settings.enabled {
+            return None;
+        }
+        let base = crate::relay_link::normalize_url(&settings.url).ok()?;
+        let id = lock(&self.relay_identity).clone();
+        Some(RelayRoute {
+            url: format!("{base}/r/{}", id.host_id()),
+            key: id.public_key_b64(),
+        })
+    }
+
+    /// Other ways to reach this host, for paired remotes.
+    pub fn routes(&self) -> Routes {
+        Routes {
+            lan: lock(&self.base_urls).clone(),
+            relay: self.relay_route(),
+        }
+    }
+
+    pub fn connectivity(&self) -> ConnectivityInfo {
+        let settings = lock(&self.settings).clone();
+        let (https_port, fingerprint) = lock(&self.https_runtime).clone();
+        let relay = *lock(&self.relay_runtime);
+        ConnectivityInfo {
+            port: self.http_port.load(std::sync::atomic::Ordering::Relaxed),
+            interfaces: lock(&self.interfaces).clone(),
+            https: HttpsStatus {
+                enabled: settings.https,
+                port: https_port,
+                fingerprint,
+            },
+            relay: RelayStatus {
+                enabled: settings.relay.enabled,
+                url: settings.relay.url.clone(),
+                has_access_token: settings
+                    .relay
+                    .access_token
+                    .as_deref()
+                    .is_some_and(|t| !t.is_empty()),
+                state: relay.state,
+                error: relay.error,
+                host_id: lock(&self.relay_identity).host_id(),
+                remotes: relay.remotes,
+            },
         }
     }
 
@@ -268,6 +392,25 @@ impl AppState {
             self.render.prefetch(s, THUMB_SIZE);
         }
     }
+}
+
+/// Recomputes the base URLs from interfaces and ports.
+pub fn refresh_base_urls(state: &AppState) {
+    let http_port = state.http_port.load(std::sync::atomic::Ordering::Relaxed);
+    let https_port = lock(&state.https_runtime).0;
+    let interfaces = lock(&state.interfaces).clone();
+    let mut urls: Vec<String> = interfaces
+        .iter()
+        .map(|i| format!("http://{}:{http_port}", i.address))
+        .collect();
+    if let Some(port) = https_port {
+        urls.extend(
+            interfaces
+                .iter()
+                .map(|i| format!("https://{}:{port}", i.address)),
+        );
+    }
+    *lock(&state.base_urls) = urls;
 }
 
 /// Where converted office documents are stored.

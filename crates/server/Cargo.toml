@@ -14,7 +14,10 @@ path = "src/bin/devserver.rs"
 
 [dependencies]
 axum = { version = "0.8", features = ["ws"] }
+base64 = "0.22"
 futures-util = "0.3"
+hyper = "1"
+hyper-util = { version = "0.1", features = ["server-auto", "tokio", "service"] }
 if-addrs = "0.13"
 mdns-sd = "0.13"
 midnightsnack-core.workspace = true
@@ -25,12 +28,19 @@ midnightsnack-control.workspace = true
 bytes = "1"
 mime_guess = "2"
 rand = "0.9"
+rcgen = { version = "0.14", default-features = false, features = ["crypto", "pem", "ring"] }
+time = "0.3"
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
+rustls-native-certs = "0.8"
 rust-embed = { version = "8", features = ["mime-guess"] }
 serde.workspace = true
 serde_json.workspace = true
 sha2 = "0.10"
+snow = { version = "0.10", default-features = false, features = ["std", "use-chacha20poly1305", "use-blake2", "use-curve25519", "use-getrandom"] }
 thiserror.workspace = true
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "sync", "time", "fs", "signal"] }
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12", "logging"] }
+tokio-tungstenite = "0.26"
 tokio-util = { version = "0.7", features = ["io"] }
 tower-http = { version = "0.6", features = ["set-header", "fs"] }
 tower = { version = "0.5", features = ["util"] }
@@ -39,8 +49,8 @@ tracing-subscriber.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
+midnightsnack-relay = { path = "../relay" }
 tempfile.workspace = true
-tokio-tungstenite = "0.26"
 rosc = "0.11"
 reqwest = { version = "0.12", default-features = false, features = ["json"] }
 image = { version = "0.25", default-features = false, features = ["png"] }

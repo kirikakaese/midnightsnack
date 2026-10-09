@@ -73,7 +73,7 @@ impl Fixture {
 
     async fn pair(&self, operator: &mut Client, name: &str, role: Role) -> String {
         let info = self.handle.state.pairing_info();
-        let token = info.join_urls[0].split("#t=").nth(1).unwrap().to_owned();
+        let token = info.links[0].url.split("#t=").nth(1).unwrap().to_owned();
         let res: PairResponse = self
             .http
             .post(self.url("/api/v1/pair"))
@@ -268,7 +268,7 @@ async fn operator_receives_full_state() {
         })
         .await;
     assert_eq!(pairing.pin.len(), 6);
-    assert!(pairing.join_urls[0].contains("/join#t="));
+    assert!(pairing.links[0].url.contains("/join#t="));
 }
 
 #[tokio::test]
@@ -433,7 +433,7 @@ async fn full_pairing_and_control_flow() {
 async fn wrong_pins_lock_out() {
     let f = fixture().await;
     let info = f.handle.state.pairing_info();
-    let token = info.join_urls[0].split("#t=").nth(1).unwrap().to_owned();
+    let token = info.links[0].url.split("#t=").nth(1).unwrap().to_owned();
     let wrong = if info.pin == "000000" {
         "111111"
     } else {
@@ -482,7 +482,7 @@ async fn auto_approve_and_disconnect_all() {
 
     let info = f.handle.state.pairing_info();
     assert_eq!(info.auto_approve, Some(Role::StageViewer));
-    let token = info.join_urls[0].split("#t=").nth(1).unwrap().to_owned();
+    let token = info.links[0].url.split("#t=").nth(1).unwrap().to_owned();
     let res: PairResponse = f
         .http
         .post(f.url("/api/v1/pair"))
@@ -719,7 +719,7 @@ async fn logo_assets_and_stage_messages() {
     .await
     .unwrap();
     let info = f.handle.state.pairing_info();
-    let token = info.join_urls[0].split("#t=").nth(1).unwrap().to_owned();
+    let token = info.links[0].url.split("#t=").nth(1).unwrap().to_owned();
     let res: PairResponse = f
         .http
         .post(f.url("/api/v1/pair"))

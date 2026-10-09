@@ -263,6 +263,7 @@ impl Pairing {
                 request_id: id.clone(),
                 device_name: r.device_name.clone(),
                 address: r.address.to_string(),
+                via_relay: crate::relay_link::is_relay_ip(r.address),
                 requested_at_ms: r.created_ms,
             })
             .collect();

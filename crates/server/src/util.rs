@@ -45,3 +45,30 @@ pub fn read_json<T: serde::de::DeserializeOwned>(path: &Path) -> Option<T> {
         }
     }
 }
+
+/// Like [`write_json_atomic`], readable only by the current user (keys, secrets).
+pub fn write_secret_json<T: serde::Serialize>(path: &Path, value: &T) -> std::io::Result<()> {
+    let dir = path.parent().unwrap_or(Path::new("."));
+    std::fs::create_dir_all(dir)?;
+    let tmp = path.with_extension("json.tmp");
+    write_private(&tmp, &serde_json::to_vec_pretty(value)?)?;
+    std::fs::rename(tmp, path)
+}
+
+/// Writes a file that only the current user can read (on Unix; elsewhere the user profile's
+/// permissions apply).
+pub fn write_private(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    use std::io::Write;
+    // Permissions are only applied when the file is created.
+    let _ = std::fs::remove_file(path);
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create(true).truncate(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let mut f = options.open(path)?;
+    f.write_all(bytes)?;
+    f.sync_all()
+}

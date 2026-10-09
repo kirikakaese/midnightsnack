@@ -10,11 +10,14 @@ mod control_api;
 mod devices;
 pub mod discovery;
 mod host_actions;
+pub mod https;
 mod inbox;
 mod osc_service;
 mod pairing;
+pub mod relay_link;
 mod scheduler;
 pub mod state;
+mod tunnel;
 mod util;
 mod ws;
 
@@ -167,6 +170,49 @@ async fn capture_status(state: Arc<AppState>) {
     }
 }
 
+fn current_interfaces(loopback: bool) -> Vec<midnightsnack_protocol::NetworkInterface> {
+    let loopback_only = || {
+        vec![midnightsnack_protocol::NetworkInterface {
+            name: "loopback".into(),
+            address: "127.0.0.1".into(),
+            hotspot: false,
+        }]
+    };
+    if loopback {
+        return loopback_only();
+    }
+    let v = discovery::interfaces();
+    if v.is_empty() {
+        loopback_only()
+    } else {
+        v
+    }
+}
+
+/// Notices new interfaces (a hotspot was started, Wi-Fi changed) and updates join links.
+async fn watch_interfaces(state: Arc<AppState>) {
+    let mut tick = tokio::time::interval(std::time::Duration::from_secs(3));
+    loop {
+        tick.tick().await;
+        let now = tokio::task::spawn_blocking(|| current_interfaces(false))
+            .await
+            .unwrap_or_default();
+        let changed = {
+            let mut cur = state::lock(&state.interfaces);
+            let changed = *cur != now && !now.is_empty();
+            if changed {
+                *cur = now;
+            }
+            changed
+        };
+        if changed {
+            tracing::info!("network interfaces changed");
+            state::refresh_base_urls(&state);
+            state.emit(Event::Connectivity);
+        }
+    }
+}
+
 /// Starts the server on the current Tokio runtime.
 pub async fn start(config: ServerConfig) -> std::io::Result<ServerHandle> {
     if let Some(d) = &config.data_dir {
@@ -204,19 +250,12 @@ pub async fn start(config: ServerConfig) -> std::io::Result<ServerHandle> {
     };
     let addr = listener.local_addr()?;
 
-    let base_urls: Vec<String> = if config.bind.ip().is_loopback() {
-        vec![format!("http://127.0.0.1:{}", addr.port())]
-    } else {
-        let mut v: Vec<String> = discovery::lan_addresses()
-            .into_iter()
-            .map(|ip| format!("http://{ip}:{}", addr.port()))
-            .collect();
-        if v.is_empty() {
-            v.push(format!("http://127.0.0.1:{}", addr.port()));
-        }
-        v
-    };
-    *state::lock(&state.base_urls) = base_urls;
+    state
+        .http_port
+        .store(addr.port(), std::sync::atomic::Ordering::Relaxed);
+    let loopback = config.bind.ip().is_loopback();
+    *state::lock(&state.interfaces) = current_interfaces(loopback);
+    state::refresh_base_urls(&state);
 
     let (operator_token, output_token, stage_token) = {
         let mut d = state::lock(&state.devices);
@@ -243,6 +282,16 @@ pub async fn start(config: ServerConfig) -> std::io::Result<ServerHandle> {
     tokio::spawn(capture_status(state.clone()));
     tokio::spawn(osc_service::run(state.clone()));
     tokio::spawn(host_actions::refresh_conversions(state.clone()));
+    tokio::spawn(https::run(
+        state.clone(),
+        router(state.clone()),
+        config.bind.ip(),
+        https::default_port(config.bind.port()),
+    ));
+    tokio::spawn(relay_link::run(state.clone(), router(state.clone())));
+    if !loopback {
+        tokio::spawn(watch_interfaces(state.clone()));
+    }
     state.prefetch();
 
     let (tx, rx) = tokio::sync::oneshot::channel::<()>();

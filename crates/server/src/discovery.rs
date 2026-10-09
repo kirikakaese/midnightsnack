@@ -4,30 +4,70 @@
 use std::net::{IpAddr, Ipv4Addr};
 
 use mdns_sd::{ServiceDaemon, ServiceInfo};
-use midnightsnack_protocol::{MDNS_SERVICE_TYPE, PROTOCOL_VERSION};
+use midnightsnack_protocol::{NetworkInterface, MDNS_SERVICE_TYPE, PROTOCOL_VERSION};
 
-/// IPv4 addresses remotes can reach, best first (private LAN ranges before others).
-pub fn lan_addresses() -> Vec<Ipv4Addr> {
-    let mut addrs: Vec<Ipv4Addr> = if_addrs::get_if_addrs()
+/// Network interfaces remotes can reach, best first: this computer's hotspot, then private
+/// LAN ranges, then anything else.
+pub fn interfaces() -> Vec<NetworkInterface> {
+    let raw: Vec<(String, Ipv4Addr)> = if_addrs::get_if_addrs()
         .unwrap_or_default()
         .into_iter()
         .filter(|i| !i.is_loopback())
         .filter_map(|i| match i.ip() {
-            IpAddr::V4(v4) if !v4.is_link_local() && !v4.is_unspecified() => Some(v4),
+            IpAddr::V4(v4) if !v4.is_link_local() && !v4.is_unspecified() => Some((i.name, v4)),
             _ => None,
         })
         .collect();
-    addrs.sort_by_key(|a| {
-        let o = a.octets();
-        match o {
-            [192, 168, ..] => 0,
-            [10, ..] => 1,
-            [172, b, ..] if (16..32).contains(&b) => 2,
-            _ => 3,
-        }
-    });
-    addrs.dedup();
-    addrs
+    rank(raw)
+}
+
+fn rank(raw: Vec<(String, Ipv4Addr)>) -> Vec<NetworkInterface> {
+    let mut v: Vec<(u8, NetworkInterface)> = raw
+        .into_iter()
+        .map(|(name, ip)| {
+            let hotspot = is_hotspot(&name, ip);
+            let o = ip.octets();
+            let rank = if hotspot {
+                0
+            } else {
+                match o {
+                    [192, 168, ..] => 1,
+                    [10, ..] => 2,
+                    [172, b, ..] if (16..32).contains(&b) => 3,
+                    _ => 4,
+                }
+            };
+            let iface = NetworkInterface {
+                name,
+                address: ip.to_string(),
+                hotspot,
+            };
+            (rank, iface)
+        })
+        .collect();
+    v.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.name.cmp(&b.1.name)));
+    v.dedup_by(|a, b| a.1.address == b.1.address);
+    v.into_iter().map(|(_, i)| i).collect()
+}
+
+/// Recognizes the access point of the common hotspot implementations:
+/// Windows Mobile Hotspot (192.168.137.1), macOS Internet Sharing (`bridge100`…), NetworkManager
+/// shared connections (10.42.0.1), hostapd-style `ap0`/`uap0` interfaces.
+pub fn is_hotspot(name: &str, ip: Ipv4Addr) -> bool {
+    let name = name.to_ascii_lowercase();
+    ip.octets() == [192, 168, 137, 1]
+        || (ip.octets()[..3] == [10, 42, 0] && ip.octets()[3] == 1)
+        || (name.starts_with("bridge1") && ip.octets()[..2] == [192, 168])
+        || name == "ap0"
+        || name == "uap0"
+}
+
+/// IPv4 addresses remotes can reach, best first.
+pub fn lan_addresses() -> Vec<Ipv4Addr> {
+    interfaces()
+        .into_iter()
+        .filter_map(|i| i.address.parse().ok())
+        .collect()
 }
 
 /// Keeps the advertisement alive while held.
@@ -130,4 +170,33 @@ pub fn browse(timeout: std::time::Duration) -> Vec<FoundHost> {
     }
     let _ = daemon.shutdown();
     found
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn hotspots_are_recognized_and_preferred() {
+        let ifaces = rank(vec![
+            ("eth0".into(), Ipv4Addr::new(172, 20, 0, 3)),
+            ("wlan0".into(), Ipv4Addr::new(192, 168, 1, 20)),
+            (
+                "Local Area Connection* 10".into(),
+                Ipv4Addr::new(192, 168, 137, 1),
+            ),
+            ("tun0".into(), Ipv4Addr::new(100, 64, 1, 2)),
+        ]);
+        let names: Vec<&str> = ifaces.iter().map(|i| i.name.as_str()).collect();
+        assert_eq!(
+            names,
+            ["Local Area Connection* 10", "wlan0", "eth0", "tun0"]
+        );
+        assert!(ifaces[0].hotspot);
+        assert!(!ifaces[1].hotspot);
+        assert!(is_hotspot("bridge100", Ipv4Addr::new(192, 168, 2, 1)));
+        assert!(is_hotspot("wlp2s0", Ipv4Addr::new(10, 42, 0, 1)));
+        assert!(!is_hotspot("wlp2s0", Ipv4Addr::new(10, 42, 0, 77)));
+        assert!(!is_hotspot("en0", Ipv4Addr::new(192, 168, 2, 1)));
+    }
 }
