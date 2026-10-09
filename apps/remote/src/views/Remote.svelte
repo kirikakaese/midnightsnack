@@ -1,10 +1,11 @@
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 <script lang="ts">
-  import type { Action, Role } from "@midnightsnack/protocol";
+  import type { Action, ErrorCode, Role } from "@midnightsnack/protocol";
   import {
     Button,
     HostConnection,
     Panel,
+    PointerPad,
     Stage,
     StageDisplay,
     StatusDot,
@@ -83,6 +84,42 @@
   );
   let message = $state("");
 
+  // Laser pointer and drawing on the current slide (presenters and up).
+  const POINTER_COLORS = ["#ff3b30", "#ffd60a", "#30d158", "#0a84ff", "#ffffff"];
+  let pointerMode = $state<"off" | "point" | "draw">("off");
+  let pointerColor = $state(POINTER_COLORS[0]!);
+  const hasDrawing = $derived(!!live?.drawing?.strokes.length);
+  // Sending files to the host's inbox.
+  const UPLOAD_ACCEPT =
+    ".pdf,.pptx,.ppt,.pps,.ppsx,.odp,.key,.png,.jpg,.jpeg,.gif,.webp,.bmp,.tif,.tiff," +
+    ".mp4,.m4v,.mov,.webm,.mkv,.ogv,.mp3,.m4a,.aac,.wav,.ogg,.oga,.opus,.flac";
+  let fileInput = $state<HTMLInputElement>();
+  let uploadProgress = $state<number | null>(null);
+  let uploadResult = $state<{ ok: boolean; text: string } | null>(null);
+  async function sendFile() {
+    const file = fileInput?.files?.[0];
+    if (!file) return;
+    uploadResult = null;
+    uploadProgress = 0;
+    try {
+      const res = await conn.upload(file, (f) => (uploadProgress = f));
+      uploadResult = {
+        ok: true,
+        text: res.added ? t("upload.added", { name: file.name }) : t("upload.waiting"),
+      };
+    } catch (code) {
+      uploadResult = { ok: false, text: t(`error.${code as ErrorCode}`) };
+    } finally {
+      uploadProgress = null;
+      fileInput!.value = "";
+    }
+  }
+
+  function togglePointer(mode: "point" | "draw") {
+    tap();
+    pointerMode = pointerMode === mode ? "off" : mode;
+  }
+
   function send(action: Action) {
     tap();
     conn.action(action);
@@ -116,9 +153,13 @@
     {#if showStage}
       <StageDisplay {conn} />
     {:else}
-      <section class="screens">
+      <section class="screens" class:pointing={pointerMode !== "off"}>
         <figure>
-          <div class="screen"><Stage {conn} mode="thumb" /></div>
+          <div class="screen">
+            <PointerPad {conn} mode={pointerMode} color={pointerColor}>
+              <Stage {conn} mode="thumb" />
+            </PointerPad>
+          </div>
           <figcaption>
             {t("remote.current")}
             {#if programCue && live?.program}
@@ -136,6 +177,68 @@
           </figcaption>
         </figure>
       </section>
+
+      {#if can("presenter")}
+        <section class="pointer-bar" aria-label={t("pointer.title")}>
+          <Button
+            variant="go"
+            active={pointerMode === "point"}
+            aria-pressed={pointerMode === "point"}
+            onclick={() => togglePointer("point")}>{t("pointer.laser")}</Button
+          >
+          <Button
+            variant="go"
+            active={pointerMode === "draw"}
+            aria-pressed={pointerMode === "draw"}
+            onclick={() => togglePointer("draw")}>{t("pointer.draw")}</Button
+          >
+          {#if pointerMode !== "off"}
+            <span class="swatches" role="radiogroup" aria-label={t("pointer.color")}>
+              {#each POINTER_COLORS as c (c)}
+                <button
+                  class="swatch"
+                  role="radio"
+                  aria-checked={pointerColor === c}
+                  aria-label={c}
+                  style:background={c}
+                  onclick={() => (pointerColor = c)}
+                ></button>
+              {/each}
+            </span>
+          {/if}
+          <Button disabled={!hasDrawing} onclick={() => send({ action: "clear_drawing" })}
+            >{t("pointer.clear")}</Button
+          >
+        </section>
+        {#if pointerMode !== "off"}
+          <p class="pointer-hint">{t("pointer.hint")}</p>
+        {/if}
+      {/if}
+
+      {#if can("presenter")}
+        <section class="upload" aria-label={t("upload.title")}>
+          <input
+            bind:this={fileInput}
+            type="file"
+            accept={UPLOAD_ACCEPT}
+            class="ms-visually-hidden"
+            id="upload-file"
+            onchange={sendFile}
+          />
+          <Button
+            disabled={uploadProgress !== null}
+            onclick={() => {
+              tap();
+              fileInput?.click();
+            }}>{t("upload.send")}</Button
+          >
+          {#if uploadProgress !== null}
+            <progress max="1" value={uploadProgress} aria-label={t("upload.progress")}></progress>
+          {:else if uploadResult}
+            <span class:error={!uploadResult.ok} role="status">{uploadResult.text}</span>
+          {/if}
+        </section>
+      {/if}
 
       <section class="timers" aria-label={t("timer.show")}>
         <div><span>{t("timer.show")}</span><strong>{showTime}</strong></div>
@@ -327,6 +430,52 @@
     grid-template-columns: 2fr 1fr;
     gap: 8px;
     align-items: start;
+  }
+  /* While pointing, the current slide takes the full width. */
+  .screens.pointing {
+    grid-template-columns: 1fr;
+  }
+  .screens.pointing .next {
+    display: none;
+  }
+  .pointer-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+  }
+  .swatches {
+    display: flex;
+    gap: 6px;
+  }
+  .swatch {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: 2px solid var(--ms-border);
+    cursor: pointer;
+  }
+  .swatch[aria-checked="true"] {
+    border-color: var(--ms-text);
+    box-shadow: 0 0 0 2px var(--ms-bg) inset;
+  }
+  .upload {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    font-size: 0.85rem;
+    color: var(--ms-text-muted);
+  }
+  .upload progress {
+    flex: 1;
+  }
+  .upload .error {
+    color: var(--ms-danger);
+  }
+  .pointer-hint {
+    margin: 0;
+    font-size: 0.8rem;
+    color: var(--ms-text-muted);
   }
   figure {
     margin: 0;

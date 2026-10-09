@@ -1,7 +1,9 @@
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 <script lang="ts">
   import {
+    Button,
     Panel,
+    PointerPad,
     Stage,
     Tabs,
     Ticker,
@@ -14,6 +16,7 @@
   import { connectToHost, host } from "../lib/host";
   import { buildKeymap, installKeyHandler, type KeyAction } from "../lib/keymap";
   import ConnectPanel from "../operator/ConnectPanel.svelte";
+  import ControlPanel from "../operator/ControlPanel.svelte";
   import CueList from "../operator/CueList.svelte";
   import Inspector from "../operator/Inspector.svelte";
   import LivePanel from "../operator/LivePanel.svelte";
@@ -28,7 +31,7 @@
   let keymap = $state<Record<string, KeyAction>>(buildKeymap({}));
   let readySent = false;
   let selected = $state<string | null>(null);
-  type TabId = "live" | "cue" | "show" | "outputs" | "connect";
+  type TabId = "live" | "cue" | "show" | "outputs" | "connect" | "control";
   let tab = $state<TabId>("live");
   const tabs = $derived([
     { id: "live" as const, label: t("tab.live") },
@@ -36,6 +39,7 @@
     { id: "show" as const, label: t("tab.show") },
     { id: "outputs" as const, label: t("tab.outputs") },
     { id: "connect" as const, label: t("tab.connect"), badge: conn?.pending.length ?? 0 },
+    { id: "control" as const, label: t("tab.control") },
   ]);
   // Selecting a cue opens the inspector.
   $effect(() => {
@@ -81,6 +85,10 @@
     conn ? elapsedMs(conn.live?.slide_timer, ticker.now + conn.clockOffset) : 0,
   );
   const frozen = $derived(!!conn?.live?.masters.freeze);
+  // Point and draw on the audience screen with the mouse on the program monitor.
+  let pointerMode = $state<"off" | "point" | "draw">("off");
+  const togglePointer = (mode: "point" | "draw") =>
+    (pointerMode = pointerMode === mode ? "off" : mode);
 </script>
 
 {#if conn}
@@ -109,8 +117,29 @@
                 {t("monitor.nothing_live")}
               {/if}
             </span>
+            <span class="pointer-tools" role="group" aria-label={t("pointer.title")}>
+              <Button
+                variant="ghost"
+                active={pointerMode === "point"}
+                aria-pressed={pointerMode === "point"}
+                onclick={() => togglePointer("point")}>{t("pointer.laser")}</Button
+              >
+              <Button
+                variant="ghost"
+                active={pointerMode === "draw"}
+                aria-pressed={pointerMode === "draw"}
+                onclick={() => togglePointer("draw")}>{t("pointer.draw")}</Button
+              >
+              {#if conn.live?.drawing}
+                <Button variant="ghost" onclick={() => conn?.action({ action: "clear_drawing" })}
+                  >{t("pointer.clear")}</Button
+                >
+              {/if}
+            </span>
           </header>
-          <div class="screen"><Stage {conn} /></div>
+          <div class="screen">
+            <PointerPad {conn} mode={pointerMode} color="#ff3b30"><Stage {conn} /></PointerPad>
+          </div>
           <MediaTransport {conn} {ticker} />
           {#if frozen}
             <div class="behind">
@@ -173,6 +202,8 @@
           <ShowPanel {conn} />
         {:else if tab === "outputs"}
           <OutputPanel {conn} />
+        {:else if tab === "control"}
+          <ControlPanel {conn} />
         {:else}
           <ConnectPanel {conn} />
         {/if}
@@ -226,7 +257,7 @@
   }
   .monitors {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     gap: var(--ms-gap);
   }
   .monitor header {
@@ -236,7 +267,21 @@
     margin-bottom: 6px;
     min-height: 26px;
   }
+  .pointer-tools {
+    display: flex;
+    gap: 2px;
+    margin-left: auto;
+    flex-shrink: 0;
+  }
+  .pointer-tools :global(.ms-btn.ms-btn) {
+    min-height: 26px;
+    min-width: 26px;
+    padding: 0 8px;
+    font-size: 0.8rem;
+    white-space: nowrap;
+  }
   .where {
+    min-width: 0;
     color: var(--ms-text-muted);
     overflow: hidden;
     text-overflow: ellipsis;

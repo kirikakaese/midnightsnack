@@ -893,3 +893,435 @@ async fn only_admins_list_capture_targets() {
     })
     .await;
 }
+
+#[tokio::test]
+async fn presenters_point_and_draw_stage_viewers_do_not() {
+    let f = fixture().await;
+    let mut op = f.connect(&f.handle.operator_token).await;
+    op.welcome().await;
+    op.action(Action::AddFiles {
+        paths: vec![f.pdf("deck.pdf", 2)],
+        at_index: None,
+    })
+    .await
+    .unwrap();
+    op.action(Action::Go).await.unwrap();
+    let token = f.pair(&mut op, "Presenter", Role::Presenter).await;
+    let mut phone = f.connect(&token).await;
+    let me = phone.welcome().await;
+
+    phone
+        .send(&ClientMessage::Pointer {
+            pos: Some([0.25, 1.5]),
+            mode: PointerMode::Point,
+            color: "#ff3b30".into(),
+        })
+        .await;
+    let (device, pos) = op
+        .wait(|m| match m {
+            ServerMessage::Pointer { device_id, pos, .. } => Some((device_id, pos)),
+            _ => None,
+        })
+        .await;
+    assert_eq!(device, me.device_id);
+    assert_eq!(pos, Some([0.25, 1.0]), "clamped to the slide");
+
+    phone
+        .action(Action::DrawStroke {
+            stroke: Stroke {
+                color: "#ff3b30".into(),
+                width: 0.01,
+                points: vec![[0.1, 0.1], [0.4, 0.4]],
+            },
+        })
+        .await
+        .unwrap();
+    let drawing = op
+        .wait(|m| match m {
+            ServerMessage::Live { live } => live.drawing,
+            _ => None,
+        })
+        .await;
+    assert_eq!(drawing.strokes.len(), 1);
+
+    let token = f.pair(&mut op, "Stage", Role::StageViewer).await;
+    let mut stage = f.connect(&token).await;
+    stage.welcome().await;
+    stage
+        .send(&ClientMessage::Pointer {
+            pos: Some([0.5, 0.5]),
+            mode: PointerMode::Point,
+            color: "#ffffff".into(),
+        })
+        .await;
+    let err = stage
+        .wait(|m| match m {
+            ServerMessage::Error { code } => Some(code),
+            _ => None,
+        })
+        .await;
+    assert_eq!(err, ErrorCode::Forbidden);
+    assert_eq!(
+        stage.action(Action::ClearDrawing).await,
+        Err(ErrorCode::Forbidden)
+    );
+}
+
+impl Fixture {
+    async fn upload(&self, token: &str, name: &str, body: Vec<u8>) -> reqwest::Response {
+        self.http
+            .post(self.url("/api/v1/upload"))
+            .query(&[("name", name)])
+            .bearer_auth(token)
+            .body(body)
+            .send()
+            .await
+            .unwrap()
+    }
+}
+
+async fn inbox(c: &mut Client) -> (Vec<InboxItem>, bool) {
+    c.wait(|m| match m {
+        ServerMessage::Inbox { items, auto_accept } => Some((items, auto_accept)),
+        _ => None,
+    })
+    .await
+}
+
+#[tokio::test]
+async fn uploads_wait_in_the_inbox_until_accepted() {
+    let f = fixture().await;
+    let mut op = f.connect(&f.handle.operator_token).await;
+    op.welcome().await;
+    let (items, auto) = inbox(&mut op).await;
+    assert!(items.is_empty() && !auto);
+    let token = f.pair(&mut op, "Speaker", Role::Presenter).await;
+
+    let pdf = std::fs::read(f.pdf("talk.pdf", 3)).unwrap();
+    let res = f.upload(&token, "../talk.pdf", pdf.clone()).await;
+    assert_eq!(res.status(), 200);
+    let up: UploadResponse = res.json().await.unwrap();
+    assert!(!up.added);
+    let (items, _) = inbox(&mut op).await;
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0].file_name, "talk.pdf");
+    assert_eq!(items[0].device_name, "Speaker");
+    assert_eq!(items[0].size, pdf.len() as u64);
+
+    op.action(Action::AcceptUpload {
+        upload_id: up.upload_id.clone(),
+        at_index: None,
+    })
+    .await
+    .unwrap();
+    let show = op
+        .wait(|m| match m {
+            ServerMessage::Show { show } if !show.cues.is_empty() => Some(show),
+            _ => None,
+        })
+        .await;
+    assert_eq!(show.cues[0].name, "talk");
+    assert_eq!(show.cues[0].slide_count, 3);
+    assert_eq!(
+        op.action(Action::AcceptUpload {
+            upload_id: up.upload_id,
+            at_index: None,
+        })
+        .await,
+        Err(ErrorCode::NotFound)
+    );
+
+    // Rejected uploads are deleted.
+    let res = f
+        .upload(&token, "photo.png", std::fs::read(f.png("p.png")).unwrap())
+        .await;
+    let up: UploadResponse = res.json().await.unwrap();
+    let pending = f.dir.path().join("data/inbox").join(&up.upload_id);
+    assert!(pending.join("photo.png").is_file());
+    op.action(Action::RejectUpload {
+        upload_id: up.upload_id,
+    })
+    .await
+    .unwrap();
+    assert!(!pending.exists());
+}
+
+#[tokio::test]
+async fn uploads_are_checked() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut config = ServerConfig::new(dir.path().join("cache"));
+    config.bind = "127.0.0.1:0".parse().unwrap();
+    config.mdns = false;
+    config.data_dir = Some(dir.path().join("data"));
+    config.max_upload_bytes = 1000;
+    let handle = start(config).await.unwrap();
+    let f = Fixture {
+        handle,
+        dir,
+        http: reqwest::Client::new(),
+    };
+    let mut op = f.connect(&f.handle.operator_token).await;
+    op.welcome().await;
+
+    let res = f.upload("nope", "a.pdf", vec![1; 10]).await;
+    assert_eq!(res.status(), 401);
+    let viewer = f.pair(&mut op, "Viewer", Role::StageViewer).await;
+    assert_eq!(f.upload(&viewer, "a.pdf", vec![1; 10]).await.status(), 403);
+    let presenter = f.pair(&mut op, "Presenter", Role::Presenter).await;
+    let res = f.upload(&presenter, "script.sh", vec![1; 10]).await;
+    assert_eq!(res.status(), 415);
+    let res = f.upload(&presenter, "big.mp4", vec![0; 5000]).await;
+    assert_eq!(res.status(), 413);
+    let err: ApiError = res.json().await.unwrap();
+    assert_eq!(err.code, ErrorCode::FileTooLarge);
+    let inbox_dir = f.dir.path().join("data/inbox");
+    let leftovers = std::fs::read_dir(&inbox_dir)
+        .map(|d| d.count())
+        .unwrap_or(0);
+    assert_eq!(leftovers, 0, "rejected uploads leave nothing behind");
+
+    // Admin uploads and auto-accept skip the inbox.
+    let png = std::fs::read(f.png("p.png")).unwrap();
+    assert!(png.len() < 1000);
+    let up: UploadResponse = f
+        .upload(&f.handle.operator_token, "logo.png", png.clone())
+        .await
+        .json()
+        .await
+        .unwrap();
+    assert!(up.added);
+    op.action(Action::SetAutoAcceptUploads { on: true })
+        .await
+        .unwrap();
+    let up: UploadResponse = f
+        .upload(&presenter, "slide.png", png)
+        .await
+        .json()
+        .await
+        .unwrap();
+    assert!(up.added);
+    let show = op
+        .wait(|m| match m {
+            ServerMessage::Show { show } if show.cues.len() == 2 => Some(show),
+            _ => None,
+        })
+        .await;
+    assert_eq!(show.cues[1].name, "slide");
+}
+
+#[tokio::test]
+async fn api_keys_drive_the_http_api_until_revoked() {
+    let f = fixture().await;
+    let mut op = f.connect(&f.handle.operator_token).await;
+    op.welcome().await;
+    op.action(Action::AddFiles {
+        paths: vec![f.pdf("deck.pdf", 3)],
+        at_index: None,
+    })
+    .await
+    .unwrap();
+    op.send(&ClientMessage::CreateApiKey {
+        name: "Stream Deck".into(),
+        role: Role::Operator,
+    })
+    .await;
+    let (device_id, token) = op
+        .wait(|m| match m {
+            ServerMessage::ApiKey {
+                device_id, token, ..
+            } => Some((device_id, token)),
+            _ => None,
+        })
+        .await;
+    let (devices, local_only) = op
+        .wait(|m| match m {
+            ServerMessage::Devices {
+                devices, control, ..
+            } if devices.iter().any(|d| d.api_key) => Some((devices, control.api_local_only)),
+            _ => None,
+        })
+        .await;
+    assert!(local_only, "restricted to this computer by default");
+    assert_eq!(
+        devices.iter().find(|d| d.api_key).unwrap().name,
+        "Stream Deck"
+    );
+
+    let post = |action: serde_json::Value, token: &str| {
+        f.http
+            .post(f.url("/api/v1/action"))
+            .bearer_auth(token)
+            .json(&action)
+            .send()
+    };
+    let res = post(serde_json::json!({ "action": "go" }), &token)
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 200);
+    post(serde_json::json!({ "action": "next" }), &token)
+        .await
+        .unwrap();
+    post(
+        serde_json::json!({ "action": "set_blackout", "on": true }),
+        &token,
+    )
+    .await
+    .unwrap();
+    let summary: StateSummary = f
+        .http
+        .get(f.url("/api/v1/state"))
+        .bearer_auth(&token)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let program = summary.program.unwrap();
+    assert_eq!(
+        (program.name.as_str(), program.slide, program.slide_count),
+        ("deck", 2, 3)
+    );
+    assert!(summary.masters.blackout);
+
+    // Operators cannot edit; bad bodies are rejected.
+    let res = post(serde_json::json!({ "action": "new_show" }), &token)
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 403);
+    let res = post(serde_json::json!({ "action": "fly" }), &token)
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 400);
+
+    // "Disconnect all" keeps API keys; revoking one stops it.
+    op.action(Action::DisconnectAll).await.unwrap();
+    let res = post(serde_json::json!({ "action": "prev" }), &token)
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 200);
+    op.action(Action::RevokeDevice { device_id }).await.unwrap();
+    let res = post(serde_json::json!({ "action": "prev" }), &token)
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 401);
+    let res = f.http.get(f.url("/api/v1/state")).send().await.unwrap();
+    assert_eq!(res.status(), 401);
+}
+
+#[tokio::test]
+async fn osc_controls_the_show_and_reports_state() {
+    use rosc::{OscMessage, OscPacket, OscType};
+    let f = fixture().await;
+    let mut op = f.connect(&f.handle.operator_token).await;
+    op.welcome().await;
+    op.action(Action::AddFiles {
+        paths: vec![f.pdf("a.pdf", 2), f.pdf("b.pdf", 3)],
+        at_index: None,
+    })
+    .await
+    .unwrap();
+    let port = std::net::UdpSocket::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port();
+    op.action(Action::ConfigureOsc {
+        osc: OscSettings {
+            enabled: true,
+            port,
+        },
+    })
+    .await
+    .unwrap();
+    op.wait(|m| match m {
+        ServerMessage::Devices { control, .. } if control.osc_listening == Some(port) => Some(()),
+        _ => None,
+    })
+    .await;
+
+    let client = tokio::net::UdpSocket::bind("127.0.0.1:0").await.unwrap();
+    client.connect(("127.0.0.1", port)).await.unwrap();
+    let send = |addr: &str, args: Vec<OscType>| {
+        rosc::encoder::encode(&OscPacket::Message(OscMessage {
+            addr: addr.into(),
+            args,
+        }))
+        .unwrap()
+    };
+    // Reads feedback bundles until `pred` holds for the state messages.
+    async fn until(
+        client: &tokio::net::UdpSocket,
+        pred: impl Fn(&std::collections::HashMap<String, OscType>) -> bool,
+    ) -> std::collections::HashMap<String, OscType> {
+        let mut buf = vec![0u8; 65536];
+        loop {
+            let n = tokio::time::timeout(Duration::from_secs(5), client.recv(&mut buf))
+                .await
+                .expect("no OSC feedback")
+                .unwrap();
+            let (_, packet) = rosc::decoder::decode_udp(&buf[..n]).unwrap();
+            let OscPacket::Bundle(b) = packet else {
+                continue;
+            };
+            let state: std::collections::HashMap<String, OscType> = b
+                .content
+                .into_iter()
+                .filter_map(|p| match p {
+                    OscPacket::Message(m) => Some((m.addr, m.args.into_iter().next()?)),
+                    _ => None,
+                })
+                .collect();
+            if pred(&state) {
+                return state;
+            }
+        }
+    }
+    client
+        .send(&send("/midnightsnack/subscribe", vec![]))
+        .await
+        .unwrap();
+    until(&client, |s| {
+        s.get("/midnightsnack/state/blackout") == Some(&OscType::Int(0))
+    })
+    .await;
+
+    client
+        .send(&send("/midnightsnack/blackout", vec![OscType::Int(1)]))
+        .await
+        .unwrap();
+    until(&client, |s| {
+        s.get("/midnightsnack/state/blackout") == Some(&OscType::Int(1))
+    })
+    .await;
+
+    client
+        .send(&send("/midnightsnack/cue/2", vec![OscType::Int(3)]))
+        .await
+        .unwrap();
+    let s = until(&client, |s| {
+        s.get("/midnightsnack/state/cue/number") == Some(&OscType::Int(2))
+    })
+    .await;
+    assert_eq!(s["/midnightsnack/state/slide"], OscType::Int(3));
+    assert_eq!(
+        s["/midnightsnack/state/cue/name"],
+        OscType::String("b".into())
+    );
+    assert!(op.live().await.masters.blackout);
+
+    // Turning OSC off stops the server.
+    op.action(Action::ConfigureOsc {
+        osc: OscSettings {
+            enabled: false,
+            port,
+        },
+    })
+    .await
+    .unwrap();
+    op.wait(|m| match m {
+        ServerMessage::Devices { control, .. } if control.osc_listening.is_none() => Some(()),
+        _ => None,
+    })
+    .await;
+}

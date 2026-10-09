@@ -73,7 +73,8 @@
     min-height: 96px;
     font-size: 1.6rem;
   }
-  .ms-btn--default.ms-btn--active {
+  .ms-btn--default.ms-btn--active,
+  .ms-btn--ghost.ms-btn--active {
     border-color: var(--ms-accent);
     box-shadow: inset 0 0 0 1px var(--ms-accent);
   }

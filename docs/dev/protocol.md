@@ -16,6 +16,9 @@ clock.
 | `POST /api/v1/pair`                             | join token+PIN| Start pairing → `{request_id}`   |
 | `GET /api/v1/pair/{request_id}`                 | request id    | `PairStatus`                     |
 | `GET /api/v1/ws`                                | token (hello) | Realtime WebSocket               |
+| `POST /api/v1/action`                           | bearer token  | Run an `Action` (JSON body) → `{}` |
+| `GET /api/v1/state`                             | bearer token  | `StateSummary` (live cue, masters, timers) |
+| `POST /api/v1/upload?name=`                     | bearer token  | Send a file (raw body) → `UploadResponse`; presenter and up |
 | `GET /api/v1/media/slide/{cue_id}/{slide}?k=&w=&h=` | media key | Rendered slide image             |
 | `GET /api/v1/media/file/{cue_id}?k=`            | media key     | Original video/audio file (HTTP range requests) |
 | `GET /api/v1/media/asset/{asset_id}?k=`         | media key     | Image asset (logo, backgrounds, logo bug) |
@@ -23,7 +26,10 @@ clock.
 | `GET /*`                                        | none          | Web remote (single-page app)     |
 
 Errors are returned as `{"code": "<error_code>"}` with a matching status: `401` for bad tokens or
-PINs, `403` forbidden, `404` not found, `429` pairing locked, `503` PDF engine missing.
+PINs, `403` forbidden, `404` not found, `413` file too large, `415` unsupported file, `429`
+pairing locked, `503` PDF engine missing. Bearer tokens are device tokens or API keys
+(`Authorization: Bearer <token>`); API keys are refused from other computers while the host
+restricts them to itself (`ControlSettings.api_local_only`, on by default).
 
 ### Pairing
 
@@ -31,6 +37,8 @@ PINs, `403` forbidden, `404` not found, `429` pairing locked, `503` PDF engine m
    the URL fragment so it is never sent in requests or logged.
 2. The remote posts `{"join_token", "pin", "device_name"}` to `/api/v1/pair`.
    - The join token is **one-time**: it rotates after every successful submission.
+   - An empty join token (a second computer typing the PIN) is accepted only while
+     auto-approve is off, so the operator always approves such requests.
    - 5 wrong attempts from one address lock that address for 60 s; 20 failures across all
      addresses within a minute lock pairing globally for 60 s.
 3. The remote polls `/api/v1/pair/{request_id}` once per second:
@@ -60,6 +68,8 @@ On failure the server sends `{"type":"error","code":"unauthorized" | "protocol_m
 | `viewport` | `width`, `height`              | Output windows only (ignored from remotes)      |
 | `ping`     | `nonce`                        | Answered by `pong`                              |
 | `list_capture_targets` |                    | Admins; answered by `capture_targets`           |
+| `create_api_key` | `name`, `role`               | Admins; answered by `api_key` (token shown once) |
+| `pointer`  | `pos` (`[x, y]` or `null`), `mode`, `color` | Presenters and up; relayed to other clients, ≤ 60/s per device |
 
 ### Host → client
 
@@ -68,11 +78,14 @@ On failure the server sends `{"type":"error","code":"unauthorized" | "protocol_m
 | `welcome`         | `host`, `session`              | After a valid `hello`                   |
 | `show`            | `show` (`ShowSnapshot`)        | Cue list or show metadata changed       |
 | `live`            | `live` (`LiveState`)           | Position, masters or timers changed     |
-| `devices`         | `devices`, `pending`           | Admins; device list or pairing requests |
+| `devices`         | `devices`, `pending`, `control` | Admins; device list, pairing requests, API/OSC settings |
 | `pairing`         | `pairing` (PIN, join URLs)     | Admins; PIN/join token changed          |
 | `session`         | `session`                      | This device's role changed              |
 | `render_progress` | `queued`                       | Background render queue length          |
 | `capture_targets` | `targets`                      | Reply to `list_capture_targets` (`error` `capture_permission` if the OS denies capture) |
+| `pointer`         | `device_id`, `pos`, `mode`, `color` | Another device's laser pointer / drawing in progress |
+| `inbox`           | `items`, `auto_accept`         | Admins; uploads waiting for a decision  |
+| `api_key`         | `device_id`, `name`, `token`   | Reply to `create_api_key`               |
 | `action_result`   | `request_id`, `error \| null`  | Reply to `action`                       |
 | `pong`            | `nonce`                        | Reply to `ping`                         |
 | `error`           | `code`                         | Protocol-level error                    |
@@ -93,7 +106,10 @@ Master states are drawn on top in this order: content → logo → blackout.
 `ShowSnapshot.outputs` lists the show's outputs (`OutputDef`: feed, scaling, margin, overlays);
 `LiveState.outputs` holds the position each output shows. A cue with `targets` only moves the
 listed outputs; the others keep their position. `output` is the main output's position.
-`test_pattern` replaces the content on program outputs. `capture_lost` lists capture cues whose
+`test_pattern` replaces the content on program outputs. `drawing` holds the strokes drawn on the
+slide the main output shows (coordinates are fractions of a 16:9 frame); it is dropped when that
+slide changes. Laser pointers are not part of the state: they travel as `pointer` messages and
+disappear after 3 s without updates. `capture_lost` lists capture cues whose
 source is gone. `web_nav` counts next/prev steps forwarded to the live web page (`seq` increases
 with every step).
 Stopwatch elapsed time is `accumulated_ms + (now - running_since_ms)`; clients compute
@@ -112,6 +128,8 @@ Stopwatch elapsed time is `accumulated_ms + (now - running_since_ms)`; clients c
 | `set_overlay_visible`, `toggle_overlay`                  | operator     |            |
 | `media_loaded`, `media_ended` (reports from output windows) | operator  | yes        |
 | `set_test_pattern`                                       | operator     |            |
+| `draw_stroke`, `clear_drawing`                           | presenter    |            |
+| `accept_upload`, `reject_upload`, `set_auto_accept_uploads`, `set_api_local_only`, `configure_osc` | admin | |
 | `put_output`, `remove_output`, `set_cue_targets`, `add_web`, `set_web_options`, `add_capture`, `set_capture` | admin | |
 | `put_overlay`, `remove_overlay`, `add_text`, `set_cue_text`, `add_timer`, `set_cue_timer`, `set_cue_theme`, `set_default_theme`, `set_cue_transition`, `set_default_transition`, `set_cue_auto_advance`, `set_media_options` | admin | |
 | `set_logo_image`, `set_background_image`, `set_overlay_image` with a `path` | admin | yes |
@@ -128,3 +146,11 @@ even with the admin role. Stage viewers cannot send any action.
 Slide images require the per-connection `media_key` from `welcome.session` (image elements
 cannot send headers). Without `w`/`h` a 640×360 thumbnail is returned; output windows request
 their native pixel size. Responses carry an `ETag`; send `If-None-Match` to get `304`.
+
+## OSC
+
+UDP, default port 4748, enabled in the Control tab. The address space and feedback messages are
+documented in [docs/user/control.md](../user/control.md#osc) and in `crates/control/src/osc.rs`.
+Senders on this computer act as operators; with API keys not restricted to this computer, the
+server also listens on all interfaces and other senders must `/midnightsnack/auth <token>` first
+(5 failed attempts per address and minute, then ignored).

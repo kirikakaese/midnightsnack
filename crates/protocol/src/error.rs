@@ -34,5 +34,7 @@ pub enum ErrorCode {
     ConversionFailed,
     /// Screen recording permission is missing (macOS).
     CapturePermission,
+    /// An upload exceeds the host's size limit.
+    FileTooLarge,
     Internal,
 }

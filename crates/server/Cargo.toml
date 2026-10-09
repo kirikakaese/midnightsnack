@@ -21,6 +21,7 @@ midnightsnack-core.workspace = true
 midnightsnack-protocol.workspace = true
 midnightsnack-render = { path = "../render" }
 midnightsnack-capture = { path = "../capture" }
+midnightsnack-control.workspace = true
 bytes = "1"
 mime_guess = "2"
 rand = "0.9"
@@ -40,6 +41,7 @@ uuid.workspace = true
 [dev-dependencies]
 tempfile.workspace = true
 tokio-tungstenite = "0.26"
+rosc = "0.11"
 reqwest = { version = "0.12", default-features = false, features = ["json"] }
 image = { version = "0.25", default-features = false, features = ["png"] }
 

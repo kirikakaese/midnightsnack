@@ -134,7 +134,10 @@ impl Pairing {
         if self.global.locked(now) || self.failures.get(&address).is_some_and(|f| f.locked(now)) {
             return Err(ErrorCode::PairingLocked);
         }
-        let token_ok = constant_time_eq(join_token, &self.join_token);
+        // Without the QR code's join token (e.g. a second computer typing the PIN), the request
+        // always needs the operator's approval.
+        let pin_only = join_token.is_empty() && self.auto_approve.is_none();
+        let token_ok = pin_only || constant_time_eq(join_token, &self.join_token);
         let pin_ok = constant_time_eq(pin.trim(), &self.pin);
         if !(token_ok && pin_ok) {
             let locked = self
@@ -155,7 +158,9 @@ impl Pairing {
         }
         self.failures.remove(&address);
         // One-time token: the QR code changes after every successful submission.
-        self.join_token = random_id();
+        if !pin_only {
+            self.join_token = random_id();
+        }
 
         let name: String = device_name
             .chars()
@@ -308,6 +313,29 @@ mod tests {
             })
         );
         assert_eq!(p.status(&id), None);
+    }
+
+    #[test]
+    fn pin_only_requests_always_need_approval() {
+        let mut p = Pairing::new(None);
+        let pin = p.pin().to_owned();
+        let token = p.join_token().to_owned();
+        assert!(matches!(
+            p.submit("", &pin, "Laptop", IP),
+            Ok(Submitted::Pending(_))
+        ));
+        assert_eq!(p.join_token(), token, "the QR code stays valid");
+        assert_eq!(
+            p.submit("", "999999x", "Laptop", IP2).err(),
+            Some(ErrorCode::InvalidPin)
+        );
+        // With auto-approve the join token is required.
+        let mut p = Pairing::new(Some(Role::Presenter));
+        let pin = p.pin().to_owned();
+        assert_eq!(
+            p.submit("", &pin, "Laptop", IP).err(),
+            Some(ErrorCode::InvalidJoinToken)
+        );
     }
 
     #[test]

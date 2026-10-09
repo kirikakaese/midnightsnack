@@ -8,6 +8,7 @@ export { default as Stage } from "./components/Stage.svelte";
 export { default as StatusDot } from "./components/StatusDot.svelte";
 export { default as Tabs } from "./components/Tabs.svelte";
 export { default as StageDisplay } from "./components/StageDisplay.svelte";
+export { default as PointerPad } from "./components/PointerPad.svelte";
 export * from "./client/connection.svelte";
 export * from "./client/time.svelte";
 export * from "./stage/content";

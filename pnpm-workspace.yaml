@@ -2,3 +2,4 @@ packages:
   - "apps/host"
   - "apps/remote"
   - "packages/*"
+  - "integrations/*"

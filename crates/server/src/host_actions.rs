@@ -71,6 +71,38 @@ pub async fn run(state: &Arc<AppState>, action: Action) -> Result<(), ErrorCode>
             state.emit(Event::Pairing);
             Ok(())
         }
+        Action::AcceptUpload {
+            upload_id,
+            at_index,
+        } => crate::inbox::accept(state, &upload_id, at_index).await,
+        Action::RejectUpload { upload_id } => crate::inbox::reject(state, &upload_id).await,
+        Action::SetApiLocalOnly { on } => {
+            lock(&state.settings).api_local_only = on;
+            state.save_settings();
+            if on {
+                state.emit(Event::ApiLocalOnly);
+            }
+            // OSC binds to this computer or all interfaces accordingly.
+            state.osc_restart.notify_one();
+            state.emit(Event::Devices);
+            Ok(())
+        }
+        Action::ConfigureOsc { osc } => {
+            if osc.port == 0 {
+                return Err(ErrorCode::InvalidState);
+            }
+            lock(&state.settings).osc = osc;
+            state.save_settings();
+            state.osc_restart.notify_one();
+            state.emit(Event::Devices);
+            Ok(())
+        }
+        Action::SetAutoAcceptUploads { on } => {
+            lock(&state.settings).auto_accept_uploads = on;
+            state.save_settings();
+            state.emit(Event::Inbox);
+            Ok(())
+        }
         Action::SetLogoImage { path } => {
             let asset = image_asset(state, path)?;
             let c = lock(&state.engine).set_logo_asset(asset);
@@ -105,6 +137,15 @@ fn image_asset(state: &AppState, path: Option<String>) -> Result<Option<String>,
 
 const VIDEO_EXTENSIONS: &[&str] = &["mp4", "m4v", "mov", "webm", "mkv", "ogv"];
 const AUDIO_EXTENSIONS: &[&str] = &["mp3", "m4a", "aac", "wav", "ogg", "oga", "opus", "flac"];
+
+/// Adds files the host itself chose (uploads), bypassing the local-only check.
+pub async fn add_paths(
+    state: &Arc<AppState>,
+    paths: Vec<String>,
+    at_index: Option<u32>,
+) -> Result<(), ErrorCode> {
+    add_files(state, paths, at_index).await
+}
 
 async fn add_files(
     state: &Arc<AppState>,

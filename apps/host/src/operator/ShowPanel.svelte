@@ -4,6 +4,7 @@
   import { Button, t, type HostConnection } from "@midnightsnack/ui";
   import { open } from "@tauri-apps/plugin-dialog";
   import ThemeEditor from "./ThemeEditor.svelte";
+  import { isController } from "../lib/mode";
 
   interface Props {
     conn: HostConnection;
@@ -67,21 +68,25 @@
     <ThemeEditor
       theme={show.default_theme}
       onchange={(theme) => conn.action({ action: "set_default_theme", theme })}
-      onpickimage={async () => {
-        const path = await pick();
-        if (path) conn.action({ action: "set_background_image", cue_id: null, path });
-      }}
+      onpickimage={isController()
+        ? undefined
+        : async () => {
+            const path = await pick();
+            if (path) conn.action({ action: "set_background_image", cue_id: null, path });
+          }}
       onclearimage={() => conn.action({ action: "set_background_image", cue_id: null, path: null })}
     />
 
     <h3>{t("show_settings.logo")}</h3>
     <div class="row">
-      <Button
-        onclick={async () => {
-          const path = await pick();
-          if (path) conn.action({ action: "set_logo_image", path });
-        }}>{t("show_settings.choose_logo")}</Button
-      >
+      {#if !isController()}
+        <Button
+          onclick={async () => {
+            const path = await pick();
+            if (path) conn.action({ action: "set_logo_image", path });
+          }}>{t("show_settings.choose_logo")}</Button
+        >
+      {/if}
       {#if show.logo}
         <Button
           variant="ghost"

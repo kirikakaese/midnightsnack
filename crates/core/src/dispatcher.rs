@@ -63,6 +63,11 @@ pub fn is_host_action(action: &Action) -> bool {
             | RevokeDevice { .. }
             | DisconnectAll
             | SetAutoApprove { .. }
+            | AcceptUpload { .. }
+            | RejectUpload { .. }
+            | SetAutoAcceptUploads { .. }
+            | SetApiLocalOnly { .. }
+            | ConfigureOsc { .. }
     )
 }
 

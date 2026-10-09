@@ -374,6 +374,7 @@ pub struct ShowSnapshot {
     pub path: Option<String>,
     /// Unsaved changes exist.
     pub dirty: bool,
+    #[ts(type = "number")]
     pub revision: u64,
     pub default_transition: Transition,
     pub default_theme: TextTheme,
@@ -463,6 +464,83 @@ pub struct WebNav {
     pub seq: u64,
 }
 
+/// A freehand stroke on the slide. Coordinates are fractions (0–1) of the content area, so every
+/// output and monitor draws it in the same place.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct Stroke {
+    /// `#rrggbb`.
+    pub color: String,
+    /// Line width as a fraction of the content height (0.002–0.05).
+    pub width: f32,
+    pub points: Vec<[f32; 2]>,
+}
+
+impl Stroke {
+    pub const MAX_POINTS: usize = 2000;
+    pub const MIN_WIDTH: f32 = 0.002;
+    pub const MAX_WIDTH: f32 = 0.05;
+}
+
+/// Drawings on the slide the main output shows. Cleared when that slide changes.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct Drawing {
+    pub position: Position,
+    pub strokes: Vec<Stroke>,
+}
+
+impl Drawing {
+    /// Oldest strokes are dropped beyond this.
+    pub const MAX_STROKES: usize = 200;
+}
+
+/// What a remote's pointer is doing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum PointerMode {
+    /// Laser pointer dot.
+    Point,
+    /// Drawing in progress (the finished stroke follows as `draw_stroke`).
+    Draw,
+}
+
+/// A cue position described for control surfaces (1-based slide numbers).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct CueRef {
+    pub cue_id: CueId,
+    pub name: String,
+    /// 1-based position of the cue in the list.
+    pub cue_number: u32,
+    /// 1-based slide number.
+    pub slide: u32,
+    pub slide_count: u32,
+}
+
+/// Compact live state for control surfaces (`GET /api/v1/state`, OSC feedback, Companion).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct StateSummary {
+    pub show_title: String,
+    pub cue_count: u32,
+    pub program: Option<CueRef>,
+    /// What the main output shows.
+    pub output: Option<CueRef>,
+    pub next: Option<CueRef>,
+    pub masters: Masters,
+    #[ts(type = "number")]
+    pub show_timer_ms: i64,
+    #[ts(type = "number")]
+    pub slide_timer_ms: i64,
+    /// Negative in overtime.
+    #[ts(type = "number")]
+    pub countdown_remaining_ms: i64,
+    pub countdown_running: bool,
+    pub overlays_visible: Vec<String>,
+}
+
 /// Live show state. Sent on every change.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export)]
@@ -494,11 +572,14 @@ pub struct LiveState {
     pub capture_lost: Vec<CueId>,
     /// Last next/prev forwarded to the live web page.
     pub web_nav: Option<WebNav>,
+    /// Strokes drawn on the slide on the main output.
+    pub drawing: Option<Drawing>,
     /// When the program will advance automatically.
     #[ts(type = "number | null")]
     pub auto_advance_at_ms: Option<i64>,
     /// Host clock at the time this state was sent.
     #[ts(type = "number")]
     pub host_time_ms: i64,
+    #[ts(type = "number")]
     pub revision: u64,
 }

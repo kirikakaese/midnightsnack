@@ -2,6 +2,7 @@
 //! Shared server state and the action entry point used by every transport.
 
 use std::collections::HashMap;
+use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard};
 
@@ -31,8 +32,17 @@ pub const DEFAULT_OUTPUT_SIZE: TargetSize = TargetSize {
 /// Slides pre-rendered beyond the next one.
 const PREFETCH_AHEAD: usize = 3;
 
+/// A remote's pointer moved; relayed to every other connection.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PointerUpdate {
+    pub device_id: String,
+    pub pos: Option<[f32; 2]>,
+    pub mode: midnightsnack_protocol::PointerMode,
+    pub color: String,
+}
+
 /// Something changed; connections decide what to send.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Event {
     Show,
     Live,
@@ -43,11 +53,33 @@ pub enum Event {
     Kick(Option<String>),
     /// A device's role changed.
     Session(String),
+    Pointer(Arc<PointerUpdate>),
+    /// The upload inbox changed (admins).
+    Inbox,
+    /// API keys were restricted to this computer: drop remote API key connections.
+    ApiLocalOnly,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct Settings {
     pub auto_approve: Option<Role>,
+    /// Add uploads from every device without asking.
+    pub auto_accept_uploads: bool,
+    /// API keys only work from this computer.
+    pub api_local_only: bool,
+    pub osc: midnightsnack_protocol::OscSettings,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Settings {
+            auto_approve: None,
+            auto_accept_uploads: false,
+            api_local_only: true,
+            osc: Default::default(),
+        }
+    }
 }
 
 pub struct AppState {
@@ -58,6 +90,12 @@ pub struct AppState {
     pub settings: Mutex<Settings>,
     pub render: RenderService,
     pub capture: CaptureHub,
+    pub inbox: Mutex<crate::inbox::Inbox>,
+    pub max_upload: std::sync::atomic::AtomicU64,
+    /// Port the OSC server listens on, if running.
+    pub osc_listening: Mutex<Option<u16>>,
+    /// Rebinds the OSC server after its settings changed.
+    pub osc_restart: Notify,
     pub events: broadcast::Sender<Event>,
     /// media key -> device id
     pub media_keys: Mutex<HashMap<String, String>>,
@@ -97,6 +135,10 @@ impl AppState {
             settings: Mutex::new(settings),
             render,
             capture: CaptureHub::new(),
+            inbox: Mutex::new(Default::default()),
+            max_upload: std::sync::atomic::AtomicU64::new(crate::inbox::DEFAULT_MAX_UPLOAD_BYTES),
+            osc_listening: Mutex::new(None),
+            osc_restart: Notify::new(),
             events,
             media_keys: Mutex::new(HashMap::new()),
             output_size: Mutex::new(DEFAULT_OUTPUT_SIZE),
@@ -105,6 +147,29 @@ impl AppState {
             autosave: Notify::new(),
             schedule: Notify::new(),
         })
+    }
+
+    /// Whether a device may connect from `addr` (host windows and, if restricted, API keys only
+    /// from this computer).
+    pub fn device_allowed_from(&self, device: &crate::devices::Device, addr: SocketAddr) -> bool {
+        allowed_from(
+            device,
+            addr.ip().is_loopback(),
+            lock(&self.settings).api_local_only,
+        )
+    }
+
+    pub fn control_settings(&self) -> midnightsnack_protocol::ControlSettings {
+        let s = lock(&self.settings);
+        midnightsnack_protocol::ControlSettings {
+            api_local_only: s.api_local_only,
+            osc: s.osc,
+            osc_listening: *lock(&self.osc_listening),
+        }
+    }
+
+    pub fn max_upload_bytes(&self) -> u64 {
+        self.max_upload.load(std::sync::atomic::Ordering::Relaxed)
     }
 
     pub fn emit(&self, event: Event) {
@@ -255,4 +320,38 @@ fn following(show: &Show, from: &Position, n: usize) -> Vec<Position> {
         slide = 0;
     }
     out
+}
+
+fn allowed_from(device: &crate::devices::Device, loopback: bool, api_local_only: bool) -> bool {
+    loopback || !(device.local || (device.api_key && api_local_only))
+}
+
+#[cfg(test)]
+mod address_tests {
+    use super::*;
+    use crate::devices::Device;
+
+    fn device(local: bool, api_key: bool) -> Device {
+        Device {
+            id: "d".into(),
+            name: "d".into(),
+            role: Role::Operator,
+            local,
+            api_key,
+        }
+    }
+
+    #[test]
+    fn host_windows_and_restricted_api_keys_stay_on_this_computer() {
+        let phone = device(false, false);
+        let window = device(true, false);
+        let key = device(false, true);
+        for d in [&phone, &window, &key] {
+            assert!(allowed_from(d, true, true), "loopback is always fine");
+        }
+        assert!(allowed_from(&phone, false, true));
+        assert!(!allowed_from(&window, false, false));
+        assert!(!allowed_from(&key, false, true));
+        assert!(allowed_from(&key, false, false));
+    }
 }

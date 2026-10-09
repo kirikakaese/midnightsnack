@@ -6,16 +6,21 @@ import {
   type Action,
   type CaptureTarget,
   type ClientMessage,
+  type ControlSettings,
   type DeviceInfo,
   type ErrorCode,
   type HostInfo,
+  type InboxItem,
   type LiveState,
   type PairingInfo,
   type PendingPairing,
+  type PointerMode,
   type Position,
+  type Role,
   type ServerMessage,
   type SessionInfo,
   type ShowSnapshot,
+  type UploadResponse,
 } from "@midnightsnack/protocol";
 
 export type ConnectionStatus =
@@ -37,6 +42,18 @@ export interface ConnectionOptions {
 
 const ACTION_TIMEOUT_MS = 5000;
 const PING_INTERVAL_MS = 5000;
+/** A remote pointer that stops reporting disappears after this long. */
+export const POINTER_IDLE_MS = 3000;
+
+/** Another device's pointer, with the trail of a drawing in progress. */
+export interface RemotePointer {
+  pos: [number, number];
+  mode: PointerMode;
+  color: string;
+  trail: [number, number][];
+  /** `performance.now()` of the last update. */
+  at: number;
+}
 
 export class HostConnection {
   status = $state<ConnectionStatus>("connecting");
@@ -48,6 +65,15 @@ export class HostConnection {
   pending = $state<PendingPairing[]>([]);
   pairing = $state<PairingInfo | null>(null);
   renderQueued = $state(0);
+  /** Admins: API key and OSC settings. */
+  control = $state<ControlSettings | null>(null);
+  /** Admins: the API key just created (its token is shown once). */
+  newApiKey = $state<{ device_id: string; name: string; token: string } | null>(null);
+  /** Admins: uploaded files waiting for a decision. */
+  inbox = $state<InboxItem[]>([]);
+  autoAcceptUploads = $state(false);
+  /** Pointers of other devices, by device id. */
+  pointers = $state<Record<string, RemotePointer>>({});
   /** Round-trip time of the last ping, in ms. */
   latency = $state<number | null>(null);
   /** Last error reported for an action (cleared after a few seconds). */
@@ -69,6 +95,9 @@ export class HostConnection {
   #pingSent = new Map<number, number>();
   #closed = false;
   #viewport: { width: number; height: number } | null = null;
+  #pointerTimer: ReturnType<typeof setInterval> | undefined;
+  #pointerQueued: { pos: [number, number] | null; mode: PointerMode; color: string } | null = null;
+  #pointerFrame = 0;
 
   constructor(opts: ConnectionOptions) {
     this.#opts = opts;
@@ -112,6 +141,7 @@ export class HostConnection {
     this.#closed = true;
     clearTimeout(this.#retryTimer);
     clearInterval(this.#pingTimer);
+    clearInterval(this.#pointerTimer);
     this.#ws?.close();
     this.#ws = null;
   }
@@ -154,6 +184,10 @@ export class HostConnection {
       case "devices":
         this.devices = msg.devices;
         this.pending = msg.pending;
+        this.control = msg.control;
+        break;
+      case "api_key":
+        this.newApiKey = { device_id: msg.device_id, name: msg.name, token: msg.token };
         break;
       case "pairing":
         this.pairing = msg.pairing;
@@ -164,6 +198,13 @@ export class HostConnection {
         break;
       case "render_progress":
         this.renderQueued = msg.queued;
+        break;
+      case "inbox":
+        this.inbox = msg.items;
+        this.autoAcceptUploads = msg.auto_accept;
+        break;
+      case "pointer":
+        this.#updatePointer(msg.device_id, msg.pos, msg.mode, msg.color);
         break;
       case "action_result": {
         const resolve = this.#pendingActions.get(msg.request_id);
@@ -187,6 +228,50 @@ export class HostConnection {
         else this.#flashError(msg.code);
         break;
     }
+  }
+
+  #updatePointer(
+    deviceId: string,
+    pos: [number, number] | null,
+    mode: PointerMode,
+    color: string,
+  ): void {
+    if (!pos) {
+      delete this.pointers[deviceId];
+      return;
+    }
+    const prev = this.pointers[deviceId];
+    const trail = mode === "draw" && prev?.mode === "draw" ? [...prev.trail, pos] : [pos];
+    this.pointers[deviceId] = { pos, mode, color, trail, at: performance.now() };
+    // Pointers whose device went quiet (or disconnected) fade out.
+    this.#pointerTimer ??= setInterval(() => {
+      const now = performance.now();
+      for (const [id, p] of Object.entries(this.pointers)) {
+        if (now - p.at > POINTER_IDLE_MS) delete this.pointers[id];
+      }
+    }, 1000);
+  }
+
+  /**
+   * Moves this device's pointer (`pos` as a fraction of the 16:9 slide frame) or hides it
+   * (`null`). Updates are coalesced to one per animation frame.
+   */
+  sendPointer(pos: [number, number] | null, mode: PointerMode, color: string): void {
+    const first = this.#pointerQueued === null;
+    this.#pointerQueued = { pos, mode, color };
+    if (pos === null) {
+      // Hiding is sent at once so it is never overtaken by a queued move.
+      cancelAnimationFrame(this.#pointerFrame);
+      this.#pointerQueued = null;
+      this.#send({ type: "pointer", pos, mode, color });
+      return;
+    }
+    if (!first) return;
+    this.#pointerFrame = requestAnimationFrame(() => {
+      const q = this.#pointerQueued;
+      this.#pointerQueued = null;
+      if (q) this.#send({ type: "pointer", ...q });
+    });
   }
 
   #ping(): void {
@@ -251,9 +336,45 @@ export class HostConnection {
   captureTargets = $state<CaptureTarget[] | null>(null);
   capturePermissionMissing = $state(false);
 
+  /** Admins: creates an API key; the token arrives in `newApiKey`. */
+  createApiKey(name: string, role: Role): void {
+    this.newApiKey = null;
+    this.#send({ type: "create_api_key", name, role });
+  }
+
   requestCaptureTargets(): void {
     this.captureTargets = null;
     this.#send({ type: "list_capture_targets" });
+  }
+
+  /**
+   * Sends a file to the host's inbox. `onProgress` gets the fraction sent (0–1). Resolves with
+   * the host's answer or rejects with an error code.
+   */
+  upload(file: File, onProgress?: (fraction: number) => void): Promise<UploadResponse> {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open(
+        "POST",
+        `${this.#opts.httpBase}/api/v1/upload?name=${encodeURIComponent(file.name)}`,
+      );
+      xhr.setRequestHeader("Authorization", `Bearer ${this.#opts.token}`);
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) onProgress?.(e.loaded / e.total);
+      };
+      xhr.onload = () => {
+        let body: unknown = null;
+        try {
+          body = JSON.parse(xhr.responseText);
+        } catch {
+          // Not JSON (proxy error page); handled below.
+        }
+        if (xhr.status === 200) resolve(body as UploadResponse);
+        else reject(((body as { code?: ErrorCode } | null)?.code ?? "internal") as ErrorCode);
+      };
+      xhr.onerror = () => reject("io" as ErrorCode);
+      xhr.send(file);
+    });
   }
 
   /** URL of an image asset (logo, background, logo bug). */

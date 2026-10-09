@@ -20,6 +20,7 @@
   import { open } from "@tauri-apps/plugin-dialog";
   import CapturePicker from "./CapturePicker.svelte";
   import ThemeEditor from "./ThemeEditor.svelte";
+  import { isController } from "../lib/mode";
 
   interface Props {
     conn: HostConnection;
@@ -222,7 +223,7 @@
         <ThemeEditor
           theme={ownTheme}
           onchange={setTheme}
-          onpickimage={pickBackground}
+          onpickimage={isController() ? undefined : pickBackground}
           onclearimage={() =>
             conn.action({ action: "set_background_image", cue_id: cue.id, path: null })}
         />

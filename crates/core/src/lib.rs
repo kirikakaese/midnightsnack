@@ -5,6 +5,8 @@
 //! unit-tested. Time is always passed in explicitly (`now_ms`, Unix epoch milliseconds).
 
 pub mod bundle;
+#[cfg(test)]
+mod control_tests;
 pub mod dispatcher;
 pub mod engine;
 #[cfg(test)]

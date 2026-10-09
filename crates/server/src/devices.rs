@@ -19,6 +19,9 @@ struct StoredDevice {
     token_hash: String,
     created_ms: i64,
     last_seen_ms: Option<i64>,
+    /// An API key for a control surface rather than a paired device.
+    #[serde(default)]
+    api_key: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -28,6 +31,7 @@ pub struct Device {
     pub role: Role,
     /// Built-in host window; only accepted from loopback connections.
     pub local: bool,
+    pub api_key: bool,
 }
 
 /// Remembered devices (persisted) plus the host's own local sessions (in memory).
@@ -67,6 +71,7 @@ impl DeviceStore {
             name: name.to_owned(),
             role,
             local: true,
+            api_key: false,
         };
         self.local.push((sha256_hex(&token), device));
         token
@@ -74,6 +79,15 @@ impl DeviceStore {
 
     /// Registers a newly paired device and returns `(device id, token)`.
     pub fn add(&mut self, name: &str, role: Role) -> (String, String) {
+        self.insert(name, role, false)
+    }
+
+    /// Creates an API key for a control surface and returns `(device id, token)`.
+    pub fn add_api_key(&mut self, name: &str, role: Role) -> (String, String) {
+        self.insert(name, role, true)
+    }
+
+    fn insert(&mut self, name: &str, role: Role, api_key: bool) -> (String, String) {
         let token = random_token();
         let id = random_id();
         self.devices.push(StoredDevice {
@@ -83,6 +97,7 @@ impl DeviceStore {
             token_hash: sha256_hex(&token),
             created_ms: now_ms(),
             last_seen_ms: None,
+            api_key,
         });
         self.persist();
         (id, token)
@@ -101,6 +116,7 @@ impl DeviceStore {
                 name: d.name.clone(),
                 role: d.role,
                 local: false,
+                api_key: d.api_key,
             })
     }
 
@@ -114,6 +130,7 @@ impl DeviceStore {
             name: d.name.clone(),
             role: d.role,
             local: false,
+            api_key: d.api_key,
         })
     }
 
@@ -136,9 +153,10 @@ impl DeviceStore {
         removed
     }
 
-    /// Forgets every remote device. Local sessions are kept.
+    /// Forgets every paired device. Local sessions and API keys (configured integrations) are
+    /// kept; revoke those one by one.
     pub fn revoke_all(&mut self) {
-        self.devices.clear();
+        self.devices.retain(|d| d.api_key);
         self.persist();
     }
 
@@ -165,6 +183,7 @@ impl DeviceStore {
             role: d.role,
             connected: self.connected.contains_key(&d.id),
             local: true,
+            api_key: false,
             latency_ms: self.latency.get(&d.id).copied(),
             last_seen_ms: None,
         });
@@ -174,6 +193,7 @@ impl DeviceStore {
             role: d.role,
             connected: self.connected.contains_key(&d.id),
             local: false,
+            api_key: d.api_key,
             latency_ms: self.latency.get(&d.id).copied(),
             last_seen_ms: d.last_seen_ms,
         });

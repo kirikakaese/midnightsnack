@@ -4,7 +4,9 @@
 //! The operator and output windows talk to the core through the same WebSocket protocol as
 //! remote devices (with loopback-only tokens), so every control path shares one dispatcher.
 
+mod controller;
 mod hotplug;
+mod midi;
 mod output;
 mod settings;
 mod web;
@@ -14,7 +16,7 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 
 use midnightsnack_core::APP_VERSION;
-use midnightsnack_protocol::{HostInfo, OutputFeed, DEFAULT_PORT, PROTOCOL_VERSION};
+use midnightsnack_protocol::{HostInfo, MidiTrigger, OutputFeed, DEFAULT_PORT, PROTOCOL_VERSION};
 use midnightsnack_server::{start, state::lock, ServerConfig, ServerHandle};
 use serde::Serialize;
 use tauri::{AppHandle, Manager, State, Webview};
@@ -43,6 +45,8 @@ struct ConnectionInfo {
     token: String,
     /// For output windows: the output this window shows.
     output_id: Option<String>,
+    /// This window controls another host (controller mode).
+    controller: bool,
 }
 
 #[tauri::command]
@@ -54,6 +58,17 @@ fn host_info(state: State<'_, HostState>) -> HostInfo {
 /// outputs a read-only one, the operator window an admin token. All only work from this machine.
 #[tauri::command]
 fn connection_info(webview: Webview, state: State<'_, HostState>) -> ConnectionInfo {
+    if let Some(remote) =
+        controller::remote_id(webview.label()).and_then(|id| controller::remote(&state, id))
+    {
+        return ConnectionInfo {
+            ws_url: remote.ws_url(),
+            http_base: remote.base_url.clone(),
+            token: remote.token,
+            output_id: None,
+            controller: true,
+        };
+    }
     let s = &state.server;
     let output_id = output::output_id(webview.label()).map(str::to_owned);
     let token = match &output_id {
@@ -77,6 +92,7 @@ fn connection_info(webview: Webview, state: State<'_, HostState>) -> ConnectionI
         http_base: s.local_http_url(),
         token,
         output_id,
+        controller: false,
     }
 }
 
@@ -227,6 +243,37 @@ fn qr_svg(text: String) -> Result<String, String> {
 
 /// Opens the macOS privacy settings for Screen Recording.
 #[tauri::command]
+fn midi_ports() -> Vec<String> {
+    midnightsnack_control::midi::port_names()
+}
+
+#[tauri::command]
+fn midi_settings(state: State<'_, HostState>) -> midi::MidiSettings {
+    state
+        .settings
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .midi
+        .clone()
+}
+
+#[tauri::command]
+fn set_midi_settings(state: State<'_, HostState>, settings: midi::MidiSettings) {
+    state
+        .settings
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .midi = settings;
+    state.save_settings();
+}
+
+/// Waits up to 10 s for the next MIDI press; `null` on timeout.
+#[tauri::command]
+async fn midi_learn(learn: State<'_, midi::Learn>) -> Result<Option<MidiTrigger>, ()> {
+    Ok(learn.next(std::time::Duration::from_secs(10)).await)
+}
+
+#[tauri::command]
 fn open_capture_settings() {
     #[cfg(target_os = "macos")]
     {
@@ -322,6 +369,10 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     update_keep_awake(&handle, &app.state::<HostState>());
 
     hotplug::spawn(handle.clone());
+    app.manage(midi::Learn::default());
+    if !smoke {
+        midi::spawn(handle.clone(), server_state.clone());
+    }
     tauri::async_runtime::spawn(web::run(handle, server_state, data_dir.join("web")));
     Ok(())
 }
@@ -361,6 +412,15 @@ pub fn run() {
             keymap,
             qr_svg,
             open_capture_settings,
+            midi_ports,
+            midi_settings,
+            set_midi_settings,
+            midi_learn,
+            controller::discover_hosts,
+            controller::remote_hosts,
+            controller::forget_remote,
+            controller::pair_remote,
+            controller::open_controller,
             ui_ready
         ])
         .run(tauri::generate_context!())

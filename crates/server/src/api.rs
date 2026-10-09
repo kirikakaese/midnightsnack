@@ -37,6 +37,8 @@ impl From<ErrorCode> for ApiFailure {
             ErrorCode::NotFound => StatusCode::NOT_FOUND,
             ErrorCode::MalformedMessage | ErrorCode::InvalidState => StatusCode::BAD_REQUEST,
             ErrorCode::PdfEngineMissing => StatusCode::SERVICE_UNAVAILABLE,
+            ErrorCode::UnsupportedFile => StatusCode::UNSUPPORTED_MEDIA_TYPE,
+            ErrorCode::FileTooLarge => StatusCode::PAYLOAD_TOO_LARGE,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         };
         ApiFailure(status, code)

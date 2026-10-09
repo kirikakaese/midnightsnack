@@ -28,6 +28,9 @@ pub struct HostSettings {
     pub keymap: BTreeMap<String, String>,
     /// Port of the embedded server.
     pub port: Option<u16>,
+    pub midi: crate::midi::MidiSettings,
+    /// Hosts this computer controls (controller mode).
+    pub remotes: Vec<crate::controller::RemoteHost>,
     // Phase 1/2 fields, migrated into `outputs["main"]`.
     #[serde(skip_serializing)]
     output_display: Option<String>,

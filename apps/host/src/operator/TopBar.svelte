@@ -11,6 +11,7 @@
     type Ticker,
   } from "@midnightsnack/ui";
   import { ask, open, save } from "@tauri-apps/plugin-dialog";
+  import { isController } from "../lib/mode";
 
   interface Props {
     conn: HostConnection;
@@ -63,10 +64,18 @@
 <header class="topbar">
   <div class="file" role="group" aria-label={t("file.menu")}>
     <Button size="md" onclick={newShow}>{t("file.new")}</Button>
-    <Button size="md" onclick={openShow}>{t("file.open")}</Button>
-    <Button size="md" onclick={saveShow}>{t("file.save")}</Button>
-    <Button size="md" variant="ghost" onclick={() => saveAs(true)}>{t("file.save_as")}</Button>
-    <Button size="md" variant="ghost" onclick={() => saveAs(false)}>{t("file.save_linked")}</Button>
+    {#if !isController()}
+      <Button size="md" onclick={openShow}>{t("file.open")}</Button>
+    {/if}
+    <Button size="md" disabled={isController() && !conn.show?.path} onclick={saveShow}
+      >{t("file.save")}</Button
+    >
+    {#if !isController()}
+      <Button size="md" variant="ghost" onclick={() => saveAs(true)}>{t("file.save_as")}</Button>
+      <Button size="md" variant="ghost" onclick={() => saveAs(false)}
+        >{t("file.save_linked")}</Button
+      >
+    {/if}
   </div>
 
   <label class="title">

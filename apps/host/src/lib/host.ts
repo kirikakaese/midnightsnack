@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Typed wrappers around the host's Tauri commands.
-import type { HostInfo } from "@midnightsnack/protocol";
+import type { HostInfo, MidiBinding, MidiTrigger, Role } from "@midnightsnack/protocol";
 import { HostConnection } from "@midnightsnack/ui";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -10,6 +10,22 @@ export interface ConnectionInfo {
   http_base: string;
   token: string;
   output_id: string | null;
+  /** This window controls another host. */
+  controller: boolean;
+}
+
+/** Another host this computer controls. */
+export interface RemoteHost {
+  id: string;
+  name: string;
+  base_url: string;
+  role: Role;
+}
+
+export interface FoundHost {
+  name: string;
+  url: string;
+  version: string;
 }
 
 export interface DisplayInfo {
@@ -32,6 +48,11 @@ export interface OutputWindowState {
   window_open: boolean;
 }
 
+export interface MidiSettings {
+  enabled: boolean;
+  bindings: MidiBinding[];
+}
+
 export interface DisplayStatus {
   displays: DisplayInfo[];
   /** Output ids whose remembered display is not connected. */
@@ -50,8 +71,34 @@ export const host = {
   keymap: () => invoke<Record<string, string>>("keymap"),
   qrSvg: (text: string) => invoke<string>("qr_svg", { text }),
   openCaptureSettings: () => invoke<void>("open_capture_settings"),
+  midiPorts: () => invoke<string[]>("midi_ports"),
+  midiSettings: () => invoke<MidiSettings>("midi_settings"),
+  setMidiSettings: (settings: MidiSettings) => invoke<void>("set_midi_settings", { settings }),
+  /** Resolves with the next MIDI press, or `null` after 10 s. */
+  midiLearn: () => invoke<MidiTrigger | null>("midi_learn"),
   uiReady: () => invoke<void>("ui_ready"),
+  discoverHosts: () => invoke<FoundHost[]>("discover_hosts"),
+  remoteHosts: () => invoke<RemoteHost[]>("remote_hosts"),
+  forgetRemote: (id: string) => invoke<void>("forget_remote", { id }),
+  /** Rejects with a protocol error code (`invalid_pin`, `pairing_denied`, …). */
+  pairRemote: (address: string, pin: string, deviceName: string) =>
+    invoke<RemoteHost>("pair_remote", { address, pin, deviceName }),
+  openController: (id: string) => invoke<void>("open_controller", { id }),
 };
+
+/** Fired for every MIDI press (activity indicator). */
+export function onMidiPress(cb: (trigger: MidiTrigger) => void): () => void {
+  let unlisten: (() => void) | null = null;
+  let cancelled = false;
+  listen<MidiTrigger>("midi-press", (e) => cb(e.payload)).then((u) => {
+    if (cancelled) u();
+    else unlisten = u;
+  });
+  return () => {
+    cancelled = true;
+    unlisten?.();
+  };
+}
 
 /** Fired by the host when displays are plugged or unplugged. */
 export function onDisplaysChanged(cb: (status: DisplayStatus) => void): () => void {

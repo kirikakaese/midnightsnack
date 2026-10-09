@@ -7,9 +7,10 @@ use crate::model::{is_valid_color, new_id, split_text, Asset, Cue, CueContent, M
 use std::collections::BTreeMap;
 
 use crate::protocol::{
-    Action, CaptureSource, Countdown, ErrorCode, LiveState, Masters, MediaOptions, MediaPlayback,
-    OutputDef, OutputFeed, OutputLive, Overlay, OverlayKind, Position, ShowSnapshot, Stopwatch,
-    TestPattern, TextTheme, TimerCue, TimerMode, Transition, WebInfo,
+    Action, CaptureSource, Countdown, CueRef, Drawing, ErrorCode, LiveState, Masters, MediaOptions,
+    MediaPlayback, OutputDef, OutputFeed, OutputLive, Overlay, OverlayKind, Position, ShowSnapshot,
+    StateSummary, Stopwatch, Stroke, TestPattern, TextTheme, TimerCue, TimerMode, Transition,
+    WebInfo,
 };
 
 /// Longest accepted duration for timers, countdowns and auto-advance (24 h).
@@ -64,6 +65,7 @@ struct Live {
     test_pattern: Option<TestPattern>,
     capture_lost: Vec<String>,
     web_nav: Option<crate::protocol::WebNav>,
+    drawing: Option<Drawing>,
     blackout: bool,
     logo: bool,
     show_timer: Stopwatch,
@@ -339,6 +341,37 @@ impl Engine {
         }
     }
 
+    /// Compact state for control surfaces.
+    pub fn summary(&self, now_ms: i64) -> StateSummary {
+        let describe = |p: Option<&Position>| -> Option<CueRef> {
+            let p = p?;
+            let index = self.show.cues.iter().position(|c| c.id == p.cue_id)?;
+            let cue = &self.show.cues[index];
+            Some(CueRef {
+                cue_id: cue.id.clone(),
+                name: cue.name.clone(),
+                cue_number: index as u32 + 1,
+                slide: p.slide + 1,
+                slide_count: cue.slide_count(),
+            })
+        };
+        let countdown = &self.live.countdown;
+        StateSummary {
+            show_title: self.show.title.clone(),
+            cue_count: self.show.cues.len() as u32,
+            program: describe(self.live.program.as_ref()),
+            output: describe(self.output()),
+            next: describe(self.next_position().as_ref()),
+            masters: self.masters(),
+            show_timer_ms: self.live.show_timer.elapsed_ms(now_ms),
+            slide_timer_ms: self.live.slide_timer.elapsed_ms(now_ms),
+            countdown_remaining_ms: countdown.duration_ms as i64
+                - countdown.elapsed.elapsed_ms(now_ms),
+            countdown_running: countdown.elapsed.is_running(),
+            overlays_visible: self.live.overlays_visible.clone(),
+        }
+    }
+
     pub fn live_state(&self, now_ms: i64) -> LiveState {
         LiveState {
             program: self.live.program.clone(),
@@ -362,6 +395,7 @@ impl Engine {
             test_pattern: self.live.test_pattern,
             capture_lost: self.live.capture_lost.clone(),
             web_nav: self.live.web_nav.clone(),
+            drawing: self.live.drawing.clone(),
             auto_advance_at_ms: self.auto_advance_at(),
             host_time_ms: now_ms,
             revision: self.live_revision,
@@ -391,6 +425,9 @@ impl Engine {
         if self.sync_media(now_ms) {
             change.live = true;
         }
+        if self.reconcile_drawing() {
+            change.live = true;
+        }
         // Metadata reported by the output is not an edit by the user.
         let was_dirty = self.dirty;
         let change = self.bump(change);
@@ -398,6 +435,19 @@ impl Engine {
             self.dirty = was_dirty;
         }
         Ok(change)
+    }
+
+    /// Drawings belong to the slide on the main output; drop them once it shows something else.
+    fn reconcile_drawing(&mut self) -> bool {
+        let stale = self
+            .live
+            .drawing
+            .as_ref()
+            .is_some_and(|d| self.output() != Some(&d.position));
+        if stale {
+            self.live.drawing = None;
+        }
+        stale
     }
 
     /// Keeps positions valid after the cue list changed (e.g. a text cue lost slides).
@@ -849,6 +899,28 @@ impl Engine {
                 Change::BOTH
             }
 
+            DrawStroke { stroke } => {
+                let stroke = validate_stroke(stroke)?;
+                let Some(position) = self.output().cloned() else {
+                    return Err(ErrorCode::InvalidState);
+                };
+                let drawing = self.live.drawing.get_or_insert_with(|| Drawing {
+                    position,
+                    strokes: Vec::new(),
+                });
+                drawing.strokes.push(stroke);
+                if drawing.strokes.len() > Drawing::MAX_STROKES {
+                    drawing.strokes.remove(0);
+                }
+                Change::LIVE
+            }
+            ClearDrawing => {
+                if self.live.drawing.take().is_some() {
+                    Change::LIVE
+                } else {
+                    Change::NONE
+                }
+            }
             SetTestPattern { pattern } => {
                 if self.live.test_pattern == *pattern {
                     Change::NONE
@@ -1054,7 +1126,12 @@ impl Engine {
             | SetDeviceRole { .. }
             | RevokeDevice { .. }
             | DisconnectAll
-            | SetAutoApprove { .. } => return Err(ErrorCode::InvalidState),
+            | SetAutoApprove { .. }
+            | AcceptUpload { .. }
+            | RejectUpload { .. }
+            | SetAutoAcceptUploads { .. }
+            | SetApiLocalOnly { .. }
+            | ConfigureOsc { .. } => return Err(ErrorCode::InvalidState),
         })
     }
 
@@ -1385,6 +1462,27 @@ fn validate_output(o: &OutputDef) -> Result<OutputDef, ErrorCode> {
             name
         },
         ..o.clone()
+    })
+}
+
+/// Points are clamped to the slide; empty or oversized strokes are refused.
+fn validate_stroke(s: &Stroke) -> Result<Stroke, ErrorCode> {
+    if !is_valid_color(&s.color)
+        || s.points.is_empty()
+        || s.points.len() > Stroke::MAX_POINTS
+        || !s.width.is_finite()
+        || s.points.iter().flatten().any(|v| !v.is_finite())
+    {
+        return Err(ErrorCode::InvalidState);
+    }
+    Ok(Stroke {
+        color: s.color.clone(),
+        width: s.width.clamp(Stroke::MIN_WIDTH, Stroke::MAX_WIDTH),
+        points: s
+            .points
+            .iter()
+            .map(|[x, y]| [x.clamp(0.0, 1.0), y.clamp(0.0, 1.0)])
+            .collect(),
     })
 }
 

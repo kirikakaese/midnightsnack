@@ -8,6 +8,7 @@
   import { Button, Stage, t, type HostConnection } from "@midnightsnack/ui";
   import { onDestroy } from "svelte";
   import { host, onDisplaysChanged, type DisplayInfo, type OutputWindowState } from "../lib/host";
+  import { isController } from "../lib/mode";
 
   interface Props {
     conn: HostConnection;
@@ -36,8 +37,9 @@
     }
   }
 
+  // Placement is about this computer's displays; a controller only edits the show's outputs.
   $effect(() => {
-    refresh();
+    if (!isController()) refresh();
   });
   const stop = onDisplaysChanged(() => refresh());
   onDestroy(stop);
@@ -102,10 +104,14 @@
 <div class="outputs">
   <div class="head">
     <h3>{t("outputs.title")}</h3>
-    <Button variant="ghost" onclick={refresh} aria-label={t("output.refresh")}>⟳</Button>
+    {#if !isController()}
+      <Button variant="ghost" onclick={refresh} aria-label={t("output.refresh")}>⟳</Button>
+    {/if}
   </div>
 
-  {#if displays.length < 2}
+  {#if isController()}
+    <p class="hint">{t("outputs.controller_hint")}</p>
+  {:else if displays.length < 2}
     <p class="warn">{t("output.single_display_hint")}</p>
   {/if}
 
@@ -119,9 +125,11 @@
           aria-label={t("outputs.name")}
           onchange={(e) => e.currentTarget.value.trim() && put(o, { name: e.currentTarget.value })}
         />
-        <span class="state" class:on={isOpen}>
-          {isOpen ? t("outputs.on_screen") : t("outputs.closed")}
-        </span>
+        {#if !isController()}
+          <span class="state" class:on={isOpen}>
+            {isOpen ? t("outputs.on_screen") : t("outputs.closed")}
+          </span>
+        {/if}
       </div>
 
       {#if missing.includes(o.id)}
@@ -191,30 +199,37 @@
           </div>
         {/if}
 
-        <label>
-          <span>{t("output.display")}</span>
-          <select value={displayFor(o.id)} onchange={(e) => (picked[o.id] = e.currentTarget.value)}>
-            {#each displays as d (d.name)}
-              <option value={d.name}>
-                {d.name} — {d.width}×{d.height}{d.primary ? ` (${t("output.primary")})` : ""}
-              </option>
-            {/each}
-          </select>
-        </label>
-        <label class="check">
-          <input
-            type="checkbox"
-            checked={windowed[o.id] ?? false}
-            onchange={(e) => (windowed[o.id] = e.currentTarget.checked)}
-          />
-          {t("output.windowed")}
-        </label>
+        {#if !isController()}
+          <label>
+            <span>{t("output.display")}</span>
+            <select
+              value={displayFor(o.id)}
+              onchange={(e) => (picked[o.id] = e.currentTarget.value)}
+            >
+              {#each displays as d (d.name)}
+                <option value={d.name}>
+                  {d.name} — {d.width}×{d.height}{d.primary ? ` (${t("output.primary")})` : ""}
+                </option>
+              {/each}
+            </select>
+          </label>
+          <label class="check">
+            <input
+              type="checkbox"
+              checked={windowed[o.id] ?? false}
+              onchange={(e) => (windowed[o.id] = e.currentTarget.checked)}
+            />
+            {t("output.windowed")}
+          </label>
+        {/if}
         <div class="row">
-          <Button variant="go" onclick={() => openOutput(o.id)}>
-            {isOpen ? t("output.move") : t("output.open")}
-          </Button>
-          {#if isOpen}
-            <Button onclick={() => closeOutput(o.id)}>{t("output.close")}</Button>
+          {#if !isController()}
+            <Button variant="go" onclick={() => openOutput(o.id)}>
+              {isOpen ? t("output.move") : t("output.open")}
+            </Button>
+            {#if isOpen}
+              <Button onclick={() => closeOutput(o.id)}>{t("output.close")}</Button>
+            {/if}
           {/if}
           {#if o.id !== "main"}
             <Button variant="danger" onclick={() => removeOutput(o.id)}>

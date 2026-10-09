@@ -4,6 +4,8 @@
   import { Button, t, type HostConnection } from "@midnightsnack/ui";
   import { ask } from "@tauri-apps/plugin-dialog";
   import { host } from "../lib/host";
+  import { isController } from "../lib/mode";
+  import ControllerPanel from "./ControllerPanel.svelte";
 
   interface Props {
     conn: HostConnection;
@@ -14,7 +16,7 @@
   const joinUrl = $derived(conn.pairing?.join_urls[0] ?? null);
   let qr = $state<string | null>(null);
   let approveRole = $state<Record<string, Role>>({});
-  const remotes = $derived(conn.devices.filter((d) => !d.local));
+  const remotes = $derived(conn.devices.filter((d) => !d.local && !d.api_key));
 
   $effect(() => {
     const url = joinUrl;
@@ -75,6 +77,15 @@
             <option value={r}>{t(`role.${r}`)}</option>
           {/each}
         </select>
+      </label>
+      <label class="check">
+        <input
+          type="checkbox"
+          checked={conn.autoAcceptUploads}
+          onchange={(e) =>
+            conn.action({ action: "set_auto_accept_uploads", on: e.currentTarget.checked })}
+        />
+        {t("inbox.auto_accept")}
       </label>
     {/if}
 
@@ -148,12 +159,17 @@
       </ul>
       <Button variant="danger" onclick={disconnectAll}>{t("devices.disconnect_all")}</Button>
     {/if}
+
+    {#if !isController()}
+      <ControllerPanel />
+    {/if}
   </div>
 </div>
 
 <style>
   .connect {
     display: grid;
+    grid-template-columns: minmax(0, 1fr);
     gap: 10px;
   }
   .pair {

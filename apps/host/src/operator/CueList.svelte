@@ -4,6 +4,8 @@
   import { Button, Panel, captureLabel, t, type HostConnection } from "@midnightsnack/ui";
   import { open } from "@tauri-apps/plugin-dialog";
   import CapturePicker from "./CapturePicker.svelte";
+  import InboxPanel from "./InboxPanel.svelte";
+  import { isController } from "../lib/mode";
 
   interface Props {
     conn: HostConnection;
@@ -162,7 +164,28 @@
     else if (kind === "web" || kind === "openslides" || kind === "capture") startAdding(kind);
   }
 
+  // Controller mode: the other host cannot read this computer's files, so they are uploaded.
+  let uploadInput = $state<HTMLInputElement>();
+  let uploading = $state<number | null>(null);
+  async function uploadFiles() {
+    const files = [...(uploadInput?.files ?? [])];
+    for (const [i, f] of files.entries()) {
+      uploading = i / files.length;
+      try {
+        await conn.upload(f, (p) => (uploading = (i + p) / files.length));
+      } catch {
+        // The host reports refused files; keep going with the rest.
+      }
+    }
+    uploading = null;
+    if (uploadInput) uploadInput.value = "";
+  }
+
   async function addFiles() {
+    if (isController()) {
+      uploadInput?.click();
+      return;
+    }
     expectNewCue();
     const paths = await open({ multiple: true, filters: mediaFilter });
     if (paths?.length) conn.action({ action: "add_files", paths, at_index: null });
@@ -226,7 +249,9 @@
       }}
     >
       <option value="" disabled>{t("cue.add_more")}</option>
-      <option value="folder">{t("cue.add_folder")}</option>
+      {#if !isController()}
+        <option value="folder">{t("cue.add_folder")}</option>
+      {/if}
       <option value="text">{t("cue.add_text")}</option>
       <option value="timer">{t("cue.add_timer")}</option>
       <option value="blank">{t("cue.add_blank")}</option>
@@ -262,6 +287,20 @@
       <CapturePicker {conn} onpick={addCapture} oncancel={() => (adding = null)} />
     </div>
   {/if}
+
+  <input
+    bind:this={uploadInput}
+    type="file"
+    multiple
+    class="ms-visually-hidden"
+    aria-hidden="true"
+    tabindex="-1"
+    onchange={uploadFiles}
+  />
+  {#if uploading !== null}
+    <progress max="1" value={uploading} aria-label={t("upload.progress")}></progress>
+  {/if}
+  <InboxPanel {conn} />
 
   {#if cues.length === 0}
     <p class="empty">{t("cue.empty")}</p>
@@ -316,12 +355,6 @@
             </button>
           {/if}
           <span class="tools">
-            <button
-              class="go"
-              aria-label={t("cue.go_live")}
-              disabled={cue.slide_count === 0}
-              onclick={() => go(cue)}>▶</button
-            >
             <button aria-label={t("cue.rename")} onclick={() => startRename(cue)}>✎</button>
             <button aria-label={t("cue.move_up")} disabled={i === 0} onclick={() => move(cue, -1)}
               >↑</button
@@ -334,6 +367,13 @@
             <button
               aria-label={t("cue.remove")}
               onclick={() => conn.action({ action: "remove_cue", cue_id: cue.id })}>✕</button
+            >
+            <!-- Last, so revealing the other tools never moves it under the pointer. -->
+            <button
+              class="go"
+              aria-label={t("cue.go_live")}
+              disabled={cue.slide_count === 0}
+              onclick={() => go(cue)}>▶</button
             >
           </span>
         </li>

@@ -3,8 +3,8 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::{
-    CaptureSource, CueId, MediaOptions, OutputDef, Overlay, Position, Role, TestPattern, TextTheme,
-    TimerCue, Transition, WebInfo,
+    CaptureSource, CueId, MediaOptions, OscSettings, OutputDef, Overlay, Position, Role, Stroke,
+    TestPattern, TextTheme, TimerCue, Transition, WebInfo,
 };
 
 /// Everything any input source can ask the host to do. Every action passes through the single
@@ -63,6 +63,39 @@ pub enum Action {
     CountdownReset,
     SetStageMessage {
         text: Option<String>,
+    },
+
+    // --- pointer and drawing ---
+    /// Adds a finished stroke to the drawing on the current slide.
+    DrawStroke {
+        stroke: Stroke,
+    },
+    /// Removes all drawings.
+    ClearDrawing,
+
+    /// Restrict API keys (HTTP API, WebSocket, OSC) to this computer.
+    SetApiLocalOnly {
+        on: bool,
+    },
+
+    /// Turns the OSC server on or off and sets its UDP port.
+    ConfigureOsc {
+        osc: OscSettings,
+    },
+
+    // --- upload inbox ---
+    /// Adds an uploaded file to the show.
+    AcceptUpload {
+        upload_id: String,
+        at_index: Option<u32>,
+    },
+    /// Deletes an uploaded file.
+    RejectUpload {
+        upload_id: String,
+    },
+    /// Add uploads from every device without asking.
+    SetAutoAcceptUploads {
+        on: bool,
     },
 
     // --- outputs ---
