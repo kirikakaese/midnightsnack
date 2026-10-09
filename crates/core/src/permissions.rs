@@ -22,6 +22,14 @@ pub fn required_role(action: &Action) -> Role {
         MediaLoaded { .. } | MediaEnded { .. } => Role::Operator,
         CountdownSet { .. } | CountdownStart | CountdownPause | CountdownReset => Role::Operator,
         SetStageMessage { .. } | SetOverlayVisible { .. } | ToggleOverlay { .. } => Role::Operator,
+        SetTestPattern { .. } => Role::Operator,
+        PutOutput { .. }
+        | RemoveOutput { .. }
+        | SetCueTargets { .. }
+        | AddWeb { .. }
+        | SetWebOptions { .. }
+        | AddCapture { .. }
+        | SetCapture { .. } => Role::Admin,
         PutOverlay { .. }
         | RemoveOverlay { .. }
         | AddText { .. }

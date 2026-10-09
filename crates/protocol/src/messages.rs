@@ -3,7 +3,8 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::{
-    Action, DeviceInfo, ErrorCode, LiveState, PairingInfo, PendingPairing, Role, ShowSnapshot,
+    Action, CaptureTarget, DeviceInfo, ErrorCode, LiveState, PairingInfo, PendingPairing, Role,
+    ShowSnapshot,
 };
 
 /// Static information about a host, available before pairing (`GET /api/v1/info`).
@@ -51,6 +52,8 @@ pub enum ClientMessage {
     Ping {
         nonce: u32,
     },
+    /// Admins: list screens and windows available for capture.
+    ListCaptureTargets,
 }
 
 /// Messages sent from the host to a client.
@@ -80,6 +83,10 @@ pub enum ServerMessage {
     /// Background rendering status (operator view progress bar).
     RenderProgress {
         queued: u32,
+    },
+    /// Screens and windows that can be captured (admins, on request).
+    CaptureTargets {
+        targets: Vec<CaptureTarget>,
     },
     /// Session role changed by an admin.
     Session {

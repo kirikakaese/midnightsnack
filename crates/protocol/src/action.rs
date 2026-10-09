@@ -2,7 +2,10 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::{CueId, MediaOptions, Overlay, Position, Role, TextTheme, TimerCue, Transition};
+use crate::{
+    CaptureSource, CueId, MediaOptions, OutputDef, Overlay, Position, Role, TestPattern, TextTheme,
+    TimerCue, Transition, WebInfo,
+};
 
 /// Everything any input source can ask the host to do. Every action passes through the single
 /// dispatcher in `crates/core`, which checks it against the sender's role.
@@ -60,6 +63,23 @@ pub enum Action {
     CountdownReset,
     SetStageMessage {
         text: Option<String>,
+    },
+
+    // --- outputs ---
+    /// Shows a test pattern on every output, or hides it.
+    SetTestPattern {
+        pattern: Option<TestPattern>,
+    },
+    /// Adds or replaces (by id) an output definition.
+    PutOutput {
+        output: OutputDef,
+    },
+    RemoveOutput {
+        output_id: String,
+    },
+    SetCueTargets {
+        cue_id: CueId,
+        targets: Option<Vec<String>>,
     },
 
     // --- overlays ---
@@ -147,6 +167,25 @@ pub enum Action {
     SetMediaOptions {
         cue_id: CueId,
         options: MediaOptions,
+    },
+    AddWeb {
+        name: String,
+        web: WebInfo,
+        at_index: Option<u32>,
+    },
+    SetWebOptions {
+        cue_id: CueId,
+        web: WebInfo,
+    },
+    AddCapture {
+        name: String,
+        source: CaptureSource,
+        at_index: Option<u32>,
+    },
+    SetCapture {
+        cue_id: CueId,
+        source: CaptureSource,
+        fps: u32,
     },
 
     // --- host file operations (local only: paths refer to the host's file system) ---

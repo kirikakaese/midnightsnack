@@ -6,8 +6,8 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use crate::protocol::{
-    CueKind, CueSummary, MediaInfo, MediaOptions, Overlay, TextInfo, TextTheme, TimerCue,
-    Transition,
+    CaptureInfo, CueKind, CueSummary, MediaInfo, MediaOptions, OutputDef, Overlay, TextInfo,
+    TextTheme, TimerCue, Transition, WebInfo,
 };
 
 /// Version of the `show.json` format.
@@ -54,6 +54,9 @@ pub enum CueContent {
     Pdf {
         file: MediaRef,
         page_count: u32,
+        /// Office document the PDF was converted from (re-converted when it changes).
+        #[serde(default)]
+        source: Option<MediaRef>,
     },
     Image {
         file: MediaRef,
@@ -82,6 +85,12 @@ pub enum CueContent {
     Timer {
         timer: TimerCue,
     },
+    Web {
+        web: WebInfo,
+    },
+    Capture {
+        capture: CaptureInfo,
+    },
 }
 
 impl CueContent {
@@ -95,6 +104,8 @@ impl CueContent {
             CueContent::Media { video: false, .. } => CueKind::Audio,
             CueContent::Text { .. } => CueKind::Text,
             CueContent::Timer { .. } => CueKind::Timer,
+            CueContent::Web { .. } => CueKind::Web,
+            CueContent::Capture { .. } => CueKind::Capture,
         }
     }
 
@@ -104,7 +115,9 @@ impl CueContent {
             CueContent::Image { .. }
             | CueContent::Blank { .. }
             | CueContent::Media { .. }
-            | CueContent::Timer { .. } => 1,
+            | CueContent::Timer { .. }
+            | CueContent::Web { .. }
+            | CueContent::Capture { .. } => 1,
             CueContent::ImageFolder { files } => files.len() as u32,
             CueContent::Text { slides, .. } => slides.len() as u32,
         }
@@ -113,21 +126,29 @@ impl CueContent {
     /// Media files referenced by this cue (not counting theme assets).
     pub fn media(&self) -> Vec<&MediaRef> {
         match self {
-            CueContent::Pdf { file, .. }
-            | CueContent::Image { file }
-            | CueContent::Media { file, .. } => vec![file],
+            CueContent::Pdf { file, source, .. } => std::iter::once(file).chain(source).collect(),
+            CueContent::Image { file } | CueContent::Media { file, .. } => vec![file],
             CueContent::ImageFolder { files } => files.iter().collect(),
-            CueContent::Blank { .. } | CueContent::Text { .. } | CueContent::Timer { .. } => vec![],
+            CueContent::Blank { .. }
+            | CueContent::Text { .. }
+            | CueContent::Timer { .. }
+            | CueContent::Web { .. }
+            | CueContent::Capture { .. } => vec![],
         }
     }
 
     pub fn media_mut(&mut self) -> Vec<&mut MediaRef> {
         match self {
-            CueContent::Pdf { file, .. }
-            | CueContent::Image { file }
-            | CueContent::Media { file, .. } => vec![file],
+            CueContent::Pdf { file, source, .. } => {
+                std::iter::once(file).chain(source.as_mut()).collect()
+            }
+            CueContent::Image { file } | CueContent::Media { file, .. } => vec![file],
             CueContent::ImageFolder { files } => files.iter_mut().collect(),
-            CueContent::Blank { .. } | CueContent::Text { .. } | CueContent::Timer { .. } => vec![],
+            CueContent::Blank { .. }
+            | CueContent::Text { .. }
+            | CueContent::Timer { .. }
+            | CueContent::Web { .. }
+            | CueContent::Capture { .. } => vec![],
         }
     }
 
@@ -185,6 +206,9 @@ pub struct Cue {
     pub transition: Option<Transition>,
     #[serde(default)]
     pub auto_advance_ms: Option<u32>,
+    /// Output ids this cue is shown on; `None` = all program outputs.
+    #[serde(default)]
+    pub targets: Option<Vec<String>>,
 }
 
 impl Cue {
@@ -198,6 +222,7 @@ impl Cue {
             slide_notes: Vec::new(),
             transition: None,
             auto_advance_ms: None,
+            targets: None,
         }
     }
 
@@ -249,6 +274,21 @@ impl Cue {
                 CueContent::Timer { timer } => Some(timer.clone()),
                 _ => None,
             },
+            web: match &self.content {
+                CueContent::Web { web } => Some(web.clone()),
+                _ => None,
+            },
+            capture: match &self.content {
+                CueContent::Capture { capture } => Some(capture.clone()),
+                _ => None,
+            },
+            targets: self.targets.clone(),
+            converted_from: match &self.content {
+                CueContent::Pdf {
+                    source: Some(src), ..
+                } => Some(src.file_name()),
+                _ => None,
+            },
         }
     }
 }
@@ -277,6 +317,8 @@ pub struct Show {
     pub logo: Option<String>,
     #[serde(default)]
     pub assets: Vec<Asset>,
+    #[serde(default = "default_outputs")]
+    pub outputs: Vec<OutputDef>,
     /// Directory bundled media was extracted to. Runtime only.
     #[serde(skip)]
     pub media_dir: Option<PathBuf>,
@@ -294,9 +336,14 @@ impl Default for Show {
             overlays: Vec::new(),
             logo: None,
             assets: Vec::new(),
+            outputs: default_outputs(),
             media_dir: None,
         }
     }
+}
+
+fn default_outputs() -> Vec<OutputDef> {
+    vec![OutputDef::main()]
 }
 
 impl Show {
@@ -310,6 +357,15 @@ impl Show {
 
     pub fn resolve(&self, media: &MediaRef) -> Option<PathBuf> {
         media.resolve(self.media_dir.as_deref())
+    }
+
+    /// The first program output; content positions of "the output" refer to it.
+    pub fn main_output_id(&self) -> &str {
+        use crate::protocol::OutputFeed;
+        self.outputs
+            .iter()
+            .find(|o| o.feed == OutputFeed::Program)
+            .map_or(OutputDef::MAIN_ID, |o| o.id.as_str())
     }
 
     pub fn asset(&self, id: &str) -> Option<&Asset> {

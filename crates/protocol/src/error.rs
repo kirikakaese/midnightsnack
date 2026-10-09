@@ -28,5 +28,11 @@ pub enum ErrorCode {
     /// The file could not be read or written.
     Io,
     ShowFileInvalid,
+    /// No office suite (LibreOffice / Keynote) is available to convert the file.
+    ConverterMissing,
+    /// The conversion ran but failed.
+    ConversionFailed,
+    /// Screen recording permission is missing (macOS).
+    CapturePermission,
     Internal,
 }
