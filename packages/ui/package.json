@@ -19,8 +19,11 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "intl-messageformat": "^10.7.0",
-    "@midnightsnack/protocol": "workspace:*"
+    "@midnightsnack/protocol": "workspace:*",
+    "@noble/ciphers": "^2.4.0",
+    "@noble/curves": "^2.4.0",
+    "@noble/hashes": "^2.4.0",
+    "intl-messageformat": "^10.7.0"
   },
   "peerDependencies": {
     "svelte": "^5.0.0"

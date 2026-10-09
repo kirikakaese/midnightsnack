@@ -6,6 +6,7 @@ import {
   type Action,
   type CaptureTarget,
   type ClientMessage,
+  type ConnectivityInfo,
   type ControlSettings,
   type DeviceInfo,
   type ErrorCode,
@@ -17,11 +18,19 @@ import {
   type PointerMode,
   type Position,
   type Role,
+  type Routes,
   type ServerMessage,
   type SessionInfo,
   type ShowSnapshot,
   type UploadResponse,
 } from "@midnightsnack/protocol";
+import {
+  DirectTransport,
+  jsonBody,
+  type HostSocket,
+  type HostTransport,
+  type TransportFailure,
+} from "./transport";
 
 export type ConnectionStatus =
   | "connecting"
@@ -33,10 +42,12 @@ export type ConnectionStatus =
   | "incompatible";
 
 export interface ConnectionOptions {
-  /** WebSocket URL, e.g. `ws://192.168.1.5:4747/api/v1/ws`. */
-  wsUrl: string;
-  /** HTTP base for media, e.g. `http://192.168.1.5:4747`. */
-  httpBase: string;
+  /** WebSocket URL, e.g. `ws://192.168.1.5:4747/api/v1/ws` (direct connections). */
+  wsUrl?: string;
+  /** HTTP base for media, e.g. `http://192.168.1.5:4747`; empty for the page's origin. */
+  httpBase?: string;
+  /** How to reach the host; defaults to a direct connection to `wsUrl`/`httpBase`. */
+  transport?: HostTransport;
   token: string;
 }
 
@@ -74,6 +85,12 @@ export class HostConnection {
   autoAcceptUploads = $state(false);
   /** Pointers of other devices, by device id. */
   pointers = $state<Record<string, RemotePointer>>({});
+  /** Admins: interfaces, HTTPS and relay status. */
+  connectivity = $state<ConnectivityInfo | null>(null);
+  /** Paired remotes: the host's other routes (LAN addresses, relay). */
+  routes = $state<Routes | null>(null);
+  /** Why the transport failed last (relay: host offline, wrong key…). */
+  failure = $state<TransportFailure | null>(null);
   /** Round-trip time of the last ping, in ms. */
   latency = $state<number | null>(null);
   /** Last error reported for an action (cleared after a few seconds). */
@@ -82,7 +99,8 @@ export class HostConnection {
   clockOffset = 0;
 
   #opts: ConnectionOptions;
-  #ws: WebSocket | null = null;
+  #transport: HostTransport;
+  #ws: HostSocket | null = null;
   #nextId = 1;
   // Internal bookkeeping, intentionally not reactive.
   // eslint-disable-next-line svelte/prefer-svelte-reactivity
@@ -101,33 +119,35 @@ export class HostConnection {
 
   constructor(opts: ConnectionOptions) {
     this.#opts = opts;
+    this.#transport = opts.transport ?? new DirectTransport(opts.wsUrl ?? "", opts.httpBase ?? "");
+  }
+
+  /** How this connection reaches the host. */
+  get transport(): HostTransport {
+    return this.#transport;
   }
 
   connect(): void {
     this.#closed = false;
     clearTimeout(this.#retryTimer);
     this.status = "connecting";
-    let ws: WebSocket;
-    try {
-      ws = new WebSocket(this.#opts.wsUrl);
-    } catch {
-      this.#scheduleReconnect();
-      return;
-    }
+    const ws = this.#transport.openSocket();
     this.#ws = ws;
     ws.onopen = () => {
+      this.failure = null;
       this.#send({ type: "hello", protocol_version: PROTOCOL_VERSION, token: this.#opts.token });
     };
-    ws.onmessage = (ev) => {
+    ws.onmessage = (text) => {
       try {
-        this.#handle(JSON.parse(String(ev.data)) as ServerMessage);
+        this.#handle(JSON.parse(text) as ServerMessage);
       } catch (e) {
         console.error("bad message from host", e);
       }
     };
-    ws.onclose = () => {
+    ws.onclose = (failure) => {
       if (this.#ws !== ws) return;
       this.#ws = null;
+      if (failure) this.failure = failure;
       clearInterval(this.#pingTimer);
       for (const resolve of this.#pendingActions.values()) resolve("internal");
       this.#pendingActions.clear();
@@ -144,6 +164,7 @@ export class HostConnection {
     clearInterval(this.#pointerTimer);
     this.#ws?.close();
     this.#ws = null;
+    this.#transport.dispose();
   }
 
   #scheduleReconnect(): void {
@@ -154,7 +175,7 @@ export class HostConnection {
   }
 
   #send(msg: ClientMessage): boolean {
-    if (this.#ws?.readyState !== WebSocket.OPEN) return false;
+    if (!this.#ws?.open) return false;
     this.#ws.send(JSON.stringify(msg));
     return true;
   }
@@ -191,6 +212,12 @@ export class HostConnection {
         break;
       case "pairing":
         this.pairing = msg.pairing;
+        break;
+      case "connectivity":
+        this.connectivity = msg.connectivity;
+        break;
+      case "routes":
+        this.routes = msg.routes;
         break;
       case "capture_targets":
         this.captureTargets = msg.targets;
@@ -313,23 +340,27 @@ export class HostConnection {
     const cue = this.show.cues.find((c) => c.id === pos.cue_id);
     if (!cue || cue.kind === "blank" || pos.slide >= cue.slide_count) return null;
     const size = width && height ? `&w=${Math.round(width)}&h=${Math.round(height)}` : "";
-    return (
-      `${this.#opts.httpBase}/api/v1/media/slide/${encodeURIComponent(pos.cue_id)}/${pos.slide}` +
-      `?k=${this.session.media_key}${size}`
+    return this.#transport.mediaSrc(
+      `/api/v1/media/slide/${encodeURIComponent(pos.cue_id)}/${pos.slide}` +
+        `?k=${this.session.media_key}${size}`,
     );
   }
 
-  /** URL of a video/audio cue's file (supports range requests). */
+  /** URL of a video/audio cue's file (supports range requests); `null` over the relay. */
   mediaUrl(cueId: string): string | null {
-    if (!this.session) return null;
-    return `${this.#opts.httpBase}/api/v1/media/file/${encodeURIComponent(cueId)}?k=${this.session.media_key}`;
+    if (!this.session || !this.#transport.streams) return null;
+    return this.#transport.mediaSrc(
+      `/api/v1/media/file/${encodeURIComponent(cueId)}?k=${this.session.media_key}`,
+    );
   }
 
-  /** MJPEG stream of a capture cue. */
+  /** MJPEG stream of a capture cue; `null` over the relay. */
   captureUrl(cueId: string, fps?: number): string | null {
-    if (!this.session) return null;
+    if (!this.session || !this.#transport.streams) return null;
     const rate = fps ? `&fps=${fps}` : "";
-    return `${this.#opts.httpBase}/api/v1/media/capture/${encodeURIComponent(cueId)}?k=${this.session.media_key}${rate}`;
+    return this.#transport.mediaSrc(
+      `/api/v1/media/capture/${encodeURIComponent(cueId)}?k=${this.session.media_key}${rate}`,
+    );
   }
 
   /** Screens and windows available for capture (admins). */
@@ -351,36 +382,33 @@ export class HostConnection {
    * Sends a file to the host's inbox. `onProgress` gets the fraction sent (0–1). Resolves with
    * the host's answer or rejects with an error code.
    */
-  upload(file: File, onProgress?: (fraction: number) => void): Promise<UploadResponse> {
-    return new Promise((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      xhr.open(
+  async upload(file: File, onProgress?: (fraction: number) => void): Promise<UploadResponse> {
+    let res;
+    try {
+      res = await this.#transport.request(
         "POST",
-        `${this.#opts.httpBase}/api/v1/upload?name=${encodeURIComponent(file.name)}`,
+        `/api/v1/upload?name=${encodeURIComponent(file.name)}`,
+        {
+          headers: { Authorization: `Bearer ${this.#opts.token}` },
+          body: file,
+          onUploadProgress: onProgress,
+        },
       );
-      xhr.setRequestHeader("Authorization", `Bearer ${this.#opts.token}`);
-      xhr.upload.onprogress = (e) => {
-        if (e.lengthComputable) onProgress?.(e.loaded / e.total);
-      };
-      xhr.onload = () => {
-        let body: unknown = null;
-        try {
-          body = JSON.parse(xhr.responseText);
-        } catch {
-          // Not JSON (proxy error page); handled below.
-        }
-        if (xhr.status === 200) resolve(body as UploadResponse);
-        else reject(((body as { code?: ErrorCode } | null)?.code ?? "internal") as ErrorCode);
-      };
-      xhr.onerror = () => reject("io" as ErrorCode);
-      xhr.send(file);
-    });
+    } catch {
+      throw "io" as ErrorCode;
+    }
+    const body = jsonBody<UploadResponse & { code?: ErrorCode }>(res);
+    if (res.status === 200 && body) return body;
+    // Not JSON (proxy error page) or an API error.
+    throw (body?.code ?? "internal") as ErrorCode;
   }
 
   /** URL of an image asset (logo, background, logo bug). */
   assetUrl(assetId: string | null | undefined): string | null {
     if (!assetId || !this.session) return null;
-    return `${this.#opts.httpBase}/api/v1/media/asset/${encodeURIComponent(assetId)}?k=${this.session.media_key}`;
+    return this.#transport.mediaSrc(
+      `/api/v1/media/asset/${encodeURIComponent(assetId)}?k=${this.session.media_key}`,
+    );
   }
 
   cue(id: string | undefined | null) {

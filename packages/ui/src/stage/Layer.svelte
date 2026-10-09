@@ -8,6 +8,8 @@
   import TimerContent from "./TimerContent.svelte";
   import CaptureContent from "./CaptureContent.svelte";
   import WebPlaceholder from "./WebPlaceholder.svelte";
+  import Placeholder from "./Placeholder.svelte";
+  import { t } from "../i18n/index.svelte";
 
   interface Props {
     conn: HostConnection;
@@ -68,6 +70,13 @@
       {onready}
     />
   {/if}
+{:else if content.kind === "unavailable"}
+  <Placeholder
+    icon={content.icon}
+    name={content.name}
+    detail={t("stage.not_over_relay")}
+    {onready}
+  />
 {:else if content.kind === "capture"}
   <CaptureContent src={content.src} {fit} {onready} />
 {:else if content.kind === "text"}

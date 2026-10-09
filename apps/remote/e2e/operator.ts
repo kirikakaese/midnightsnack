@@ -11,9 +11,11 @@ import type {
 
 export interface DevInfo {
   port: number;
+  relay_port: number;
   operator_token: string;
   pin: string;
   join_url: string;
+  relay_join_url: string | null;
 }
 
 export function devInfo(): DevInfo {
@@ -32,6 +34,8 @@ export class Operator {
   /** Last pointer message per device. */
   pointers = new Map<string, Extract<ServerMessage, { type: "pointer" }>>();
   joinUrl = "";
+  /** Join link through the relay (while the host is connected to it). */
+  relayJoinUrl = "";
 
   private constructor(ws: WebSocket) {
     this.#ws = ws;
@@ -44,7 +48,8 @@ export class Operator {
       if (m.type === "devices") this.pending = m.pending;
       if (m.type === "pairing") {
         this.pin = m.pairing.pin;
-        this.joinUrl = m.pairing.join_urls[0] ?? "";
+        this.joinUrl = m.pairing.links.find((l) => l.kind === "lan")?.url ?? "";
+        this.relayJoinUrl = m.pairing.links.find((l) => l.kind === "relay")?.url ?? "";
       }
       for (const l of this.#listeners) l(m);
     };

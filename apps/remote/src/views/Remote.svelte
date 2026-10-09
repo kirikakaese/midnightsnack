@@ -16,18 +16,30 @@
     t,
   } from "@midnightsnack/ui";
   import { onDestroy, untrack } from "svelte";
-  import { storage, wsUrl } from "../lib/storage";
+  import {
+    makeTransport,
+    storage,
+    switchToLan,
+    switchToRelay,
+    type HostLink,
+  } from "../lib/storage";
   import { keepScreenOn, tap } from "../lib/wakelock";
 
   interface Props {
+    link: HostLink;
     token: string;
     onunpaired: () => void;
   }
-  let { token, onunpaired }: Props = $props();
+  let { link, token, onunpaired }: Props = $props();
 
-  // The parent remounts this view (`{#key}`) when the token changes.
-  const conn = new HostConnection({ wsUrl: wsUrl(), httpBase: "", token: untrack(() => token) });
+  // The parent remounts this view (`{#key}`) when the token changes, and only shows it for
+  // usable links.
+  const conn = new HostConnection({
+    transport: makeTransport(untrack(() => link))!,
+    token: untrack(() => token),
+  });
   conn.connect();
+  const viaRelay = conn.transport.kind === "relay";
   const ticker = new Ticker(500);
   const releaseWake = keepScreenOn();
   let view = $state<"control" | "stage">("control");
@@ -39,8 +51,46 @@
   });
 
   $effect(() => {
-    if (conn.status === "unauthorized") storage.setToken(null);
+    if (conn.status === "unauthorized") storage.setToken(link, null);
   });
+
+  // Fallback: when the local network stays unreachable and the host has a relay, move there
+  // (after a short countdown the user can cancel); on the relay, offer the way back.
+  const FALLBACK_AFTER_MS = 8000;
+  const FALLBACK_COUNTDOWN_MS = 5000;
+  let knownRoutes = $state(storage.routes());
+  $effect(() => {
+    if (conn.routes && !viaRelay) {
+      storage.setRoutes(conn.routes);
+      knownRoutes = conn.routes;
+    }
+  });
+  const routes = $derived(conn.routes ?? (viaRelay ? null : knownRoutes));
+  let lostSince = $state<number | null>(null);
+  let stayLocal = $state(false);
+  $effect(() => {
+    if (conn.status === "connected") {
+      lostSince = null;
+      stayLocal = false;
+    } else if (conn.status === "disconnected" || conn.status === "connecting") {
+      lostSince ??= Date.now();
+    }
+  });
+  const relayRoute = $derived(routes?.relay ?? null);
+  const fallbackIn = $derived(
+    !viaRelay && relayRoute && lostSince !== null && !stayLocal
+      ? FALLBACK_AFTER_MS + FALLBACK_COUNTDOWN_MS - (ticker.now - lostSince)
+      : null,
+  );
+  $effect(() => {
+    if (fallbackIn !== null && fallbackIn <= 0 && relayRoute) {
+      switchToRelay(
+        relayRoute,
+        untrack(() => token),
+      );
+    }
+  });
+  const lanBase = $derived(viaRelay ? (conn.routes?.lan[0] ?? null) : null);
 
   const rank: Record<Role, number> = { stage_viewer: 0, presenter: 1, operator: 2, admin: 3 };
   const role = $derived(conn.session?.role ?? "stage_viewer");
@@ -139,6 +189,14 @@
     <header>
       <StatusDot status={statusKind} label={conn.host?.name ?? t("status.connecting")} />
       <span class="role">{t(`role.${role}`)}</span>
+      {#if viaRelay}
+        <span class="via" title={t("remote.via_relay_hint")}>{t("remote.via_relay")}</span>
+        {#if lanBase}
+          <button class="switch" onclick={() => switchToLan(lanBase, token)}
+            >{t("remote.use_local_network")}</button
+          >
+        {/if}
+      {/if}
       {#if role !== "stage_viewer"}
         <button class="switch" onclick={() => (view = view === "stage" ? "control" : "stage")}>
           {view === "stage" ? t("remote.control_view") : t("remote.stage_view")}
@@ -146,8 +204,18 @@
       {/if}
     </header>
 
-    {#if conn.status !== "connected"}
-      <div class="banner" role="status">{t("remote.reconnecting")}</div>
+    {#if fallbackIn !== null && fallbackIn <= FALLBACK_COUNTDOWN_MS && relayRoute}
+      <div class="banner fallback" role="alert">
+        <span
+          >{t("remote.switching_to_relay", { s: Math.max(1, Math.ceil(fallbackIn / 1000)) })}</span
+        >
+        <Button onclick={() => switchToRelay(relayRoute, token)}>{t("remote.switch_now")}</Button>
+        <Button variant="ghost" onclick={() => (stayLocal = true)}>{t("remote.stay_local")}</Button>
+      </div>
+    {:else if conn.status !== "connected"}
+      <div class="banner" role="status">
+        {viaRelay && conn.failure ? t(`error.${conn.failure}`) : t("remote.reconnecting")}
+      </div>
     {/if}
 
     {#if showStage}
@@ -424,6 +492,22 @@
     color: #241500;
     border-radius: var(--ms-radius-sm);
     font-weight: 600;
+  }
+  .banner.fallback {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+  }
+  .banner.fallback span {
+    flex: 1 1 12em;
+  }
+  .via {
+    font-size: 0.75rem;
+    padding: 2px 6px;
+    border-radius: 999px;
+    border: 1px solid var(--ms-border);
+    color: var(--ms-text-muted);
   }
   .screens {
     display: grid;
