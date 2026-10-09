@@ -115,8 +115,10 @@ jobs:
         run: node scripts/fetch-pdfium.mjs
       - name: Build web remote
         run: pnpm build:remote
-      - name: Build development server
-        run: cargo build -p midnightsnack-server --bin midnightsnack-devserver --locked
+      - name: Build development server and relay
+        run: |
+          cargo build -p midnightsnack-server --bin midnightsnack-devserver --locked
+          cargo build -p midnightsnack-relay --locked
       - name: Install Chromium
         run: pnpm --filter @midnightsnack/remote exec playwright install --with-deps chromium
       - name: Playwright
@@ -126,3 +128,30 @@ jobs:
         with:
           name: playwright-results
           path: apps/remote/test-results
+
+  relay-image:
+    name: Relay Docker image
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v3
+      - name: Build (not pushed)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/relay/Dockerfile
+          push: false
+          load: true
+          tags: midnightsnack-relay:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Start and check health
+        run: |
+          docker run -d --name relay -p 8080:8080 midnightsnack-relay:ci
+          for i in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:8080/healthz && break
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:8080/relay/v1/info
+          curl -fsS http://127.0.0.1:8080/r/AAAAAAAAAAAAAAAAAAAAAA | grep -q '<div id="app"'
+          docker exec relay /usr/local/bin/midnightsnack-relay --healthcheck
