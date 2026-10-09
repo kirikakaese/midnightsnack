@@ -3,6 +3,7 @@
 import type {
   CaptureSource,
   CueSummary,
+  OpenSlidesSlide,
   MediaOptions,
   Position,
   ShowSnapshot,
@@ -36,11 +37,19 @@ export type Content =
     }
   | { kind: "web"; key: string; cueId: string; url: string; openslides: boolean; name: string }
   | { kind: "capture"; key: string; cueId: string; src: string; name: string }
+  | {
+      kind: "openslides";
+      key: string;
+      slide: OpenSlidesSlide;
+      page: number;
+      theme: TextTheme;
+      backgroundSrc: string | null;
+    }
   /** Content that cannot be shown on this device (video and capture through the relay). */
   | { kind: "unavailable"; key: string; icon: string; name: string };
 
 export function effectiveTheme(show: ShowSnapshot, cue: CueSummary): TextTheme {
-  return cue.text?.theme ?? cue.timer?.theme ?? show.default_theme;
+  return cue.text?.theme ?? cue.timer?.theme ?? cue.openslides?.theme ?? show.default_theme;
 }
 
 export function effectiveTransition(show: ShowSnapshot | null, cue: CueSummary | null): Transition {
@@ -113,6 +122,18 @@ export function describe(
         url: cue.web.url,
         openslides: cue.web.openslides,
         name: cue.name,
+      };
+    }
+    case "open_slides": {
+      if (!cue.openslides) return null;
+      const theme = effectiveTheme(show, cue);
+      return {
+        kind: "openslides",
+        key,
+        slide: cue.openslides.slide,
+        page: pos.slide,
+        theme,
+        backgroundSrc: conn.assetUrl(theme.background_image),
       };
     }
     case "capture": {
