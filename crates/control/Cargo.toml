@@ -1,0 +1,18 @@
+[package]
+name = "midnightsnack-control"
+description = "MIDI and OSC control surfaces for midnightsnack"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+midir = "0.10"
+midnightsnack-protocol.workspace = true
+rosc = "0.11"
+tracing.workspace = true
+
+[lints]
+workspace = true

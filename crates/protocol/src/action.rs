@@ -3,8 +3,8 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::{
-    CaptureSource, CueId, MediaOptions, OutputDef, Overlay, Position, Role, Stroke, TestPattern,
-    TextTheme, TimerCue, Transition, WebInfo,
+    CaptureSource, CueId, MediaOptions, OscSettings, OutputDef, Overlay, Position, Role, Stroke,
+    TestPattern, TextTheme, TimerCue, Transition, WebInfo,
 };
 
 /// Everything any input source can ask the host to do. Every action passes through the single
@@ -76,6 +76,11 @@ pub enum Action {
     /// Restrict API keys (HTTP API, WebSocket, OSC) to this computer.
     SetApiLocalOnly {
         on: bool,
+    },
+
+    /// Turns the OSC server on or off and sets its UDP port.
+    ConfigureOsc {
+        osc: OscSettings,
     },
 
     // --- upload inbox ---

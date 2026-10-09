@@ -1130,7 +1130,8 @@ impl Engine {
             | AcceptUpload { .. }
             | RejectUpload { .. }
             | SetAutoAcceptUploads { .. }
-            | SetApiLocalOnly { .. } => return Err(ErrorCode::InvalidState),
+            | SetApiLocalOnly { .. }
+            | ConfigureOsc { .. } => return Err(ErrorCode::InvalidState),
         })
     }
 

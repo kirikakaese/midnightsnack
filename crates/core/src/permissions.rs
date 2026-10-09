@@ -25,7 +25,7 @@ pub fn required_role(action: &Action) -> Role {
         SetTestPattern { .. } => Role::Operator,
         DrawStroke { .. } | ClearDrawing => Role::Presenter,
         AcceptUpload { .. } | RejectUpload { .. } | SetAutoAcceptUploads { .. } => Role::Admin,
-        SetApiLocalOnly { .. } => Role::Admin,
+        SetApiLocalOnly { .. } | ConfigureOsc { .. } => Role::Admin,
         PutOutput { .. }
         | RemoveOutput { .. }
         | SetCueTargets { .. }

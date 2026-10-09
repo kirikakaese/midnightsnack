@@ -4,7 +4,6 @@
   import { Button, t, type HostConnection } from "@midnightsnack/ui";
   import { ask } from "@tauri-apps/plugin-dialog";
   import { host } from "../lib/host";
-  import ApiKeysPanel from "./ApiKeysPanel.svelte";
 
   interface Props {
     conn: HostConnection;
@@ -158,8 +157,6 @@
       </ul>
       <Button variant="danger" onclick={disconnectAll}>{t("devices.disconnect_all")}</Button>
     {/if}
-
-    <ApiKeysPanel {conn} />
   </div>
 </div>
 

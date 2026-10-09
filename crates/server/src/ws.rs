@@ -185,13 +185,13 @@ async fn send_inbox(socket: &mut WebSocket, state: &AppState) -> WsResult {
 async fn send_devices(socket: &mut WebSocket, state: &AppState) -> WsResult {
     let devices = lock(&state.devices).list();
     let pending = lock(&state.pairing).pending();
-    let api_local_only = lock(&state.settings).api_local_only;
+    let control = state.control_settings();
     send(
         socket,
         &ServerMessage::Devices {
             devices,
             pending,
-            api_local_only,
+            control,
         },
     )
     .await

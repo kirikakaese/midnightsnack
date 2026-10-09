@@ -11,6 +11,7 @@ mod devices;
 pub mod discovery;
 mod host_actions;
 mod inbox;
+mod osc_service;
 mod pairing;
 mod scheduler;
 pub mod state;
@@ -240,6 +241,7 @@ pub async fn start(config: ServerConfig) -> std::io::Result<ServerHandle> {
     tokio::spawn(autosave::run(state.clone()));
     tokio::spawn(scheduler::run(state.clone()));
     tokio::spawn(capture_status(state.clone()));
+    tokio::spawn(osc_service::run(state.clone()));
     tokio::spawn(host_actions::refresh_conversions(state.clone()));
     state.prefetch();
 

@@ -82,6 +82,18 @@ pub async fn run(state: &Arc<AppState>, action: Action) -> Result<(), ErrorCode>
             if on {
                 state.emit(Event::ApiLocalOnly);
             }
+            // OSC binds to this computer or all interfaces accordingly.
+            state.osc_restart.notify_one();
+            state.emit(Event::Devices);
+            Ok(())
+        }
+        Action::ConfigureOsc { osc } => {
+            if osc.port == 0 {
+                return Err(ErrorCode::InvalidState);
+            }
+            lock(&state.settings).osc = osc;
+            state.save_settings();
+            state.osc_restart.notify_one();
             state.emit(Event::Devices);
             Ok(())
         }

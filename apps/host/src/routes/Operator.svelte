@@ -16,6 +16,7 @@
   import { connectToHost, host } from "../lib/host";
   import { buildKeymap, installKeyHandler, type KeyAction } from "../lib/keymap";
   import ConnectPanel from "../operator/ConnectPanel.svelte";
+  import ControlPanel from "../operator/ControlPanel.svelte";
   import CueList from "../operator/CueList.svelte";
   import Inspector from "../operator/Inspector.svelte";
   import LivePanel from "../operator/LivePanel.svelte";
@@ -30,7 +31,7 @@
   let keymap = $state<Record<string, KeyAction>>(buildKeymap({}));
   let readySent = false;
   let selected = $state<string | null>(null);
-  type TabId = "live" | "cue" | "show" | "outputs" | "connect";
+  type TabId = "live" | "cue" | "show" | "outputs" | "connect" | "control";
   let tab = $state<TabId>("live");
   const tabs = $derived([
     { id: "live" as const, label: t("tab.live") },
@@ -38,6 +39,7 @@
     { id: "show" as const, label: t("tab.show") },
     { id: "outputs" as const, label: t("tab.outputs") },
     { id: "connect" as const, label: t("tab.connect"), badge: conn?.pending.length ?? 0 },
+    { id: "control" as const, label: t("tab.control") },
   ]);
   // Selecting a cue opens the inspector.
   $effect(() => {
@@ -200,6 +202,8 @@
           <ShowPanel {conn} />
         {:else if tab === "outputs"}
           <OutputPanel {conn} />
+        {:else if tab === "control"}
+          <ControlPanel {conn} />
         {:else}
           <ConnectPanel {conn} />
         {/if}

@@ -3,8 +3,8 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::{
-    Action, CaptureTarget, DeviceInfo, ErrorCode, InboxItem, LiveState, PairingInfo,
-    PendingPairing, PointerMode, Role, ShowSnapshot,
+    Action, CaptureTarget, ControlSettings, DeviceInfo, ErrorCode, InboxItem, LiveState,
+    PairingInfo, PendingPairing, PointerMode, Role, ShowSnapshot,
 };
 
 /// Static information about a host, available before pairing (`GET /api/v1/info`).
@@ -91,8 +91,7 @@ pub enum ServerMessage {
     Devices {
         devices: Vec<DeviceInfo>,
         pending: Vec<PendingPairing>,
-        /// API keys (HTTP API, WebSocket, OSC) only work from this computer.
-        api_local_only: bool,
+        control: ControlSettings,
     },
     /// Reply to `create_api_key`: the token is shown once and never again.
     ApiKey {

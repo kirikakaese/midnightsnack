@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Typed wrappers around the host's Tauri commands.
-import type { HostInfo } from "@midnightsnack/protocol";
+import type { HostInfo, MidiBinding, MidiTrigger } from "@midnightsnack/protocol";
 import { HostConnection } from "@midnightsnack/ui";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -32,6 +32,11 @@ export interface OutputWindowState {
   window_open: boolean;
 }
 
+export interface MidiSettings {
+  enabled: boolean;
+  bindings: MidiBinding[];
+}
+
 export interface DisplayStatus {
   displays: DisplayInfo[];
   /** Output ids whose remembered display is not connected. */
@@ -50,8 +55,27 @@ export const host = {
   keymap: () => invoke<Record<string, string>>("keymap"),
   qrSvg: (text: string) => invoke<string>("qr_svg", { text }),
   openCaptureSettings: () => invoke<void>("open_capture_settings"),
+  midiPorts: () => invoke<string[]>("midi_ports"),
+  midiSettings: () => invoke<MidiSettings>("midi_settings"),
+  setMidiSettings: (settings: MidiSettings) => invoke<void>("set_midi_settings", { settings }),
+  /** Resolves with the next MIDI press, or `null` after 10 s. */
+  midiLearn: () => invoke<MidiTrigger | null>("midi_learn"),
   uiReady: () => invoke<void>("ui_ready"),
 };
+
+/** Fired for every MIDI press (activity indicator). */
+export function onMidiPress(cb: (trigger: MidiTrigger) => void): () => void {
+  let unlisten: (() => void) | null = null;
+  let cancelled = false;
+  listen<MidiTrigger>("midi-press", (e) => cb(e.payload)).then((u) => {
+    if (cancelled) u();
+    else unlisten = u;
+  });
+  return () => {
+    cancelled = true;
+    unlisten?.();
+  };
+}
 
 /** Fired by the host when displays are plugged or unplugged. */
 export function onDisplaysChanged(cb: (status: DisplayStatus) => void): () => void {

@@ -6,12 +6,14 @@
 //! See `docs/dev/protocol.md` for the full specification.
 
 mod action;
+mod control;
 mod error;
 mod messages;
 mod pairing;
 mod state;
 
 pub use action::*;
+pub use control::*;
 pub use error::*;
 pub use messages::*;
 pub use pairing::*;

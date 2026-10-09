@@ -17,6 +17,7 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 keepawake = "0.6"
+midnightsnack-control.workspace = true
 midnightsnack-core.workspace = true
 midnightsnack-protocol.workspace = true
 midnightsnack-server = { path = "../../../crates/server" }
@@ -25,7 +26,7 @@ serde.workspace = true
 serde_json.workspace = true
 tauri = { version = "2", features = ["unstable"] }
 tauri-plugin-dialog = "2"
-tokio = { version = "1", features = ["rt-multi-thread", "sync"] }
+tokio = { version = "1", features = ["rt-multi-thread", "sync", "time"] }
 tracing.workspace = true
 tracing-subscriber.workspace = true
 

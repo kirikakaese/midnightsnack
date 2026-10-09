@@ -1136,10 +1136,8 @@ async fn api_keys_drive_the_http_api_until_revoked() {
     let (devices, local_only) = op
         .wait(|m| match m {
             ServerMessage::Devices {
-                devices,
-                api_local_only,
-                ..
-            } if devices.iter().any(|d| d.api_key) => Some((devices, api_local_only)),
+                devices, control, ..
+            } if devices.iter().any(|d| d.api_key) => Some((devices, control.api_local_only)),
             _ => None,
         })
         .await;
@@ -1209,4 +1207,121 @@ async fn api_keys_drive_the_http_api_until_revoked() {
     assert_eq!(res.status(), 401);
     let res = f.http.get(f.url("/api/v1/state")).send().await.unwrap();
     assert_eq!(res.status(), 401);
+}
+
+#[tokio::test]
+async fn osc_controls_the_show_and_reports_state() {
+    use rosc::{OscMessage, OscPacket, OscType};
+    let f = fixture().await;
+    let mut op = f.connect(&f.handle.operator_token).await;
+    op.welcome().await;
+    op.action(Action::AddFiles {
+        paths: vec![f.pdf("a.pdf", 2), f.pdf("b.pdf", 3)],
+        at_index: None,
+    })
+    .await
+    .unwrap();
+    let port = std::net::UdpSocket::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port();
+    op.action(Action::ConfigureOsc {
+        osc: OscSettings {
+            enabled: true,
+            port,
+        },
+    })
+    .await
+    .unwrap();
+    op.wait(|m| match m {
+        ServerMessage::Devices { control, .. } if control.osc_listening == Some(port) => Some(()),
+        _ => None,
+    })
+    .await;
+
+    let client = tokio::net::UdpSocket::bind("127.0.0.1:0").await.unwrap();
+    client.connect(("127.0.0.1", port)).await.unwrap();
+    let send = |addr: &str, args: Vec<OscType>| {
+        rosc::encoder::encode(&OscPacket::Message(OscMessage {
+            addr: addr.into(),
+            args,
+        }))
+        .unwrap()
+    };
+    // Reads feedback bundles until `pred` holds for the state messages.
+    async fn until(
+        client: &tokio::net::UdpSocket,
+        pred: impl Fn(&std::collections::HashMap<String, OscType>) -> bool,
+    ) -> std::collections::HashMap<String, OscType> {
+        let mut buf = vec![0u8; 65536];
+        loop {
+            let n = tokio::time::timeout(Duration::from_secs(5), client.recv(&mut buf))
+                .await
+                .expect("no OSC feedback")
+                .unwrap();
+            let (_, packet) = rosc::decoder::decode_udp(&buf[..n]).unwrap();
+            let OscPacket::Bundle(b) = packet else {
+                continue;
+            };
+            let state: std::collections::HashMap<String, OscType> = b
+                .content
+                .into_iter()
+                .filter_map(|p| match p {
+                    OscPacket::Message(m) => Some((m.addr, m.args.into_iter().next()?)),
+                    _ => None,
+                })
+                .collect();
+            if pred(&state) {
+                return state;
+            }
+        }
+    }
+    client
+        .send(&send("/midnightsnack/subscribe", vec![]))
+        .await
+        .unwrap();
+    until(&client, |s| {
+        s.get("/midnightsnack/state/blackout") == Some(&OscType::Int(0))
+    })
+    .await;
+
+    client
+        .send(&send("/midnightsnack/blackout", vec![OscType::Int(1)]))
+        .await
+        .unwrap();
+    until(&client, |s| {
+        s.get("/midnightsnack/state/blackout") == Some(&OscType::Int(1))
+    })
+    .await;
+
+    client
+        .send(&send("/midnightsnack/cue/2", vec![OscType::Int(3)]))
+        .await
+        .unwrap();
+    let s = until(&client, |s| {
+        s.get("/midnightsnack/state/cue/number") == Some(&OscType::Int(2))
+    })
+    .await;
+    assert_eq!(s["/midnightsnack/state/slide"], OscType::Int(3));
+    assert_eq!(
+        s["/midnightsnack/state/cue/name"],
+        OscType::String("b".into())
+    );
+    assert!(op.live().await.masters.blackout);
+
+    // Turning OSC off stops the server.
+    op.action(Action::ConfigureOsc {
+        osc: OscSettings {
+            enabled: false,
+            port,
+        },
+    })
+    .await
+    .unwrap();
+    op.wait(|m| match m {
+        ServerMessage::Devices { control, .. } if control.osc_listening.is_none() => Some(()),
+        _ => None,
+    })
+    .await;
 }

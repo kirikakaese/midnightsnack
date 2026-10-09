@@ -6,6 +6,7 @@ import {
   type Action,
   type CaptureTarget,
   type ClientMessage,
+  type ControlSettings,
   type DeviceInfo,
   type ErrorCode,
   type HostInfo,
@@ -64,8 +65,8 @@ export class HostConnection {
   pending = $state<PendingPairing[]>([]);
   pairing = $state<PairingInfo | null>(null);
   renderQueued = $state(0);
-  /** Admins: API keys only work from this computer. */
-  apiLocalOnly = $state(true);
+  /** Admins: API key and OSC settings. */
+  control = $state<ControlSettings | null>(null);
   /** Admins: the API key just created (its token is shown once). */
   newApiKey = $state<{ device_id: string; name: string; token: string } | null>(null);
   /** Admins: uploaded files waiting for a decision. */
@@ -183,7 +184,7 @@ export class HostConnection {
       case "devices":
         this.devices = msg.devices;
         this.pending = msg.pending;
-        this.apiLocalOnly = msg.api_local_only;
+        this.control = msg.control;
         break;
       case "api_key":
         this.newApiKey = { device_id: msg.device_id, name: msg.name, token: msg.token };

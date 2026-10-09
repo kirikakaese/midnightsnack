@@ -68,6 +68,7 @@ pub struct Settings {
     pub auto_accept_uploads: bool,
     /// API keys only work from this computer.
     pub api_local_only: bool,
+    pub osc: midnightsnack_protocol::OscSettings,
 }
 
 impl Default for Settings {
@@ -76,6 +77,7 @@ impl Default for Settings {
             auto_approve: None,
             auto_accept_uploads: false,
             api_local_only: true,
+            osc: Default::default(),
         }
     }
 }
@@ -90,6 +92,10 @@ pub struct AppState {
     pub capture: CaptureHub,
     pub inbox: Mutex<crate::inbox::Inbox>,
     pub max_upload: std::sync::atomic::AtomicU64,
+    /// Port the OSC server listens on, if running.
+    pub osc_listening: Mutex<Option<u16>>,
+    /// Rebinds the OSC server after its settings changed.
+    pub osc_restart: Notify,
     pub events: broadcast::Sender<Event>,
     /// media key -> device id
     pub media_keys: Mutex<HashMap<String, String>>,
@@ -131,6 +137,8 @@ impl AppState {
             capture: CaptureHub::new(),
             inbox: Mutex::new(Default::default()),
             max_upload: std::sync::atomic::AtomicU64::new(crate::inbox::DEFAULT_MAX_UPLOAD_BYTES),
+            osc_listening: Mutex::new(None),
+            osc_restart: Notify::new(),
             events,
             media_keys: Mutex::new(HashMap::new()),
             output_size: Mutex::new(DEFAULT_OUTPUT_SIZE),
@@ -149,6 +157,15 @@ impl AppState {
             addr.ip().is_loopback(),
             lock(&self.settings).api_local_only,
         )
+    }
+
+    pub fn control_settings(&self) -> midnightsnack_protocol::ControlSettings {
+        let s = lock(&self.settings);
+        midnightsnack_protocol::ControlSettings {
+            api_local_only: s.api_local_only,
+            osc: s.osc,
+            osc_listening: *lock(&self.osc_listening),
+        }
     }
 
     pub fn max_upload_bytes(&self) -> u64 {

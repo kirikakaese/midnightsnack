@@ -5,6 +5,7 @@
 //! remote devices (with loopback-only tokens), so every control path shares one dispatcher.
 
 mod hotplug;
+mod midi;
 mod output;
 mod settings;
 mod web;
@@ -14,7 +15,7 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 
 use midnightsnack_core::APP_VERSION;
-use midnightsnack_protocol::{HostInfo, OutputFeed, DEFAULT_PORT, PROTOCOL_VERSION};
+use midnightsnack_protocol::{HostInfo, MidiTrigger, OutputFeed, DEFAULT_PORT, PROTOCOL_VERSION};
 use midnightsnack_server::{start, state::lock, ServerConfig, ServerHandle};
 use serde::Serialize;
 use tauri::{AppHandle, Manager, State, Webview};
@@ -227,6 +228,37 @@ fn qr_svg(text: String) -> Result<String, String> {
 
 /// Opens the macOS privacy settings for Screen Recording.
 #[tauri::command]
+fn midi_ports() -> Vec<String> {
+    midnightsnack_control::midi::port_names()
+}
+
+#[tauri::command]
+fn midi_settings(state: State<'_, HostState>) -> midi::MidiSettings {
+    state
+        .settings
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .midi
+        .clone()
+}
+
+#[tauri::command]
+fn set_midi_settings(state: State<'_, HostState>, settings: midi::MidiSettings) {
+    state
+        .settings
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .midi = settings;
+    state.save_settings();
+}
+
+/// Waits up to 10 s for the next MIDI press; `null` on timeout.
+#[tauri::command]
+async fn midi_learn(learn: State<'_, midi::Learn>) -> Result<Option<MidiTrigger>, ()> {
+    Ok(learn.next(std::time::Duration::from_secs(10)).await)
+}
+
+#[tauri::command]
 fn open_capture_settings() {
     #[cfg(target_os = "macos")]
     {
@@ -322,6 +354,10 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     update_keep_awake(&handle, &app.state::<HostState>());
 
     hotplug::spawn(handle.clone());
+    app.manage(midi::Learn::default());
+    if !smoke {
+        midi::spawn(handle.clone(), server_state.clone());
+    }
     tauri::async_runtime::spawn(web::run(handle, server_state, data_dir.join("web")));
     Ok(())
 }
@@ -361,6 +397,10 @@ pub fn run() {
             keymap,
             qr_svg,
             open_capture_settings,
+            midi_ports,
+            midi_settings,
+            set_midi_settings,
+            midi_learn,
             ui_ready
         ])
         .run(tauri::generate_context!())

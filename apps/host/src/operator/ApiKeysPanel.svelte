@@ -82,7 +82,7 @@
   <label class="check">
     <input
       type="checkbox"
-      checked={conn.apiLocalOnly}
+      checked={conn.control?.api_local_only ?? true}
       onchange={(e) => conn.action({ action: "set_api_local_only", on: e.currentTarget.checked })}
     />
     {t("apikeys.local_only")}
