@@ -281,8 +281,28 @@ async fn send_full_state<S: ClientSocket>(
         )
         .await?;
     }
+    send_openslides(socket, state, role).await?;
     let queued = *state.render.subscribe_queued().borrow();
     send(socket, &ServerMessage::RenderProgress { queued }).await
+}
+
+async fn send_openslides<S: ClientSocket>(
+    socket: &mut S,
+    state: &AppState,
+    role: Role,
+) -> WsResult {
+    let data = lock(&state.openslides_data).as_deref().cloned();
+    send(socket, &ServerMessage::OpenSlides { data }).await?;
+    if role == Role::Admin {
+        send(
+            socket,
+            &ServerMessage::OpenSlidesStatus {
+                status: state.openslides_status(),
+            },
+        )
+        .await?;
+    }
+    Ok(())
 }
 
 async fn send_inbox<S: ClientSocket>(socket: &mut S, state: &AppState) -> WsResult {
@@ -373,6 +393,13 @@ async fn session<S: ClientSocket>(
                     }
                     Ok(Event::Pairing) if role == Role::Admin => {
                         send(socket, &ServerMessage::Pairing { pairing: state.pairing_info() }).await?;
+                    }
+                    Ok(Event::OpenSlides) => {
+                        let data = lock(&state.openslides_data).as_deref().cloned();
+                        send(socket, &ServerMessage::OpenSlides { data }).await?;
+                    }
+                    Ok(Event::OpenSlidesStatus) if role == Role::Admin => {
+                        send(socket, &ServerMessage::OpenSlidesStatus { status: state.openslides_status() }).await?;
                     }
                     Ok(Event::Connectivity) => {
                         if role == Role::Admin {

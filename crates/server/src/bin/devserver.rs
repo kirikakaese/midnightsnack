@@ -8,7 +8,8 @@
 //! Prints the operator token, PIN and join URL. Options:
 //! `--port N`, `--data DIR` (persist devices/settings), `--demo` (load a generated demo show),
 //! `--info-file FILE` (write pairing info as JSON, used by E2E tests), `--relay URL` (connect to
-//! a relay and wait for it), `--https` (serve HTTPS too).
+//! a relay and wait for it), `--https` (serve HTTPS too), `--openslides-mock` (start a fake
+//! OpenSlides server with a demo meeting and connect to it).
 
 use std::path::PathBuf;
 
@@ -34,6 +35,7 @@ async fn main() -> std::io::Result<()> {
     let mut info_file = None;
     let mut relay = None;
     let mut https = false;
+    let mut openslides_mock = false;
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
         match a.as_str() {
@@ -43,6 +45,7 @@ async fn main() -> std::io::Result<()> {
             "--info-file" => info_file = args.next().map(PathBuf::from),
             "--relay" => relay = args.next(),
             "--https" => https = true,
+            "--openslides-mock" => openslides_mock = true,
             other => {
                 eprintln!("unknown argument {other}");
                 std::process::exit(2);
@@ -88,6 +91,22 @@ async fn main() -> std::io::Result<()> {
         wait_for(|| lock(&handle.state.relay_runtime).state == RelayState::Connected).await;
     }
 
+    let mut openslides_url = None;
+    if openslides_mock {
+        let mock =
+            midnightsnack_openslides::mock::MockOpenSlides::start(Default::default()).await?;
+        let action = Action::ConfigureOpenSlides {
+            enabled: true,
+            url: mock.url.clone(),
+            username: "admin".into(),
+            password: Some("admin".into()),
+            meeting_id: Some(1),
+        };
+        let _ = handle.state.perform(Origin::LOCAL_ADMIN, action).await;
+        wait_for(|| lock(&handle.state.openslides_data).is_some()).await;
+        openslides_url = Some(mock.url);
+    }
+
     let pairing = handle.state.pairing_info();
     let link = |kind: JoinKind| {
         pairing
@@ -103,6 +122,7 @@ async fn main() -> std::io::Result<()> {
         "join_url": link(JoinKind::Lan),
         "https_join_url": link(JoinKind::Https),
         "relay_join_url": link(JoinKind::Relay),
+        "openslides_url": openslides_url,
     });
     println!("{}", serde_json::to_string_pretty(&info).expect("json"));
     if let Some(f) = info_file {

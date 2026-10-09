@@ -140,6 +140,47 @@ pub async fn run(state: &Arc<AppState>, action: Action) -> Result<(), ErrorCode>
             state.emit(Event::Connectivity);
             Ok(())
         }
+        Action::ConfigureOpenSlides {
+            enabled,
+            url,
+            username,
+            password,
+            meeting_id,
+        } => {
+            let url = if url.trim().is_empty() {
+                String::new()
+            } else {
+                midnightsnack_openslides::normalize_url(&url)
+                    .map_err(|_| ErrorCode::InvalidState)?
+            };
+            if enabled && url.is_empty() {
+                return Err(ErrorCode::InvalidState);
+            }
+            let username: String = username.trim().chars().take(256).collect();
+            if let Some(p) = password {
+                if p.chars().count() > 1024 {
+                    return Err(ErrorCode::InvalidState);
+                }
+                crate::openslides_service::save_password(state, &p);
+            }
+            {
+                let mut s = lock(&state.settings);
+                // A new server or account starts without a meeting unless one is given.
+                let same_account = s.openslides.url == url && s.openslides.username == username;
+                s.openslides.enabled = enabled;
+                s.openslides.url = url;
+                s.openslides.username = username;
+                s.openslides.meeting_id = meeting_id.or(if same_account {
+                    s.openslides.meeting_id
+                } else {
+                    None
+                });
+            }
+            state.save_settings();
+            state.openslides_restart.notify_one();
+            state.emit(Event::OpenSlidesStatus);
+            Ok(())
+        }
         Action::ResetRelayIdentity => {
             let id = crate::relay_link::RelayIdentity::generate();
             if let Some(dir) = &state.data_dir {

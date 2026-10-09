@@ -12,6 +12,7 @@ pub mod discovery;
 mod host_actions;
 pub mod https;
 mod inbox;
+mod openslides_service;
 mod osc_service;
 mod pairing;
 pub mod relay_link;
@@ -289,6 +290,7 @@ pub async fn start(config: ServerConfig) -> std::io::Result<ServerHandle> {
         https::default_port(config.bind.port()),
     ));
     tokio::spawn(relay_link::run(state.clone(), router(state.clone())));
+    tokio::spawn(openslides_service::run(state.clone()));
     if !loopback {
         tokio::spawn(watch_interfaces(state.clone()));
     }
