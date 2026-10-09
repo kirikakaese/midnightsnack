@@ -82,6 +82,8 @@ On failure the server sends `{"type":"error","code":"unauthorized" | "protocol_m
 | `devices`         | `devices`, `pending`, `control` | Admins; device list, pairing requests, API/OSC settings |
 | `pairing`         | `pairing` (PIN, join `links` with `kind` `lan`/`https`/`relay`) | Admins; PIN/join token or links changed |
 | `connectivity`    | `connectivity` (`ConnectivityInfo`) | Admins; interfaces, HTTPS, relay status changed |
+| `open_slides`     | `data` (`OsMeetingData` or `null`) | Every client; the OpenSlides meeting shown by OpenSlides cues |
+| `open_slides_status` | `status` (`OpenSlidesStatus`) | Admins; connection state, meetings, whether a password is stored |
 | `routes`          | `routes` (`lan` base URLs, `relay` `{url, key}`) | Paired remotes (not host windows or API keys); for falling back to the relay and back |
 | `session`         | `session`                      | This device's role changed              |
 | `render_progress` | `queued`                       | Background render queue length          |
@@ -210,6 +212,18 @@ Stream 0 is the WebSocket session: the first `WS_MESSAGE` after the handshake (o
 exchanges chosen by the remote (at most 32 at once). The host answers them with its own router
 for `/api/v1/*` (except the WebSocket, video/audio files and capture streams), with a synthetic
 client address from `100::/64` that is never treated as local.
+
+## OpenSlides
+
+The host reads OpenSlides 4 through its auth and autoupdate services
+([`crates/integrations/openslides`](../../crates/integrations/openslides/src/lib.rs),
+[ADR 0013](../adr/0013-openslides-adapter.md)); clients never talk to OpenSlides. Admins
+configure it with `configure_open_slides` and add cues with `add_open_slides` (`slide`: `agenda`,
+`motion`, `topic`, `speakers` with `list_id` or `null` for the current list, `follow` with
+`projector_id` or `null` for the reference projector). OpenSlides cues have kind `open_slides`;
+their slide count is maintained by the host from the data (`OS_AGENDA_PAGE_SIZE` agenda items per
+slide, motion/topic `page_starts`). `OsMeetingData` carries only plain text: motion and topic HTML
+is converted to `OsBlock`s (`paragraph`, `heading`, `list_item`, `reason_heading`).
 
 ## OSC
 

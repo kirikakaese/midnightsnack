@@ -41,6 +41,8 @@ protects, against whom, and the known limits.
 | Host-only tokens used through the relay       | Tunneled requests and sessions get a synthetic address (`100::/64`) that is never loopback, so host-window tokens, local-only API keys and local-only actions are refused exactly as from the LAN. Video, audio and capture streams are not served through the relay. |
 | Passive sniffing on the LAN                   | Optional HTTPS with a generated certificate; its SHA-256 fingerprint is shown in the Connect tab for comparison on the browser's warning page. |
 | Relay or join links shared too widely         | Pairing still needs the PIN and approval. "Reset relay identity" changes keys and host id; old relay links stop working. |
+| OpenSlides credentials leak                   | The OpenSlides password is stored in its own file in the data directory, readable only by the user, changeable only by admins, and never sent to clients (they see whether one is set). |
+| OpenSlides content injects markup             | Motion and topic HTML is reduced to plain text blocks on the host; clients render text only. |
 | Remote page embedded/clickjacked              | `Content-Security-Policy` with `frame-ancestors 'none'`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`. |
 
 ## Known limitations
@@ -65,6 +67,9 @@ protects, against whom, and the known limits.
   WebSocket from the other computer. The window only runs midnightsnack's own code.
 - MIDI input acts with the operator role and is not authenticated: anyone who can plug a MIDI
   device into the host can run the show (they could also press its keys).
+- Everything the configured OpenSlides account can read about the meeting's agenda, motions and
+  speakers is sent to every paired device of the show. Use an account with audience-level
+  visibility.
 - The PIN is stable for a host session until "Disconnect all"; the one-time join token is the
   per-pairing secret.
 

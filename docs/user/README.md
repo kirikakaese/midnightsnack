@@ -3,7 +3,8 @@
 - [Getting started](getting-started.md) — install, build a show, put it on the projector
 - [Video, audio, text, timers and overlays](media.md) — including the codec matrix
 - [Several screens](outputs.md) — outputs, cue targets, displays, test patterns
-- [Presentations, web pages and screen capture](sources.md) — PowerPoint/Keynote, OpenSlides
+- [Presentations, web pages and screen capture](sources.md) — PowerPoint/Keynote, OpenSlides projector
+- [OpenSlides](openslides.md) — agenda, motions and lists of speakers shown natively
 - [Phones and tablets as remotes](remotes.md) — pairing, roles, stage view
 - [Network, hotspot, HTTPS and relay](connectivity.md) — when phones are not on the same network
 - [Hosting a relay](relay.md) — Docker, reverse proxies, settings

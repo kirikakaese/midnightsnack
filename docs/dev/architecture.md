@@ -34,6 +34,7 @@
 | `packages/ui`      | Components, design tokens, i18n shared by all frontends              |
 | `crates/render`    | PDF (PDFium) and image rendering, render cache, office → PDF conversion |
 | `crates/server`    | Embedded axum HTTP + WebSocket server, pairing, devices, media, autosave, HTTPS listener, relay link (Noise responder, tunnel) |
+| `crates/integrations/openslides` | OpenSlides 4 adapter: login, autoupdate subscription, meeting views, HTML to text blocks, mock server ([ADR 0013](../adr/0013-openslides-adapter.md)) |
 | `crates/relay`     | Optional self-hosted relay: forwards encrypted channels between remotes and hosts, serves the web remote |
 | `crates/capture`   | Screen and window capture, shared JPEG frame workers               |
 | `crates/control`   | MIDI decoding/bindings and port listener, OSC address space and feedback |
