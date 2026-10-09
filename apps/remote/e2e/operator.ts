@@ -1,6 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // A minimal operator client used by tests to approve devices and inspect live state.
-import type { Action, LiveState, PendingPairing, ServerMessage } from "@midnightsnack/protocol";
+import type {
+  Action,
+  LiveState,
+  PendingPairing,
+  ServerMessage,
+  ShowSnapshot,
+} from "@midnightsnack/protocol";
 
 export interface DevInfo {
   port: number;
@@ -18,6 +24,7 @@ export class Operator {
   #listeners: Array<(m: ServerMessage) => void> = [];
   #id = 0;
   live: LiveState | null = null;
+  show: ShowSnapshot | null = null;
   pending: PendingPairing[] = [];
   pin = "";
   joinUrl = "";
@@ -27,6 +34,7 @@ export class Operator {
     ws.onmessage = (ev) => {
       const m = JSON.parse(String(ev.data)) as ServerMessage;
       if (m.type === "live") this.live = m.live;
+      if (m.type === "show") this.show = m.show;
       if (m.type === "devices") this.pending = m.pending;
       if (m.type === "pairing") {
         this.pin = m.pairing.pin;
