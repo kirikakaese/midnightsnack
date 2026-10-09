@@ -113,6 +113,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/v1/media/slide/{cue_id}/{slide}", get(api::slide))
         .route("/api/v1/media/file/{cue_id}", get(api::media_file))
         .route("/api/v1/media/asset/{asset_id}", get(api::asset))
+        .route("/api/v1/media/capture/{cue_id}", get(api::capture))
         .fallback(assets::serve)
         .layer(SetResponseHeaderLayer::overriding(
             header::X_CONTENT_TYPE_OPTIONS,
@@ -123,6 +124,35 @@ pub fn router(state: Arc<AppState>) -> Router {
             HeaderValue::from_static("no-referrer"),
         ))
         .with_state(state)
+}
+
+/// Keeps `LiveState::capture_lost` in sync with the capture workers.
+async fn capture_status(state: Arc<AppState>) {
+    let mut tick = tokio::time::interval(std::time::Duration::from_millis(500));
+    loop {
+        tick.tick().await;
+        let lost_sources = state.capture.lost_sources();
+        let change = {
+            let mut engine = state::lock(&state.engine);
+            let lost: Vec<String> = engine
+                .show()
+                .cues
+                .iter()
+                .filter(|c| match &c.content {
+                    midnightsnack_core::CueContent::Capture { capture } => {
+                        lost_sources.contains(&capture.source)
+                    }
+                    _ => false,
+                })
+                .map(|c| c.id.clone())
+                .collect();
+            engine.set_capture_lost(lost)
+        };
+        // Not an edit: only broadcast.
+        if change.live {
+            state.emit(Event::Live);
+        }
+    }
 }
 
 /// Starts the server on the current Tokio runtime.
@@ -193,6 +223,8 @@ pub async fn start(config: ServerConfig) -> std::io::Result<ServerHandle> {
     }
     tokio::spawn(autosave::run(state.clone()));
     tokio::spawn(scheduler::run(state.clone()));
+    tokio::spawn(capture_status(state.clone()));
+    tokio::spawn(host_actions::refresh_conversions(state.clone()));
     state.prefetch();
 
     let (tx, rx) = tokio::sync::oneshot::channel::<()>();

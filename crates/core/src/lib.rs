@@ -10,6 +10,8 @@ pub mod engine;
 #[cfg(test)]
 mod live_tests;
 pub mod model;
+#[cfg(test)]
+mod output_tests;
 pub mod permissions;
 
 pub use dispatcher::{dispatch, Dispatched, Origin};

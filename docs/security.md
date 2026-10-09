@@ -29,6 +29,9 @@ protects, against whom, and the known limits.
 | Session tokens leaked from disk               | Only SHA-256 hashes of device tokens are stored (`devices.json`).                             |
 | Slide images fetched without pairing          | Requires a per-connection random media key, valid only while that connection is open.        |
 | Malicious show bundle                         | Bundled media names are restricted to a single path component (no traversal); the `show.json` size is capped. |
+| Web page cue attacks the host                 | Web pages run in their own webview without IPC access, incognito unless "keep logins" is set (then with a data directory per cue), and can be kept on their site. |
+| Screen contents leak to the network           | Capture streams need the media key of a live connection; listing windows (titles) is admin-only. Capture only runs while a capture cue is viewed. |
+| Malicious presentation file                   | Office files are converted by LibreOffice in a separate process with a private profile and a timeout; notes are parsed with a size-limited XML reader. |
 | Remote page embedded/clickjacked              | `Content-Security-Policy` with `frame-ancestors 'none'`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`. |
 
 ## Known limitations

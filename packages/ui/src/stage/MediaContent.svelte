@@ -26,6 +26,7 @@
     playback: MediaPlayback | null;
     mode: "output" | "monitor" | "thumb";
     hostNow: number;
+    fit?: "contain" | "cover" | "fill";
     onready: () => void;
   }
   let {
@@ -39,6 +40,7 @@
     playback,
     mode,
     hostNow,
+    fit = "contain",
     onready,
   }: Props = $props();
 
@@ -153,6 +155,7 @@
     bind:this={el}
     {src}
     preload="auto"
+    style:object-fit={fit}
     playsinline
     disablepictureinpicture
     muted={mode !== "output"}
@@ -189,7 +192,6 @@
     inset: 0;
     width: 100%;
     height: 100%;
-    object-fit: contain;
     background: #000;
   }
   .thumb {

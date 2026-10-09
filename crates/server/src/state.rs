@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard};
 
+use midnightsnack_capture::CaptureHub;
 use midnightsnack_core::{dispatch, now_ms, Change, Dispatched, Engine, Origin, Show};
 use midnightsnack_protocol::{
     Action, ErrorCode, HostInfo, PairingInfo, Position, Role, ShowSnapshot,
@@ -56,6 +57,7 @@ pub struct AppState {
     pub pairing: Mutex<Pairing>,
     pub settings: Mutex<Settings>,
     pub render: RenderService,
+    pub capture: CaptureHub,
     pub events: broadcast::Sender<Event>,
     /// media key -> device id
     pub media_keys: Mutex<HashMap<String, String>>,
@@ -94,6 +96,7 @@ impl AppState {
             pairing: Mutex::new(Pairing::new(settings.auto_approve)),
             settings: Mutex::new(settings),
             render,
+            capture: CaptureHub::new(),
             events,
             media_keys: Mutex::new(HashMap::new()),
             output_size: Mutex::new(DEFAULT_OUTPUT_SIZE),
@@ -202,6 +205,11 @@ impl AppState {
     }
 }
 
+/// Where converted office documents are stored.
+pub fn converted_dir(state: &AppState) -> std::path::PathBuf {
+    state.render.cache().root().join("converted")
+}
+
 pub fn slide_source(show: &Show, cue_id: &str, slide: u32) -> Option<SlideSource> {
     use midnightsnack_core::CueContent::*;
     let cue = show.cue(cue_id)?;
@@ -220,7 +228,9 @@ pub fn slide_source(show: &Show, cue_id: &str, slide: u32) -> Option<SlideSource
             path: show.resolve(files.get(slide as usize)?)?,
         }),
         // Rendered by the clients themselves (video element, text layout).
-        Blank { .. } | Media { .. } | Text { .. } | Timer { .. } => None,
+        Blank { .. } | Media { .. } | Text { .. } | Timer { .. } | Web { .. } | Capture { .. } => {
+            None
+        }
     }
 }
 

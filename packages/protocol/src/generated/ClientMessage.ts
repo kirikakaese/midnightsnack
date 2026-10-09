@@ -8,4 +8,5 @@ export type ClientMessage =
   | { type: "hello"; protocol_version: number; token: string }
   | { type: "action"; request_id: number; action: Action }
   | { type: "viewport"; width: number; height: number }
-  | { type: "ping"; nonce: number };
+  | { type: "ping"; nonce: number }
+  | { type: "list_capture_targets" };

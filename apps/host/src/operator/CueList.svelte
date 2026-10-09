@@ -1,8 +1,9 @@
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 <script lang="ts">
-  import type { CueSummary } from "@midnightsnack/protocol";
-  import { Button, Panel, t, type HostConnection } from "@midnightsnack/ui";
+  import type { CaptureSource, CueSummary } from "@midnightsnack/protocol";
+  import { Button, Panel, captureLabel, t, type HostConnection } from "@midnightsnack/ui";
   import { open } from "@tauri-apps/plugin-dialog";
+  import CapturePicker from "./CapturePicker.svelte";
 
   interface Props {
     conn: HostConnection;
@@ -26,6 +27,10 @@
       name: t("cue.filter_media"),
       extensions: [
         "pdf",
+        "pptx",
+        "ppt",
+        "odp",
+        "key",
         "png",
         "jpg",
         "jpeg",
@@ -93,6 +98,70 @@
     });
   }
 
+  // Inline forms for cues that need a URL or a capture source first.
+  let adding = $state<"web" | "openslides" | "capture" | null>(null);
+  let webUrl = $state("https://");
+  const webUrlValid = $derived(/^https?:\/\/[^\s/?#]+/i.test(webUrl.trim()));
+
+  function startAdding(kind: "web" | "openslides" | "capture") {
+    adding = kind;
+    webUrl = "https://";
+  }
+
+  function addWeb() {
+    if (!webUrlValid) return;
+    const openslides = adding === "openslides";
+    const url = webUrl.trim();
+    expectNewCue();
+    conn.action({
+      action: "add_web",
+      name: openslides ? t("cue.kind.openslides") : hostName(url),
+      web: {
+        url,
+        zoom: 100,
+        // OpenSlides projector pages update themselves; nothing should navigate away.
+        block_navigation: true,
+        forward_keys: !openslides,
+        persist_session: openslides,
+        openslides,
+      },
+      at_index: null,
+    });
+    adding = null;
+  }
+
+  function hostName(url: string): string {
+    try {
+      return new URL(url).hostname;
+    } catch {
+      return t("cue.kind.web");
+    }
+  }
+
+  function addCapture(source: CaptureSource) {
+    expectNewCue();
+    conn.action({ action: "add_capture", name: captureLabel(source), source, at_index: null });
+    adding = null;
+  }
+
+  function meta(cue: CueSummary): string {
+    if (cue.web)
+      return `${t(cue.web.openslides ? "cue.kind.openslides" : "cue.kind.web")} · ${hostName(cue.web.url)}`;
+    if (cue.capture) return t("cue.kind.capture");
+    const kind = t(`cue.kind.${cue.kind}`);
+    const from = cue.converted_from ? ` · ${cue.converted_from}` : "";
+    return `${kind} · ${t("cue.slides", { n: cue.slide_count })}${from}`;
+  }
+
+  function addMore(kind: string) {
+    if (kind === "folder") addFolder();
+    else if (kind === "text") addText();
+    else if (kind === "timer") addTimer();
+    else if (kind === "blank")
+      conn.action({ action: "add_blank", color: "#000000", at_index: null });
+    else if (kind === "web" || kind === "openslides" || kind === "capture") startAdding(kind);
+  }
+
   async function addFiles() {
     expectNewCue();
     const paths = await open({ multiple: true, filters: mediaFilter });
@@ -146,13 +215,53 @@
 <Panel title={t("cue.list")}>
   {#snippet actions()}
     <Button onclick={addFiles}>{t("cue.add_files")}</Button>
-    <Button onclick={addFolder}>{t("cue.add_folder")}</Button>
-    <Button onclick={addText}>{t("cue.add_text")}</Button>
-    <Button onclick={addTimer}>{t("cue.add_timer")}</Button>
-    <Button onclick={() => conn.action({ action: "add_blank", color: "#000000", at_index: null })}>
-      {t("cue.add_blank")}
-    </Button>
+    <select
+      class="add-menu"
+      aria-label={t("cue.add_more")}
+      value=""
+      onchange={(e) => {
+        const v = e.currentTarget.value;
+        e.currentTarget.value = "";
+        addMore(v);
+      }}
+    >
+      <option value="" disabled>{t("cue.add_more")}</option>
+      <option value="folder">{t("cue.add_folder")}</option>
+      <option value="text">{t("cue.add_text")}</option>
+      <option value="timer">{t("cue.add_timer")}</option>
+      <option value="blank">{t("cue.add_blank")}</option>
+      <option value="web">{t("cue.add_web")}</option>
+      <option value="openslides">{t("cue.add_openslides")}</option>
+      <option value="capture">{t("cue.add_capture")}</option>
+    </select>
   {/snippet}
+
+  {#if adding === "web" || adding === "openslides"}
+    <form
+      class="add-form"
+      onsubmit={(e) => {
+        e.preventDefault();
+        addWeb();
+      }}
+    >
+      <label>
+        <span>{adding === "openslides" ? t("cue.openslides_url") : t("cue.web_url")}</span>
+        <!-- svelte-ignore a11y_autofocus -->
+        <input type="url" bind:value={webUrl} autofocus required />
+      </label>
+      {#if adding === "openslides"}<p class="hint">{t("cue.openslides_hint")}</p>{/if}
+      <div class="row">
+        <Button variant="go" type="submit" disabled={!webUrlValid}>{t("cue.add")}</Button>
+        <Button variant="ghost" type="button" onclick={() => (adding = null)}>
+          {t("common.cancel")}
+        </Button>
+      </div>
+    </form>
+  {:else if adding === "capture"}
+    <div class="add-form">
+      <CapturePicker {conn} onpick={addCapture} oncancel={() => (adding = null)} />
+    </div>
+  {/if}
 
   {#if cues.length === 0}
     <p class="empty">{t("cue.empty")}</p>
@@ -199,7 +308,10 @@
             >
               <span class="title">{cue.name || t("cue.unnamed")}</span>
               <span class="meta">
-                {t(`cue.kind.${cue.kind}`)} · {t("cue.slides", { n: cue.slide_count })}
+                {meta(cue)}
+                {#if cue.targets}
+                  · <span class="targets">{t("cue.targets_n", { n: cue.targets.length })}</span>
+                {/if}
               </span>
             </button>
           {/if}
@@ -231,6 +343,38 @@
 </Panel>
 
 <style>
+  .add-menu {
+    min-height: 40px;
+    padding: 0 10px;
+    font: inherit;
+    font-weight: 600;
+    color: var(--ms-text);
+    background: var(--ms-surface-2);
+    border: 1px solid var(--ms-border);
+    border-radius: var(--ms-radius-sm);
+    cursor: pointer;
+  }
+  .add-form {
+    display: grid;
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+  .add-form label {
+    display: grid;
+    gap: 4px;
+  }
+  .add-form .row {
+    display: flex;
+    gap: 6px;
+  }
+  .hint {
+    margin: 0;
+    font-size: 0.8rem;
+    color: var(--ms-text-muted);
+  }
+  .targets {
+    color: var(--ms-accent);
+  }
   .empty {
     color: var(--ms-text-muted);
   }
@@ -300,6 +444,9 @@
   .meta {
     font-size: 0.8rem;
     color: var(--ms-text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .rename {
     font: inherit;
@@ -312,6 +459,15 @@
   .tools {
     display: flex;
     gap: 2px;
+  }
+  /* Row tools only take room on the row in use, so names stay readable in narrow lists. */
+  .tools button:not(.go) {
+    display: none;
+  }
+  .cue:hover .tools button,
+  .cue:focus-within .tools button,
+  .cue.selected .tools button {
+    display: inline-block;
   }
   .tools button {
     min-width: 30px;

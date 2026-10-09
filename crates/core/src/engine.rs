@@ -4,9 +4,12 @@
 use std::path::PathBuf;
 
 use crate::model::{is_valid_color, new_id, split_text, Asset, Cue, CueContent, MediaRef, Show};
+use std::collections::BTreeMap;
+
 use crate::protocol::{
-    Action, Countdown, ErrorCode, LiveState, Masters, MediaOptions, MediaPlayback, Overlay,
-    OverlayKind, Position, ShowSnapshot, Stopwatch, TextTheme, TimerCue, TimerMode, Transition,
+    Action, CaptureSource, Countdown, ErrorCode, LiveState, Masters, MediaOptions, MediaPlayback,
+    OutputDef, OutputFeed, OutputLive, Overlay, OverlayKind, Position, ShowSnapshot, Stopwatch,
+    TestPattern, TextTheme, TimerCue, TimerMode, Transition, WebInfo,
 };
 
 /// Longest accepted duration for timers, countdowns and auto-advance (24 h).
@@ -54,8 +57,13 @@ impl Change {
 #[derive(Debug, Clone, Default)]
 struct Live {
     program: Option<Position>,
-    /// `Some` while frozen: what the output keeps showing.
-    frozen_output: Option<Option<Position>>,
+    /// While frozen, outputs keep what they show and stop following the program.
+    frozen: bool,
+    /// What each program output shows. An output keeps its last targeted cue.
+    outputs: BTreeMap<String, Option<Position>>,
+    test_pattern: Option<TestPattern>,
+    capture_lost: Vec<String>,
+    web_nav: Option<crate::protocol::WebNav>,
     blackout: bool,
     logo: bool,
     show_timer: Stopwatch,
@@ -112,18 +120,51 @@ impl Engine {
         self.live.program.as_ref()
     }
 
-    /// What the audience currently sees (ignoring blackout/logo).
+    /// What the main output shows (ignoring blackout/logo).
     pub fn output(&self) -> Option<&Position> {
-        match &self.live.frozen_output {
-            Some(frozen) => frozen.as_ref(),
-            None => self.live.program.as_ref(),
+        self.output_position(self.show.main_output_id())
+    }
+
+    /// What a given output shows.
+    pub fn output_position(&self, output_id: &str) -> Option<&Position> {
+        self.live.outputs.get(output_id).and_then(Option::as_ref)
+    }
+
+    fn program_outputs(&self) -> impl Iterator<Item = &OutputDef> {
+        self.show
+            .outputs
+            .iter()
+            .filter(|o| o.feed == OutputFeed::Program)
+    }
+
+    /// Sends the program to every output its cue targets (unless frozen).
+    fn route_program(&mut self) {
+        if self.live.frozen {
+            return;
+        }
+        let program = self.live.program.clone();
+        let targets = program
+            .as_ref()
+            .and_then(|p| self.show.cue(&p.cue_id))
+            .map(|c| c.targets.clone());
+        let ids: Vec<String> = self.program_outputs().map(|o| o.id.clone()).collect();
+        for id in ids {
+            let targeted = match &targets {
+                // Nothing live: every output goes empty.
+                None => true,
+                Some(None) => true,
+                Some(Some(list)) => list.contains(&id),
+            };
+            if targeted {
+                self.live.outputs.insert(id, program.clone());
+            }
         }
     }
 
     pub fn masters(&self) -> Masters {
         Masters {
             blackout: self.live.blackout,
-            freeze: self.live.frozen_output.is_some(),
+            freeze: self.live.frozen,
             logo: self.live.logo,
         }
     }
@@ -159,6 +200,31 @@ impl Engine {
         self.show
             .cue(&p.cue_id)
             .is_some_and(|c| p.slide < c.slide_count())
+    }
+
+    /// The live cue is a web page that receives next/prev as arrow keys.
+    pub fn forwards_keys(&self) -> bool {
+        self.live
+            .program
+            .as_ref()
+            .and_then(|p| self.show.cue(&p.cue_id))
+            .is_some_and(|c| matches!(&c.content, CueContent::Web { web } if web.forward_keys))
+    }
+
+    fn forward_key(&mut self, forward: bool) -> Change {
+        let cue_id = self
+            .live
+            .program
+            .as_ref()
+            .map(|p| p.cue_id.clone())
+            .unwrap_or_default();
+        let seq = self.live.web_nav.as_ref().map_or(1, |n| n.seq + 1);
+        self.live.web_nav = Some(crate::protocol::WebNav {
+            cue_id,
+            forward,
+            seq,
+        });
+        Change::LIVE
     }
 
     /// Position `next` would move to.
@@ -235,6 +301,7 @@ impl Engine {
             accumulated_ms: 0,
             running_since_ms: self.live.program.as_ref().map(|_| now_ms),
         };
+        self.route_program();
         Change::LIVE
     }
 
@@ -268,6 +335,7 @@ impl Engine {
             default_theme: self.show.default_theme.clone(),
             overlays: self.show.overlays.clone(),
             logo: self.show.logo.clone(),
+            outputs: self.show.outputs.clone(),
         }
     }
 
@@ -284,6 +352,16 @@ impl Engine {
             countdown: self.live.countdown.clone(),
             overlays_visible: self.live.overlays_visible.clone(),
             stage_message: self.live.stage_message.clone(),
+            outputs: self
+                .program_outputs()
+                .map(|o| OutputLive {
+                    output_id: o.id.clone(),
+                    position: self.output_position(&o.id).cloned(),
+                })
+                .collect(),
+            test_pattern: self.live.test_pattern,
+            capture_lost: self.live.capture_lost.clone(),
+            web_nav: self.live.web_nav.clone(),
             auto_advance_at_ms: self.auto_advance_at(),
             host_time_ms: now_ms,
             revision: self.live_revision,
@@ -340,11 +418,13 @@ impl Engine {
                 changed = true;
             }
         }
-        if let Some(Some(p)) = self.live.frozen_output.clone() {
-            let fixed = fix(&self.show, &p);
-            if fixed.as_ref() != Some(&p) {
-                self.live.frozen_output = Some(fixed);
-                changed = true;
+        for slot in self.live.outputs.values_mut() {
+            if let Some(p) = slot.clone() {
+                let fixed = fix(&self.show, &p);
+                if fixed.as_ref() != Some(&p) {
+                    *slot = fixed;
+                    changed = true;
+                }
             }
         }
         changed
@@ -455,6 +535,8 @@ impl Engine {
     fn apply_inner(&mut self, action: &Action, now_ms: i64) -> Result<Change, ErrorCode> {
         use Action::*;
         Ok(match action {
+            Go | Next if self.forwards_keys() => self.forward_key(true),
+            Prev if self.forwards_keys() => self.forward_key(false),
             Go | Next => {
                 let target = self.next_position();
                 match target {
@@ -481,7 +563,7 @@ impl Engine {
             SetLogo { on } => self.set_flag(|l| &mut l.logo, *on),
             ToggleLogo => self.set_flag(|l| &mut l.logo, !self.live.logo),
             SetFreeze { on } => self.set_freeze(*on),
-            ToggleFreeze => self.set_freeze(self.live.frozen_output.is_none()),
+            ToggleFreeze => self.set_freeze(!self.live.frozen),
             Panic => {
                 let c1 = self.set_flag(|l| &mut l.logo, true);
                 let c2 = self.set_freeze(false);
@@ -767,6 +849,156 @@ impl Engine {
                 Change::BOTH
             }
 
+            SetTestPattern { pattern } => {
+                if self.live.test_pattern == *pattern {
+                    Change::NONE
+                } else {
+                    self.live.test_pattern = *pattern;
+                    Change::LIVE
+                }
+            }
+            PutOutput { output } => {
+                let output = validate_output(output)?;
+                match self.show.outputs.iter_mut().find(|o| o.id == output.id) {
+                    Some(o) => *o = output,
+                    None => self.show.outputs.push(output),
+                }
+                if self.program_outputs().next().is_none() {
+                    return Err(ErrorCode::InvalidState);
+                }
+                self.live.outputs.retain(|id, _| {
+                    self.show
+                        .outputs
+                        .iter()
+                        .any(|o| o.id == *id && o.feed == OutputFeed::Program)
+                });
+                // A new output starts with what the program would show there.
+                let program = self.live.program.clone();
+                let main = self.output().cloned();
+                for o in self
+                    .show
+                    .outputs
+                    .iter()
+                    .filter(|o| o.feed == OutputFeed::Program)
+                {
+                    self.live
+                        .outputs
+                        .entry(o.id.clone())
+                        .or_insert_with(|| main.clone().or(program.clone()));
+                }
+                Change::BOTH
+            }
+            RemoveOutput { output_id } => {
+                let before = self.show.outputs.len();
+                let removed: Vec<OutputDef> = self
+                    .show
+                    .outputs
+                    .iter()
+                    .filter(|o| o.id == *output_id)
+                    .cloned()
+                    .collect();
+                self.show.outputs.retain(|o| o.id != *output_id);
+                if before == self.show.outputs.len() {
+                    return Err(ErrorCode::NotFound);
+                }
+                if self.program_outputs().next().is_none() {
+                    self.show.outputs.extend(removed);
+                    return Err(ErrorCode::InvalidState);
+                }
+                self.live.outputs.remove(output_id);
+                for cue in &mut self.show.cues {
+                    if let Some(t) = &mut cue.targets {
+                        t.retain(|id| id != output_id);
+                    }
+                }
+                Change::BOTH
+            }
+            SetCueTargets { cue_id, targets } => {
+                if let Some(list) = targets {
+                    if list
+                        .iter()
+                        .any(|id| !self.show.outputs.iter().any(|o| o.id == *id))
+                    {
+                        return Err(ErrorCode::NotFound);
+                    }
+                }
+                let mut list = targets.clone();
+                if let Some(l) = &mut list {
+                    l.dedup();
+                }
+                self.cue_mut(cue_id)?.targets = list;
+                if self
+                    .live
+                    .program
+                    .as_ref()
+                    .is_some_and(|p| p.cue_id == *cue_id)
+                {
+                    self.route_program();
+                }
+                Change::BOTH
+            }
+            AddWeb {
+                name,
+                web,
+                at_index,
+            } => {
+                let web = validate_web(web)?;
+                let name = clean_text(name, 200);
+                let cue = Cue::new(
+                    if name.is_empty() {
+                        web.url.clone()
+                    } else {
+                        name
+                    },
+                    CueContent::Web { web },
+                );
+                self.insert_cues_inner(vec![cue], at_index.map(|i| i as usize))
+            }
+            SetWebOptions { cue_id, web } => {
+                let web = validate_web(web)?;
+                match &mut self.cue_mut(cue_id)?.content {
+                    CueContent::Web { web: w } => *w = web,
+                    _ => return Err(ErrorCode::InvalidState),
+                }
+                Change::SHOW
+            }
+            AddCapture {
+                name,
+                source,
+                at_index,
+            } => {
+                let source = validate_capture_source(source)?;
+                let name = clean_text(name, 200);
+                let capture = crate::protocol::CaptureInfo { source, fps: 30 };
+                let cue = Cue::new(
+                    if name.is_empty() {
+                        "Capture".into()
+                    } else {
+                        name
+                    },
+                    CueContent::Capture { capture },
+                );
+                self.insert_cues_inner(vec![cue], at_index.map(|i| i as usize))
+            }
+            SetCapture {
+                cue_id,
+                source,
+                fps,
+            } => {
+                let source = validate_capture_source(source)?;
+                if !(1..=60).contains(fps) {
+                    return Err(ErrorCode::InvalidState);
+                }
+                match &mut self.cue_mut(cue_id)?.content {
+                    CueContent::Capture { capture } => {
+                        capture.source = source;
+                        capture.fps = *fps;
+                    }
+                    _ => return Err(ErrorCode::InvalidState),
+                }
+                Change::SHOW
+            }
+
             RenameShow { title } => {
                 self.show.title = clean_text(title, 200);
                 Change::SHOW
@@ -837,17 +1069,13 @@ impl Engine {
     }
 
     fn set_freeze(&mut self, on: bool) -> Change {
-        match (on, self.live.frozen_output.is_some()) {
-            (true, false) => {
-                self.live.frozen_output = Some(self.live.program.clone());
-                Change::LIVE
-            }
-            (false, true) => {
-                self.live.frozen_output = None;
-                Change::LIVE
-            }
-            _ => Change::NONE,
+        if on == self.live.frozen {
+            return Change::NONE;
         }
+        self.live.frozen = on;
+        // Releasing the freeze catches the outputs up with the program.
+        self.route_program();
+        Change::LIVE
     }
 
     fn set_overlay_visible(&mut self, id: &str, visible: bool) -> Result<Change, ErrorCode> {
@@ -908,6 +1136,42 @@ impl Engine {
             kind,
             ..o.clone()
         })
+    }
+
+    /// Updates a converted PDF cue after its source document changed and was converted again.
+    pub fn update_converted(
+        &mut self,
+        cue_id: &str,
+        page_count: u32,
+        notes: Vec<String>,
+        now_ms: i64,
+    ) -> Result<Change, ErrorCode> {
+        let cue = self.cue_mut(cue_id)?;
+        match &mut cue.content {
+            CueContent::Pdf {
+                page_count: pc,
+                source: Some(_),
+                ..
+            } => *pc = page_count,
+            _ => return Err(ErrorCode::InvalidState),
+        }
+        cue.slide_notes = notes;
+        let mut c = Change::SHOW;
+        if self.revalidate(now_ms) {
+            c.live = true;
+        }
+        Ok(self.bump(c))
+    }
+
+    /// Records which capture cues have lost their source. Called by the capture service.
+    pub fn set_capture_lost(&mut self, mut lost: Vec<String>) -> Change {
+        lost.sort();
+        lost.dedup();
+        if lost == self.live.capture_lost {
+            return Change::NONE;
+        }
+        self.live.capture_lost = lost;
+        self.bump(Change::LIVE)
     }
 
     /// Registers a file as a show asset and returns its id.
@@ -993,10 +1257,9 @@ impl Engine {
             change = change.merge(self.set_program(target, now_ms));
             change.live = true;
         }
-        if let Some(Some(frozen)) = &self.live.frozen_output {
-            if frozen.cue_id == cue_id {
-                self.live.frozen_output = Some(None);
-                change.live = true;
+        for slot in self.live.outputs.values_mut() {
+            if slot.as_ref().is_some_and(|p| p.cue_id == cue_id) {
+                *slot = None;
             }
         }
         Ok(Change {
@@ -1032,9 +1295,8 @@ impl Engine {
         self.show = show;
         self.path = path;
         self.live.program = None;
-        if self.live.frozen_output.is_some() {
-            self.live.frozen_output = Some(None);
-        }
+        self.live.outputs.clear();
+        self.live.capture_lost.clear();
         self.live.show_timer = Stopwatch::default();
         self.live.slide_timer = Stopwatch::default();
         self.live.media = None;
@@ -1100,6 +1362,64 @@ fn text_content(
         source,
         lyrics,
         theme,
+    })
+}
+
+fn validate_output(o: &OutputDef) -> Result<OutputDef, ErrorCode> {
+    // Ids name host windows, so keep them simple.
+    let id = o.id.trim().to_owned();
+    let id_ok = !id.is_empty()
+        && id.len() <= 64
+        && id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
+    if !id_ok || o.margin > 20 {
+        return Err(ErrorCode::InvalidState);
+    }
+    let name = clean_text(&o.name, 100);
+    Ok(OutputDef {
+        id,
+        name: if name.is_empty() {
+            "Output".into()
+        } else {
+            name
+        },
+        ..o.clone()
+    })
+}
+
+/// Only plain web pages: no `file:`, `javascript:` or `data:` URLs.
+fn validate_web(w: &WebInfo) -> Result<WebInfo, ErrorCode> {
+    let url = w.url.trim();
+    let lower = url.to_ascii_lowercase();
+    let scheme_ok = lower.starts_with("https://") || lower.starts_with("http://");
+    let host_ok = url.split("://").nth(1).is_some_and(|rest| {
+        let host = rest.split(['/', '?', '#']).next().unwrap_or("");
+        !host.is_empty() && !host.contains(char::is_whitespace)
+    });
+    if !scheme_ok || !host_ok || url.len() > 2000 || !(25..=400).contains(&w.zoom) {
+        return Err(ErrorCode::InvalidState);
+    }
+    Ok(WebInfo {
+        url: url.to_owned(),
+        ..w.clone()
+    })
+}
+
+fn validate_capture_source(s: &CaptureSource) -> Result<CaptureSource, ErrorCode> {
+    Ok(match s {
+        CaptureSource::Screen { name } if !name.trim().is_empty() => CaptureSource::Screen {
+            name: clean_text(name, 200),
+        },
+        CaptureSource::Window { app, title }
+            if !(app.trim().is_empty() && title.trim().is_empty()) =>
+        {
+            CaptureSource::Window {
+                app: clean_text(app, 200),
+                title: clean_text(title, 500),
+            }
+        }
+        _ => return Err(ErrorCode::InvalidState),
     })
 }
 
@@ -1188,6 +1508,7 @@ pub(crate) mod tests {
             CueContent::Pdf {
                 file: MediaRef::linked(format!("/{name}.pdf")),
                 page_count: pages,
+                source: None,
             },
         )
     }

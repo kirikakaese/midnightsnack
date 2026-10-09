@@ -3,9 +3,10 @@
   interface Props {
     src: string;
     background: string;
+    fit?: "contain" | "cover" | "fill";
     onready: () => void;
   }
-  let { src, background, onready }: Props = $props();
+  let { src, background, fit = "contain", onready }: Props = $props();
   let shown = $state<string | null>(null);
 
   $effect(() => {
@@ -28,7 +29,7 @@
 </script>
 
 <div class="fill" style:background>
-  {#if shown}<img src={shown} alt="" draggable="false" />{/if}
+  {#if shown}<img src={shown} alt="" draggable="false" style:object-fit={fit} />{/if}
 </div>
 
 <style>
@@ -39,7 +40,6 @@
   img {
     width: 100%;
     height: 100%;
-    object-fit: contain;
     user-select: none;
   }
 </style>

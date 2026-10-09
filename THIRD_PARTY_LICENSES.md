@@ -27,7 +27,13 @@ midnightsnack is licensed under GPL-3.0-or-later. All dependencies must be compa
 | [keepawake](https://github.com/segevfiner/keepawake-rs) | MIT | Prevent screen sleep |
 | [zip](https://github.com/zip-rs/zip2) | MIT | `.msnack` show bundles |
 | [rust-embed](https://github.com/pyrossh/rust-embed) | MIT | Embeds the web remote |
+| [xcap](https://github.com/nashaofu/xcap) | Apache-2.0 | Screen and window capture (macOS, Windows) |
+| [x11rb](https://github.com/psychon/x11rb) | MIT OR Apache-2.0 | Screen and window capture (Linux/X11) |
+| [jpeg-encoder](https://github.com/vstroebel/jpeg-encoder) | (MIT OR Apache-2.0) AND IJG | JPEG frames for capture streams |
+| [quick-xml](https://github.com/tafia/quick-xml) | MIT | Speaker notes from PPTX/ODP |
+| [LibreOffice](https://www.libreoffice.org) | MPL-2.0 | Optional, not bundled: converts presentations to PDF when installed |
 
 ## Exceptions
 
-None so far.
+- **jpeg-encoder** carries the Independent JPEG Group license in addition to MIT/Apache-2.0. The
+  FSF lists the IJG license as free and GPL-compatible; `deny.toml` allows it for this crate only.

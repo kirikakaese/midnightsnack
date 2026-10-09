@@ -4,6 +4,7 @@
 import {
   PROTOCOL_VERSION,
   type Action,
+  type CaptureTarget,
   type ClientMessage,
   type DeviceInfo,
   type ErrorCode,
@@ -157,6 +158,10 @@ export class HostConnection {
       case "pairing":
         this.pairing = msg.pairing;
         break;
+      case "capture_targets":
+        this.captureTargets = msg.targets;
+        this.capturePermissionMissing = false;
+        break;
       case "render_progress":
         this.renderQueued = msg.queued;
         break;
@@ -174,7 +179,10 @@ export class HostConnection {
         break;
       }
       case "error":
-        if (msg.code === "unauthorized") this.status = "unauthorized";
+        if (msg.code === "capture_permission") {
+          this.capturePermissionMissing = true;
+          this.captureTargets = [];
+        } else if (msg.code === "unauthorized") this.status = "unauthorized";
         else if (msg.code === "protocol_mismatch") this.status = "incompatible";
         else this.#flashError(msg.code);
         break;
@@ -230,6 +238,22 @@ export class HostConnection {
   mediaUrl(cueId: string): string | null {
     if (!this.session) return null;
     return `${this.#opts.httpBase}/api/v1/media/file/${encodeURIComponent(cueId)}?k=${this.session.media_key}`;
+  }
+
+  /** MJPEG stream of a capture cue. */
+  captureUrl(cueId: string, fps?: number): string | null {
+    if (!this.session) return null;
+    const rate = fps ? `&fps=${fps}` : "";
+    return `${this.#opts.httpBase}/api/v1/media/capture/${encodeURIComponent(cueId)}?k=${this.session.media_key}${rate}`;
+  }
+
+  /** Screens and windows available for capture (admins). */
+  captureTargets = $state<CaptureTarget[] | null>(null);
+  capturePermissionMissing = $state(false);
+
+  requestCaptureTargets(): void {
+    this.captureTargets = null;
+    this.#send({ type: "list_capture_targets" });
   }
 
   /** URL of an image asset (logo, background, logo bug). */

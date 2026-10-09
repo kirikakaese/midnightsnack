@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Turns a position into a description of what to draw, independent of how it is drawn.
 import type {
+  CaptureSource,
   CueSummary,
   MediaOptions,
   Position,
@@ -32,7 +33,9 @@ export type Content =
       timer: TimerCue;
       theme: TextTheme;
       backgroundSrc: string | null;
-    };
+    }
+  | { kind: "web"; key: string; cueId: string; url: string; openslides: boolean; name: string }
+  | { kind: "capture"; key: string; cueId: string; src: string; name: string };
 
 export function effectiveTheme(show: ShowSnapshot, cue: CueSummary): TextTheme {
   return cue.text?.theme ?? cue.timer?.theme ?? show.default_theme;
@@ -47,6 +50,8 @@ export function describe(
   pos: Position | null | undefined,
   width?: number,
   height?: number,
+  /** Frame rate for capture streams (phones ask for fewer). */
+  captureFps?: number,
 ): Content | null {
   const show = conn.show;
   if (!pos || !show) return null;
@@ -93,6 +98,21 @@ export function describe(
         backgroundSrc: conn.assetUrl(theme.background_image),
       };
     }
+    case "web": {
+      if (!cue.web) return null;
+      return {
+        kind: "web",
+        key,
+        cueId: cue.id,
+        url: cue.web.url,
+        openslides: cue.web.openslides,
+        name: cue.name,
+      };
+    }
+    case "capture": {
+      const src = conn.captureUrl(cue.id, captureFps);
+      return src ? { kind: "capture", key, cueId: cue.id, src, name: cue.name } : null;
+    }
     default: {
       const src = conn.slideUrl(pos, width, height);
       return src ? { kind: "image", key, src, background: "#000" } : null;
@@ -125,4 +145,10 @@ export function untilClockTime(time: string, now: Date): number {
   const target = new Date(now);
   target.setHours(h ?? 0, m ?? 0, 0, 0);
   return target.getTime() - now.getTime();
+}
+
+export function captureLabel(source: CaptureSource): string {
+  return source.type === "screen"
+    ? source.name
+    : [source.app, source.title].filter((s) => s.trim()).join(" — ");
 }

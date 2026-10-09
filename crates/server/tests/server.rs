@@ -752,3 +752,144 @@ async fn logo_assets_and_stage_messages() {
         .await;
     assert_eq!(msg, "Wrap up");
 }
+
+#[tokio::test]
+async fn office_files_need_a_converter() {
+    let f = fixture().await;
+    let mut op = f.connect(&f.handle.operator_token).await;
+    op.welcome().await;
+    let key = f.dir.path().join("deck.key");
+    std::fs::write(&key, b"not really keynote").unwrap();
+    let r = op
+        .action(Action::AddFiles {
+            paths: vec![key.to_string_lossy().into()],
+            at_index: None,
+        })
+        .await;
+    if cfg!(target_os = "macos") {
+        assert!(r.is_err());
+    } else {
+        assert_eq!(r, Err(ErrorCode::ConverterMissing));
+    }
+}
+
+/// Needs LibreOffice and `MIDNIGHTSNACK_TEST_PPTX` (see crates/render office tests).
+#[tokio::test]
+#[ignore]
+async fn imports_a_pptx_with_notes() {
+    let f = fixture().await;
+    let mut op = f.connect(&f.handle.operator_token).await;
+    op.welcome().await;
+    let src = std::env::var("MIDNIGHTSNACK_TEST_PPTX").expect("fixture");
+    op.action(Action::AddFiles {
+        paths: vec![src],
+        at_index: None,
+    })
+    .await
+    .unwrap();
+    let show = f.handle.state.show_snapshot(Role::Admin);
+    let cue = &show.cues[0];
+    assert_eq!(cue.kind, CueKind::Pdf);
+    assert_eq!(cue.slide_count, 3);
+    assert_eq!(cue.converted_from.as_deref(), Some("talk.pptx"));
+    assert!(cue.slide_notes[0].contains("sponsors"));
+}
+
+#[tokio::test]
+async fn capture_stream_requires_a_key_and_serves_mjpeg() {
+    let f = fixture().await;
+    let mut op = f.connect(&f.handle.operator_token).await;
+    let session = op.welcome().await;
+    let source = CaptureSource::Window {
+        app: "no-such-app-for-tests".into(),
+        title: "".into(),
+    };
+    op.action(Action::AddCapture {
+        name: "Cam".into(),
+        source,
+        at_index: None,
+    })
+    .await
+    .unwrap();
+    let png = f.png("still.png");
+    op.action(Action::AddFiles {
+        paths: vec![png],
+        at_index: None,
+    })
+    .await
+    .unwrap();
+    let show = f.handle.state.show_snapshot(Role::Admin);
+    let (capture, image) = (&show.cues[0].id, &show.cues[1].id);
+
+    let url = |cue: &str, k: &str| f.url(&format!("/api/v1/media/capture/{cue}?k={k}&fps=2"));
+    assert_eq!(
+        f.http
+            .get(url(capture, "wrong"))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        401
+    );
+    assert_eq!(
+        f.http
+            .get(url(image, &session.media_key))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        404
+    );
+    let res = f
+        .http
+        .get(url(capture, &session.media_key))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 200);
+    assert!(res.headers()["content-type"]
+        .to_str()
+        .unwrap()
+        .starts_with("multipart/x-mixed-replace"));
+
+    // The source does not exist: the operator is told within a second or two.
+    op.action(Action::Go).await.unwrap();
+    let lost = op
+        .wait(|m| match m {
+            ServerMessage::Live { live } if !live.capture_lost.is_empty() => {
+                Some(live.capture_lost)
+            }
+            _ => None,
+        })
+        .await;
+    assert_eq!(&lost[0], capture);
+    drop(res);
+}
+
+#[tokio::test]
+async fn only_admins_list_capture_targets() {
+    let f = fixture().await;
+    let mut op = f.connect(&f.handle.operator_token).await;
+    op.welcome().await;
+    let token = f.pair(&mut op, "Phone", Role::Operator).await;
+    let mut phone = f.connect(&token).await;
+    phone.welcome().await;
+    phone.send(&ClientMessage::ListCaptureTargets).await;
+    let err = phone
+        .wait(|m| match m {
+            ServerMessage::Error { code } => Some(code),
+            _ => None,
+        })
+        .await;
+    assert_eq!(err, ErrorCode::Forbidden);
+    // Admins get a (possibly empty, on headless machines) list.
+    op.send(&ClientMessage::ListCaptureTargets).await;
+    op.wait(|m| match m {
+        ServerMessage::CaptureTargets { .. }
+        | ServerMessage::Error {
+            code: ErrorCode::CapturePermission,
+        } => Some(()),
+        _ => None,
+    })
+    .await;
+}

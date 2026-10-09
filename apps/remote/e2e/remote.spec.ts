@@ -119,3 +119,56 @@ test("stage viewer shows operator messages and the countdown", async ({ page }) 
   await expect(page.getByText("Q&A")).toBeVisible();
   await page.screenshot({ path: "test-results/remote-stage.png", fullPage: true });
 });
+
+test("cues follow their output targets and web pages show as placeholders", async ({ page }) => {
+  await pair(page, "operator");
+  await op.action({
+    action: "put_output",
+    output: {
+      id: "side",
+      name: "Side screen",
+      feed: "program",
+      overlays: false,
+      scaling: "fill",
+      margin: 5,
+    },
+  });
+  await op.action({
+    action: "add_web",
+    name: "Agenda page",
+    web: {
+      url: "https://example.org/agenda",
+      zoom: 100,
+      block_navigation: true,
+      forward_keys: false,
+      persist_session: false,
+      openslides: false,
+    },
+    at_index: null,
+  });
+  const cue = (name: string) => op.show?.cues.find((c) => c.name === name);
+  await expect.poll(() => cue("Agenda page")).toBeTruthy();
+  const web = cue("Agenda page");
+  const deck = cue("Welcome deck");
+  try {
+    await op.action({ action: "set_cue_targets", cue_id: web!.id, targets: ["main"] });
+    await op.action({ action: "go_to", position: { cue_id: deck!.id, slide: 0 } });
+    const on = (id: string) => op.live?.outputs.find((o) => o.output_id === id)?.position?.cue_id;
+    await expect.poll(() => on("side")).toBe(deck!.id);
+
+    await op.action({ action: "go_to", position: { cue_id: web!.id, slide: 0 } });
+    await expect.poll(() => on("main")).toBe(web!.id);
+    // The side screen is not a target of the web cue and keeps the deck.
+    expect(on("side")).toBe(deck!.id);
+
+    await expect(page.getByText(/Agenda page · 1 \/ 1/)).toBeVisible();
+    await expect(page.getByText("example.org").first()).toBeVisible();
+
+    await op.action({ action: "set_test_pattern", pattern: "bars" });
+    await expect.poll(() => op.live?.test_pattern).toBe("bars");
+    await op.action({ action: "set_test_pattern", pattern: null });
+  } finally {
+    await op.action({ action: "remove_cue", cue_id: web!.id });
+    await op.action({ action: "remove_output", output_id: "side" });
+  }
+});

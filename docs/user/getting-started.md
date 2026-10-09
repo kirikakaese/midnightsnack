@@ -4,14 +4,19 @@
 
 A **show** is a list of **cues**. In the operator window use:
 
-- **+ Files** — PDF decks and images (PNG, JPEG, GIF, WebP, BMP, TIFF). Each file becomes a cue.
-- **+ Folder** — a folder of images becomes one cue with one slide per image, in natural order
-  (`2.png` before `10.png`).
-- **+ Blank** — a black slide, e.g. for breaks.
+- **+ Files** — PDF decks, presentations (PPTX, PPT, ODP, Keynote), images (PNG, JPEG, GIF,
+  WebP, BMP, TIFF), video and audio. Each file becomes a cue.
+- **+ Add… → Folder** — a folder of images becomes one cue with one slide per image, in natural
+  order (`2.png` before `10.png`).
+- **+ Add… → Blank** — a black slide, e.g. for breaks.
+- **+ Add… → Text, Timer, Web page, OpenSlides projector, Screen or window capture** — see
+  [media.md](media.md) and [sources.md](sources.md).
 
 Click a cue to select it and edit it in the **Cue** tab; double-click it or press ▶ to send it
 live. Drag cues (or use ↑/↓) to reorder, ✎ to rename, click the color bar to tag a cue, ✕ to
-remove it. Video, audio, text and timer cues are described in [media.md](media.md).
+remove it (the tools appear when you point at a cue). Video, audio, text and timer cues are
+described in [media.md](media.md); presentations, web pages and capture in
+[sources.md](sources.md).
 
 ### Speaker notes
 
@@ -29,12 +34,14 @@ A sidecar file wins over annotations. Annotations are never drawn on the project
 
 ## 2. Put it on the projector
 
-In the **Output** panel choose the projector's display and click **Open output**. The output
-covers that display without borders and without a mouse cursor, and never takes keyboard focus.
-Your screen is kept awake while the output is open. With a single screen, tick
-**Windowed (rehearsal)** to see the output in a normal window.
+In the **Outputs** tab choose the projector's display for the **Main** output and click
+**Open output**. The output covers that display without borders and without a mouse cursor, and
+never takes keyboard focus. Your screen is kept awake while an output is open. With a single
+screen, tick **Windowed (rehearsal)** to see the output in a normal window.
 
 midnightsnack remembers the display and reopens the output there next time if it is connected.
+More screens (a second room, a confidence monitor for the speaker) are described in
+[outputs.md](outputs.md).
 
 ## 3. Run the show
 

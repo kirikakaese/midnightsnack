@@ -2,8 +2,11 @@
 import type { Countdown } from "./Countdown";
 import type { Masters } from "./Masters";
 import type { MediaPlayback } from "./MediaPlayback";
+import type { OutputLive } from "./OutputLive";
 import type { Position } from "./Position";
 import type { Stopwatch } from "./Stopwatch";
+import type { TestPattern } from "./TestPattern";
+import type { WebNav } from "./WebNav";
 
 /**
  * Live show state. Sent on every change.
@@ -14,7 +17,8 @@ export type LiveState = {
    */
   program: Position | null;
   /**
-   * What the audience sees (differs from `program` while frozen).
+   * What the main output shows (differs from `program` while frozen or when the program cue
+   * is not targeted at it).
    */
   output: Position | null;
   /**
@@ -44,6 +48,19 @@ export type LiveState = {
    * Message from the operator to stage displays.
    */
   stage_message: string | null;
+  /**
+   * Per program output: what it shows (outputs keep their last targeted cue).
+   */
+  outputs: Array<OutputLive>;
+  test_pattern: TestPattern | null;
+  /**
+   * Capture cues whose source is currently unavailable.
+   */
+  capture_lost: Array<string>;
+  /**
+   * Last next/prev forwarded to the live web page.
+   */
+  web_nav: WebNav | null;
   /**
    * When the program will advance automatically.
    */

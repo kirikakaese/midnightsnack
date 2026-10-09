@@ -20,4 +20,7 @@ export type ErrorCode =
   | "pdf_engine_missing"
   | "io"
   | "show_file_invalid"
+  | "converter_missing"
+  | "conversion_failed"
+  | "capture_permission"
   | "internal";

@@ -7,9 +7,11 @@ use std::sync::Arc;
 use midnightsnack_core::bundle::{self, SHOW_FILE_EXTENSION};
 use midnightsnack_core::{Cue, CueContent, MediaRef, Show};
 use midnightsnack_protocol::{Action, ErrorCode};
+use midnightsnack_render::office::{self, OfficeError, OfficeKind};
 use midnightsnack_render::{is_supported_image, list_image_folder};
+use sha2::{Digest, Sha256};
 
-use crate::state::{lock, AppState, Event};
+use crate::state::{converted_dir, lock, AppState, Event};
 
 pub async fn run(state: &Arc<AppState>, action: Action) -> Result<(), ErrorCode> {
     match action {
@@ -172,11 +174,13 @@ async fn cue_for_path(state: &Arc<AppState>, path: &Path) -> Result<Cue, ErrorCo
                 CueContent::Pdf {
                     file: MediaRef::linked(&path),
                     page_count: info.page_count,
+                    source: None,
                 },
             );
             cue.slide_notes = info.notes;
             Ok(cue)
         }
+        _ if OfficeKind::from_path(&path).is_some() => office_cue(state, &path).await,
         Some(e) if VIDEO_EXTENSIONS.contains(&e) || AUDIO_EXTENSIONS.contains(&e) => Ok(Cue::new(
             display_name(&path),
             CueContent::Media {
@@ -196,6 +200,126 @@ async fn cue_for_path(state: &Arc<AppState>, path: &Path) -> Result<Cue, ErrorCo
     }
 }
 
+/// Converted PDF path for an office document: keyed by path, size and modification time.
+fn converted_path(state: &AppState, src: &Path) -> Result<PathBuf, ErrorCode> {
+    let meta = std::fs::metadata(src).map_err(|_| ErrorCode::NotFound)?;
+    let mtime = meta
+        .modified()
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map_or(0, |d| d.as_nanos());
+    let mut h = Sha256::new();
+    h.update(src.to_string_lossy().as_bytes());
+    h.update(meta.len().to_le_bytes());
+    h.update(mtime.to_le_bytes());
+    let key: String = h.finalize()[..12]
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect();
+    Ok(converted_dir(state).join(format!("{key}.pdf")))
+}
+
+/// Converts an office document (cached) and returns (pdf path, page count, notes).
+async fn convert(
+    state: &Arc<AppState>,
+    src: &Path,
+) -> Result<(PathBuf, u32, Vec<String>), ErrorCode> {
+    let dest = converted_path(state, src)?;
+    if !dest.is_file() {
+        let (s, d) = (src.to_owned(), dest.clone());
+        tokio::task::spawn_blocking(move || office::convert_to_pdf(&s, &d))
+            .await
+            .map_err(|_| ErrorCode::Internal)?
+            .map_err(|e| {
+                tracing::warn!(error = %e, path = %src.display(), "conversion failed");
+                match e {
+                    OfficeError::ConverterMissing => ErrorCode::ConverterMissing,
+                    _ => ErrorCode::ConversionFailed,
+                }
+            })?;
+    }
+    let info = state
+        .render
+        .inspect_pdf(dest.clone())
+        .await
+        .map_err(|e| e.code())?;
+    let s = src.to_owned();
+    let office_notes = tokio::task::spawn_blocking(move || office::read_notes(&s))
+        .await
+        .unwrap_or_default();
+    let notes = if office_notes.iter().any(|n| !n.is_empty()) {
+        office_notes
+    } else {
+        info.notes
+    };
+    Ok((dest, info.page_count, notes))
+}
+
+async fn office_cue(state: &Arc<AppState>, path: &Path) -> Result<Cue, ErrorCode> {
+    let (pdf, page_count, notes) = convert(state, path).await?;
+    let mut cue = Cue::new(
+        display_name(path),
+        CueContent::Pdf {
+            file: MediaRef::linked(&pdf),
+            page_count,
+            source: Some(MediaRef::linked(path)),
+        },
+    );
+    cue.slide_notes = notes;
+    Ok(cue)
+}
+
+/// Re-converts office documents that changed since they were converted (after opening a show
+/// or on startup). Runs in the background; failures keep the old PDF.
+pub async fn refresh_conversions(state: Arc<AppState>) {
+    let jobs: Vec<(String, PathBuf, PathBuf)> = {
+        let e = lock(&state.engine);
+        let show = e.show();
+        show.cues
+            .iter()
+            .filter_map(|c| match &c.content {
+                CueContent::Pdf {
+                    file,
+                    source: Some(src),
+                    ..
+                } => Some((c.id.clone(), show.resolve(src)?, show.resolve(file)?)),
+                _ => None,
+            })
+            .collect()
+    };
+    for (cue_id, src, current) in jobs {
+        let Ok(fresh) = converted_path(&state, &src) else {
+            continue;
+        };
+        if fresh == current || !src.is_file() {
+            continue;
+        }
+        match convert(&state, &src).await {
+            Ok((pdf, pages, notes)) => {
+                let changed = {
+                    let mut e = lock(&state.engine);
+                    if let Some(cue) = e
+                        .show_mut_untracked()
+                        .cues
+                        .iter_mut()
+                        .find(|c| c.id == cue_id)
+                    {
+                        if let CueContent::Pdf { file, .. } = &mut cue.content {
+                            *file = MediaRef::linked(&pdf);
+                        }
+                    }
+                    e.update_converted(&cue_id, pages, notes, midnightsnack_core::now_ms())
+                };
+                if let Ok(c) = changed {
+                    tracing::info!(path = %src.display(), "re-converted changed document");
+                    state.after_change(c);
+                }
+            }
+            Err(e) => tracing::warn!(?e, path = %src.display(), "re-conversion failed"),
+        }
+    }
+}
+
 async fn open_show(state: &Arc<AppState>, path: PathBuf) -> Result<(), ErrorCode> {
     let extract = shows_dir(state).join(uuid::Uuid::new_v4().to_string());
     let p = path.clone();
@@ -209,6 +333,7 @@ async fn open_show(state: &Arc<AppState>, path: PathBuf) -> Result<(), ErrorCode
     state.render.cancel_prefetch();
     let c = lock(&state.engine).replace_show(show, Some(path));
     state.after_change(c);
+    tokio::spawn(refresh_conversions(state.clone()));
     Ok(())
 }
 

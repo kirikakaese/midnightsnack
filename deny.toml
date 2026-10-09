@@ -27,6 +27,9 @@ allow = [
   "CDLA-Permissive-2.0",
 ]
 
+# The IJG license is free and GPL-compatible (FSF); allowed only for this crate.
+exceptions = [{ crate = "jpeg-encoder", allow = ["IJG"] }]
+
 [licenses.private]
 ignore = true
 

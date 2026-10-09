@@ -98,6 +98,7 @@ fn demo_show(dir: &std::path::Path) -> std::io::Result<Show> {
         CueContent::Pdf {
             file: MediaRef::linked(&pdf),
             page_count: pages.len() as u32,
+            source: None,
         },
     );
     deck.slide_notes = (1..=pages.len())
@@ -117,6 +118,7 @@ fn demo_show(dir: &std::path::Path) -> std::io::Result<Show> {
         CueContent::Pdf {
             file: MediaRef::linked(&second),
             page_count: 2,
+            source: None,
         },
     );
     let lyrics = "Oh midnight snack, so sweet and true\nWe gather round to dine with you\n\n\

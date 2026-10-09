@@ -40,6 +40,11 @@
     ],
     "resources": {
       "resources/pdfium/*": "pdfium/"
+    },
+    "linux": {
+      "deb": {
+        "recommends": ["libreoffice-impress"]
+      }
     }
   }
 }

@@ -36,6 +36,119 @@ pub enum CueKind {
     Audio,
     Text,
     Timer,
+    Web,
+    Capture,
+}
+
+/// What an output window shows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum OutputFeed {
+    /// Program content (cues targeted at this output).
+    #[default]
+    Program,
+    /// The stage display (current/next, notes, timers, messages).
+    Stage,
+}
+
+/// How content that does not match the output's aspect ratio is scaled.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum OutputScaling {
+    /// Letterbox: the whole slide is visible.
+    #[default]
+    Fit,
+    /// Crop: the screen is filled.
+    Fill,
+    /// Distort to fill.
+    Stretch,
+}
+
+/// An output of the show (a projector, a second room, a confidence monitor). Which physical
+/// display it uses is a host setting, not part of the show.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct OutputDef {
+    pub id: String,
+    pub name: String,
+    pub feed: OutputFeed,
+    /// Show overlays on this output.
+    pub overlays: bool,
+    pub scaling: OutputScaling,
+    /// Safe margin in percent of each side (0–20).
+    pub margin: u32,
+}
+
+impl OutputDef {
+    pub const MAIN_ID: &'static str = "main";
+
+    pub fn main() -> Self {
+        OutputDef {
+            id: Self::MAIN_ID.into(),
+            name: "Main".into(),
+            feed: OutputFeed::Program,
+            overlays: true,
+            scaling: OutputScaling::Fit,
+            margin: 0,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum TestPattern {
+    /// Grid with circles and the output resolution, for focus and geometry.
+    Grid,
+    /// Color bars, for color and brightness.
+    Bars,
+}
+
+/// A web page shown in an isolated webview.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct WebInfo {
+    pub url: String,
+    /// Zoom in percent (25–400).
+    pub zoom: u32,
+    /// Refuse navigation to other sites than the cue's URL origin.
+    pub block_navigation: bool,
+    /// Forward next/prev to the page as arrow keys (reveal.js and similar).
+    pub forward_keys: bool,
+    /// Keep cookies and logins between launches (e.g. OpenSlides).
+    pub persist_session: bool,
+    /// Created as an OpenSlides projector cue.
+    pub openslides: bool,
+}
+
+/// What a capture cue captures.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
+#[serde(tag = "type", rename_all = "snake_case")]
+#[ts(export)]
+pub enum CaptureSource {
+    /// A whole display, by name.
+    Screen { name: String },
+    /// A window, by application and title (matched case-insensitively).
+    Window { app: String, title: String },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct CaptureInfo {
+    pub source: CaptureSource,
+    /// Frames per second (1–60).
+    pub fps: u32,
+}
+
+/// A screen or window the host can capture.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct CaptureTarget {
+    pub source: CaptureSource,
+    pub width: u32,
+    pub height: u32,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
@@ -242,6 +355,12 @@ pub struct CueSummary {
     pub media: Option<MediaInfo>,
     pub text: Option<TextInfo>,
     pub timer: Option<TimerCue>,
+    pub web: Option<WebInfo>,
+    pub capture: Option<CaptureInfo>,
+    /// Output ids this cue is shown on; `None` = all program outputs.
+    pub targets: Option<Vec<String>>,
+    /// File name of the office document a PDF cue was converted from.
+    pub converted_from: Option<String>,
 }
 
 /// The show structure. Sent whenever the cue list changes.
@@ -261,6 +380,7 @@ pub struct ShowSnapshot {
     pub overlays: Vec<Overlay>,
     /// Asset id of the logo screen image (`None` = built-in logo).
     pub logo: Option<String>,
+    pub outputs: Vec<OutputDef>,
 }
 
 /// Master states, applied on top of the program content.
@@ -324,13 +444,33 @@ impl Default for Countdown {
     }
 }
 
+/// What one output currently shows.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct OutputLive {
+    pub output_id: String,
+    pub position: Option<Position>,
+}
+
+/// Next/prev forwarded to a web page cue (arrow keys), numbered so each press is delivered once.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct WebNav {
+    pub cue_id: CueId,
+    /// `true` = next (→), `false` = previous (←).
+    pub forward: bool,
+    #[ts(type = "number")]
+    pub seq: u64,
+}
+
 /// Live show state. Sent on every change.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct LiveState {
     /// Where the operator is.
     pub program: Option<Position>,
-    /// What the audience sees (differs from `program` while frozen).
+    /// What the main output shows (differs from `program` while frozen or when the program cue
+    /// is not targeted at it).
     pub output: Option<Position>,
     /// What `next` would go to.
     pub next: Option<Position>,
@@ -347,6 +487,13 @@ pub struct LiveState {
     pub overlays_visible: Vec<String>,
     /// Message from the operator to stage displays.
     pub stage_message: Option<String>,
+    /// Per program output: what it shows (outputs keep their last targeted cue).
+    pub outputs: Vec<OutputLive>,
+    pub test_pattern: Option<TestPattern>,
+    /// Capture cues whose source is currently unavailable.
+    pub capture_lost: Vec<CueId>,
+    /// Last next/prev forwarded to the live web page.
+    pub web_nav: Option<WebNav>,
     /// When the program will advance automatically.
     #[ts(type = "number | null")]
     pub auto_advance_at_ms: Option<i64>,

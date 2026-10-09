@@ -194,6 +194,7 @@ mod tests {
             CueContent::Pdf {
                 file: MediaRef::linked(&pdf),
                 page_count: 2,
+                source: None,
             },
         );
         cue.slide_notes = vec!["hi".into()];
