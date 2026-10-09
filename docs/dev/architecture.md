@@ -33,7 +33,8 @@
 | `apps/remote`      | Browser remote served by the host                                    |
 | `packages/ui`      | Components, design tokens, i18n shared by all frontends              |
 | `crates/render`    | PDF (PDFium) and image rendering, render cache, office → PDF conversion |
-| `crates/server`    | Embedded axum HTTP + WebSocket server, pairing, devices, media, autosave |
+| `crates/server`    | Embedded axum HTTP + WebSocket server, pairing, devices, media, autosave, HTTPS listener, relay link (Noise responder, tunnel) |
+| `crates/relay`     | Optional self-hosted relay: forwards encrypted channels between remotes and hosts, serves the web remote |
 | `crates/capture`   | Screen and window capture, shared JPEG frame workers               |
 | `crates/control`   | MIDI decoding/bindings and port listener, OSC address space and feedback |
 | `integrations/companion` | Bitfocus Companion module (WebSocket client with an API key)  |
@@ -41,6 +42,9 @@
 Output windows hold child webviews: the output page and, for web page cues, the remote page
 ([ADR 0010](../adr/0010-web-cues-in-child-webviews.md)). Control surfaces (MIDI, OSC, the HTTP
 API, Companion, controller mode) are described in
-[ADR 0011](../adr/0011-control-surfaces.md). A later phase adds `crates/relay`.
+[ADR 0011](../adr/0011-control-surfaces.md). Connectivity (HTTPS, hotspot, the relay and its
+end-to-end encryption) is described in [ADR 0012](../adr/0012-relay-and-connectivity.md): the
+web remote talks to the host through a transport (direct or relay tunnel), and the server runs
+the same WebSocket session code over both.
 
 See the ADRs in [../adr](../adr) for the reasoning behind these choices.

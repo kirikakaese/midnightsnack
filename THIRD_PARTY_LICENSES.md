@@ -34,6 +34,14 @@ midnightsnack is licensed under GPL-3.0-or-later. All dependencies must be compa
 | [midir](https://github.com/Boddlnagg/midir) | MIT | MIDI input |
 | [rosc](https://github.com/klingtnet/rosc) | MIT OR Apache-2.0 | OSC encoding and decoding |
 | [reqwest](https://github.com/seanmonstar/reqwest) | MIT OR Apache-2.0 | Pairing with another host (controller mode) |
+| [snow](https://github.com/mcginty/snow) | Apache-2.0 OR MIT | Noise protocol (relay end-to-end encryption, host side) |
+| [@noble/curves, ciphers, hashes](https://paulmillr.com/noble/) | MIT | X25519, ChaCha20-Poly1305, BLAKE2s (relay encryption, web remote) |
+| [rustls](https://github.com/rustls/rustls) / [tokio-rustls](https://github.com/rustls/tokio-rustls) | Apache-2.0 OR ISC OR MIT | TLS for HTTPS and `wss://` relays |
+| [ring](https://github.com/briansmith/ring) | Apache-2.0 AND ISC | Cryptography provider for rustls and rcgen |
+| [rustls-native-certs](https://github.com/rustls/rustls-native-certs) | Apache-2.0 OR ISC OR MIT | The operating system's trusted certificates |
+| [rcgen](https://github.com/rustls/rcgen) | MIT OR Apache-2.0 | Self-signed HTTPS certificate |
+| [hyper-util](https://github.com/hyperium/hyper-util) | MIT | HTTPS connections |
+| [tokio-tungstenite](https://github.com/snapview/tokio-tungstenite) | MIT | WebSocket client to the relay |
 | [@companion-module/base](https://github.com/bitfocus/companion-module-base) | MIT | Companion module framework |
 | [ws](https://github.com/websockets/ws) | MIT | WebSocket client of the Companion module |
 | [LibreOffice](https://www.libreoffice.org) | MPL-2.0 | Optional, not bundled: converts presentations to PDF when installed |

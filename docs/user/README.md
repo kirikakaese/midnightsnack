@@ -5,6 +5,8 @@
 - [Several screens](outputs.md) — outputs, cue targets, displays, test patterns
 - [Presentations, web pages and screen capture](sources.md) — PowerPoint/Keynote, OpenSlides
 - [Phones and tablets as remotes](remotes.md) — pairing, roles, stage view
+- [Network, hotspot, HTTPS and relay](connectivity.md) — when phones are not on the same network
+- [Hosting a relay](relay.md) — Docker, reverse proxies, settings
 - [Keyboard and presentation clickers](keyboard.md)
 - [MIDI, OSC, HTTP API, Stream Deck and a second computer](control.md)
 

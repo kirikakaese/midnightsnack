@@ -36,15 +36,29 @@ protects, against whom, and the known limits.
 | Uploads used to fill the disk or plant files  | Uploads need a paired device of presenter role or higher, are limited to 2 GB and to media/presentation types, are stored under a generated directory with a sanitized single-component name, and wait in the inbox until an admin accepts them. Pending uploads are deleted on restart. |
 | Pointer spam                                  | Pointer messages need the presenter role and are capped at 60 per second per device; drawings are validated (points, width, color) and capped per slide. |
 | PIN guessing from a second computer           | Pairing without the QR code's join token is only accepted while every request needs the operator's approval (auto-approve off); the PIN lockouts apply. |
+| Relay operator reads or alters the show       | Remotes and hosts talk Noise NK end to end through the relay; the host's static key comes from the QR code's URL fragment (never sent to servers). The relay sees only ciphertext and connection metadata; tampering breaks the session. |
+| Someone else registers this host on a relay   | The host id is derived from a 256-bit host secret by the relay; only the secret's owner can register it. Relays can require an access token from hosts. |
+| Host-only tokens used through the relay       | Tunneled requests and sessions get a synthetic address (`100::/64`) that is never loopback, so host-window tokens, local-only API keys and local-only actions are refused exactly as from the LAN. Video, audio and capture streams are not served through the relay. |
+| Passive sniffing on the LAN                   | Optional HTTPS with a generated certificate; its SHA-256 fingerprint is shown in the Connect tab for comparison on the browser's warning page. |
+| Relay or join links shared too widely         | Pairing still needs the PIN and approval. "Reset relay identity" changes keys and host id; old relay links stop working. |
 | Remote page embedded/clickjacked              | `Content-Security-Policy` with `frame-ancestors 'none'`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`. |
 
 ## Known limitations
 
-- **No transport encryption on the LAN (yet).** Browsers do not trust self-signed certificates,
-  so the LAN server uses plain HTTP/WebSocket. Someone who can passively sniff the network can
-  read session tokens and impersonate a paired device. Use a trusted network (or the host's own
-  hotspot) for events where this matters. Optional HTTPS with a generated certificate and the
-  end-to-end encrypted relay are planned (phase 5).
+- **Plain HTTP on the LAN by default.** Browsers do not trust self-signed certificates, so
+  HTTPS is opt-in (Connect tab) and plain HTTP keeps running for host windows and devices that
+  cannot accept the warning. On plain HTTP, someone who can passively sniff the network can read
+  session tokens and impersonate a paired device. Use HTTPS, a trusted network or the host's own
+  hotspot for events where this matters.
+- **The relay serves the web remote.** Phones that only reach the relay load the remote's code
+  from it. Encryption protects against a passive or curious relay, its logs and the network, but
+  an operator who deliberately serves modified code could read what that phone does. Only use
+  relays you or people you trust run.
+- **Token handover in URLs.** When a remote switches between the LAN and the relay, its device
+  token travels in the URL fragment (not sent to servers) and is removed from the address bar
+  and history immediately.
+- Relay channels each get their own address for per-client PIN lockouts; the global lockout
+  (20 failures per minute) bounds attempts through the relay as a whole.
 - Rate limiting is per IP address; many devices behind one NAT share a lockout.
 - The operator window's Content-Security-Policy allows connections to any host on the network,
   because controller windows (one host running another host's show) load slides and the

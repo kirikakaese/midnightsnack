@@ -13,9 +13,9 @@ nothing to install.
 The phone remembers the pairing; reloading the page or reconnecting to Wi-Fi does not require
 pairing again. Each QR code works once; it refreshes automatically after a phone has used it.
 
-If the phone cannot open the page, check that it is on the same network as the laptop and see
-**Addresses** in the panel for the laptop's other network addresses. Some guest networks block
-devices from talking to each other — use a different network or the laptop's hotspot.
+If the phone cannot open the page, check that it is on the same network as the laptop, or pick
+another address under **QR code for**. Some guest networks block devices from talking to each
+other — use the laptop's hotspot or a relay; see [connectivity.md](connectivity.md).
 
 ## Roles
 
@@ -26,7 +26,8 @@ devices from talking to each other — use a different network or the laptop's h
 | **Presenter**    | Next/previous within the current cue only; laser pointer and drawing; send files to the inbox; sees notes and timers |
 | **Stage viewer** | Read-only stage display: current and next slide, notes, big timers       |
 
-Change a device's role or remove it in the **Devices** list. **Disconnect all remotes** forgets
+Change a device's role, rename it (click its name) or remove it in the **Devices** list, which
+also shows how each device is connected. **Disconnect all remotes** forgets
 every paired device and changes the PIN — use it if a phone is lost or you suspect misuse. API
 keys (see [control.md](control.md)) are kept; revoke those one by one.
 
