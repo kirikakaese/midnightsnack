@@ -444,6 +444,9 @@
   .meta {
     font-size: 0.8rem;
     color: var(--ms-text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .rename {
     font: inherit;

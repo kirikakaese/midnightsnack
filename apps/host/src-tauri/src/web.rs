@@ -191,6 +191,24 @@ pub async fn run(app: AppHandle, state: Arc<AppState>, data_root: PathBuf) {
                 let _ = if w.visible { view.show() } else { view.hide() };
                 views2.insert(label, w.web.clone());
             }
+            // On Linux, child webviews share a GTK box and are stacked, not layered: hide the
+            // output page while a web page shows so the page view gets the whole window.
+            if cfg!(target_os = "linux") {
+                let showing: HashSet<&str> = want2
+                    .iter()
+                    .filter(|w| w.visible)
+                    .map(|w| w.output_id.as_str())
+                    .collect();
+                for (label, page) in app2.webviews() {
+                    if let Some(id) = output::output_id(&label) {
+                        let _ = if showing.contains(id) {
+                            page.hide()
+                        } else {
+                            page.show()
+                        };
+                    }
+                }
+            }
             if let Some(nav) = &nav2 {
                 if nav.seq > last {
                     for w in want2
