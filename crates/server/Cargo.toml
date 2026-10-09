@@ -20,6 +20,8 @@ mdns-sd = "0.13"
 midnightsnack-core.workspace = true
 midnightsnack-protocol.workspace = true
 midnightsnack-render = { path = "../render" }
+midnightsnack-capture = { path = "../capture" }
+bytes = "1"
 mime_guess = "2"
 rand = "0.9"
 rust-embed = { version = "8", features = ["mime-guess"] }

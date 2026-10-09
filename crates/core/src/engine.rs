@@ -1109,6 +1109,31 @@ impl Engine {
         })
     }
 
+    /// Updates a converted PDF cue after its source document changed and was converted again.
+    pub fn update_converted(
+        &mut self,
+        cue_id: &str,
+        page_count: u32,
+        notes: Vec<String>,
+        now_ms: i64,
+    ) -> Result<Change, ErrorCode> {
+        let cue = self.cue_mut(cue_id)?;
+        match &mut cue.content {
+            CueContent::Pdf {
+                page_count: pc,
+                source: Some(_),
+                ..
+            } => *pc = page_count,
+            _ => return Err(ErrorCode::InvalidState),
+        }
+        cue.slide_notes = notes;
+        let mut c = Change::SHOW;
+        if self.revalidate(now_ms) {
+            c.live = true;
+        }
+        Ok(self.bump(c))
+    }
+
     /// Records which capture cues have lost their source. Called by the capture service.
     pub fn set_capture_lost(&mut self, mut lost: Vec<String>) -> Change {
         lost.sort();

@@ -2795,10 +2795,12 @@ name = "midnightsnack-server"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "bytes",
  "futures-util",
  "if-addrs",
  "image",
  "mdns-sd",
+ "midnightsnack-capture",
  "midnightsnack-core",
  "midnightsnack-protocol",
  "midnightsnack-render",

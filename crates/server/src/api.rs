@@ -206,3 +206,91 @@ pub async fn asset(
     };
     serve_file(path, req).await
 }
+
+#[derive(Debug, Deserialize)]
+pub struct CaptureQuery {
+    k: String,
+    /// Frames per second for this viewer (phones ask for fewer).
+    fps: Option<u32>,
+}
+
+/// Live capture as an MJPEG stream (`multipart/x-mixed-replace`), which `<img>` displays
+/// natively. When the source is lost the stream simply pauses, so viewers keep the last frame.
+pub async fn capture(
+    State(state): State<Arc<AppState>>,
+    Path(cue_id): Path<String>,
+    Query(q): Query<CaptureQuery>,
+) -> Result<Response, ApiFailure> {
+    if !lock(&state.media_keys).contains_key(&q.k) {
+        return Err(ErrorCode::Unauthorized.into());
+    }
+    let info = {
+        let engine = lock(&state.engine);
+        match &engine
+            .show()
+            .cue(&cue_id)
+            .ok_or(ErrorCode::NotFound)?
+            .content
+        {
+            midnightsnack_core::CueContent::Capture { capture } => capture.clone(),
+            _ => return Err(ErrorCode::NotFound.into()),
+        }
+    };
+    let fps = q.fps.unwrap_or(info.fps).clamp(1, info.fps.max(1));
+    let mut rx = state.capture.subscribe(&info.source, fps);
+    let min_gap = std::time::Duration::from_secs_f64(1.0 / fps as f64);
+    let stream = async_stream(move |tx| async move {
+        let mut last = tokio::time::Instant::now() - min_gap;
+        loop {
+            if rx.changed().await.is_err() {
+                return;
+            }
+            let wait = (last + min_gap).saturating_duration_since(tokio::time::Instant::now());
+            if !wait.is_zero() {
+                tokio::time::sleep(wait).await;
+            }
+            last = tokio::time::Instant::now();
+            let Some(frame) = rx.borrow_and_update().clone() else {
+                continue;
+            };
+            let head = format!(
+                "--frame\r\nContent-Type: image/jpeg\r\nContent-Length: {}\r\n\r\n",
+                frame.jpeg.len()
+            );
+            let mut part = bytes::BytesMut::with_capacity(head.len() + frame.jpeg.len() + 2);
+            part.extend_from_slice(head.as_bytes());
+            part.extend_from_slice(&frame.jpeg);
+            part.extend_from_slice(b"\r\n");
+            if tx
+                .send(Ok::<_, std::io::Error>(part.freeze()))
+                .await
+                .is_err()
+            {
+                return;
+            }
+        }
+    });
+    Ok((
+        [
+            (
+                header::CONTENT_TYPE,
+                "multipart/x-mixed-replace; boundary=frame".to_owned(),
+            ),
+            (header::CACHE_CONTROL, "no-store".to_owned()),
+        ],
+        Body::from_stream(stream),
+    )
+        .into_response())
+}
+
+/// A stream fed by a task through a bounded channel (backpressure: slow viewers skip frames).
+fn async_stream<F, Fut, T>(f: F) -> impl futures_util::Stream<Item = T>
+where
+    F: FnOnce(tokio::sync::mpsc::Sender<T>) -> Fut,
+    Fut: std::future::Future<Output = ()> + Send + 'static,
+    T: Send + 'static,
+{
+    let (tx, rx) = tokio::sync::mpsc::channel(1);
+    tokio::spawn(f(tx));
+    futures_util::stream::unfold(rx, |mut rx| async move { rx.recv().await.map(|v| (v, rx)) })
+}

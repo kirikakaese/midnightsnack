@@ -268,6 +268,23 @@ async fn handle_message(state: &Arc<AppState>, conn: &Conn, text: &str) -> Optio
     match msg {
         ClientMessage::Hello { .. } => None,
         ClientMessage::Ping { nonce } => Some(ServerMessage::Pong { nonce }),
+        ClientMessage::ListCaptureTargets => {
+            if conn.role(state) != Some(Role::Admin) {
+                return Some(ServerMessage::Error {
+                    code: ErrorCode::Forbidden,
+                });
+            }
+            let result = tokio::task::spawn_blocking(midnightsnack_capture::list_targets).await;
+            Some(match result {
+                Ok(Ok(targets)) => ServerMessage::CaptureTargets { targets },
+                Ok(Err(midnightsnack_capture::CaptureError::Permission)) => ServerMessage::Error {
+                    code: ErrorCode::CapturePermission,
+                },
+                _ => ServerMessage::CaptureTargets {
+                    targets: Vec::new(),
+                },
+            })
+        }
         ClientMessage::Viewport { width, height } => {
             // Only host output windows decide the render resolution.
             if conn.local && width > 0 && height > 0 {
