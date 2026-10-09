@@ -22,15 +22,32 @@ devices from talking to each other — use a different network or the laptop's h
 | Role             | Can                                                                     |
 | ---------------- | ----------------------------------------------------------------------- |
 | **Admin**        | Everything the operator window can do except opening files on the laptop |
-| **Operator**     | Run the show: next/previous, jump to cues, blackout, freeze, logo, media playback, overlays, countdown, stage messages |
-| **Presenter**    | Next/previous within the current cue only; sees notes and timers         |
+| **Operator**     | Run the show: next/previous, jump to cues, blackout, freeze, logo, media playback, overlays, countdown, stage messages, pointer and drawing |
+| **Presenter**    | Next/previous within the current cue only; laser pointer and drawing; send files to the inbox; sees notes and timers |
 | **Stage viewer** | Read-only stage display: current and next slide, notes, big timers       |
 
 Change a device's role or remove it in the **Devices** list. **Disconnect all remotes** forgets
-every paired device and changes the PIN — use it if a phone is lost or you suspect misuse.
+every paired device and changes the PIN — use it if a phone is lost or you suspect misuse. API
+keys (see [control.md](control.md)) are kept; revoke those one by one.
 
 **Approve new devices automatically as…** skips the approval step for a given role (handy for
 stage displays during rehearsals). The PIN is still required.
+
+## Laser pointer and drawing
+
+Presenters and operators get **Laser** and **Draw** buttons below the current slide. With one of
+them on, the slide fills the width of the phone: touch it to move a red dot on the projector, or
+draw with a finger in the chosen color. Drawings belong to the slide — they disappear when the
+slide changes, or with **Clear drawing**. In the operator window the same buttons sit above the
+program monitor, for drawing with the mouse.
+
+## Sending files
+
+**Send a file to the host** uploads a PDF, presentation, image, video or audio file from the
+phone. It waits in the **Inbox** at the top of the operator's cue list until the operator adds
+it (at the end, or after the live cue) or rejects it. Files from admins, and from everyone while
+**Add files from all devices without asking** is on (Connect tab), are added right away. The
+host refuses other file types and files over 2 GB.
 
 ## Stage view
 

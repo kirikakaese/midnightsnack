@@ -6,6 +6,7 @@
 - [Presentations, web pages and screen capture](sources.md) — PowerPoint/Keynote, OpenSlides
 - [Phones and tablets as remotes](remotes.md) — pairing, roles, stage view
 - [Keyboard and presentation clickers](keyboard.md)
+- [MIDI, OSC, HTTP API, Stream Deck and a second computer](control.md)
 
 ## Installing unsigned builds
 

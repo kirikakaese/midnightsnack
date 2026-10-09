@@ -35,9 +35,12 @@
 | `crates/render`    | PDF (PDFium) and image rendering, render cache, office → PDF conversion |
 | `crates/server`    | Embedded axum HTTP + WebSocket server, pairing, devices, media, autosave |
 | `crates/capture`   | Screen and window capture, shared JPEG frame workers               |
+| `crates/control`   | MIDI decoding/bindings and port listener, OSC address space and feedback |
+| `integrations/companion` | Bitfocus Companion module (WebSocket client with an API key)  |
 
 Output windows hold child webviews: the output page and, for web page cues, the remote page
-([ADR 0010](../adr/0010-web-cues-in-child-webviews.md)). Later phases add `crates/control`
-(MIDI/OSC/HTTP adapters), `crates/relay` and `integrations/companion`.
+([ADR 0010](../adr/0010-web-cues-in-child-webviews.md)). Control surfaces (MIDI, OSC, the HTTP
+API, Companion, controller mode) are described in
+[ADR 0011](../adr/0011-control-surfaces.md). A later phase adds `crates/relay`.
 
 See the ADRs in [../adr](../adr) for the reasoning behind these choices.

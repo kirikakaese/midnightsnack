@@ -32,6 +32,10 @@ protects, against whom, and the known limits.
 | Web page cue attacks the host                 | Web pages run in their own webview without IPC access, incognito unless "keep logins" is set (then with a data directory per cue), and can be kept on their site. |
 | Screen contents leak to the network           | Capture streams need the media key of a live connection; listing windows (titles) is admin-only. Capture only runs while a capture cue is viewed. |
 | Malicious presentation file                   | Office files are converted by LibreOffice in a separate process with a private profile and a timeout; notes are parsed with a size-limited XML reader. |
+| Control surface keys leaked or misused         | API keys are devices with a role: hashed on disk, revocable, shown once. By default they (and OSC) only work from the host itself; opening them to the network is an explicit setting. OSC senders on other computers must authenticate with a key; failed attempts are throttled. "Disconnect all" keeps API keys (configured integrations); revoke them individually. |
+| Uploads used to fill the disk or plant files  | Uploads need a paired device of presenter role or higher, are limited to 2 GB and to media/presentation types, are stored under a generated directory with a sanitized single-component name, and wait in the inbox until an admin accepts them. Pending uploads are deleted on restart. |
+| Pointer spam                                  | Pointer messages need the presenter role and are capped at 60 per second per device; drawings are validated (points, width, color) and capped per slide. |
+| PIN guessing from a second computer           | Pairing without the QR code's join token is only accepted while every request needs the operator's approval (auto-approve off); the PIN lockouts apply. |
 | Remote page embedded/clickjacked              | `Content-Security-Policy` with `frame-ancestors 'none'`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`. |
 
 ## Known limitations
@@ -42,6 +46,11 @@ protects, against whom, and the known limits.
   hotspot) for events where this matters. Optional HTTPS with a generated certificate and the
   end-to-end encrypted relay are planned (phase 5).
 - Rate limiting is per IP address; many devices behind one NAT share a lockout.
+- The operator window's Content-Security-Policy allows connections to any host on the network,
+  because controller windows (one host running another host's show) load slides and the
+  WebSocket from the other computer. The window only runs midnightsnack's own code.
+- MIDI input acts with the operator role and is not authenticated: anyone who can plug a MIDI
+  device into the host can run the show (they could also press its keys).
 - The PIN is stable for a host session until "Disconnect all"; the one-time join token is the
   per-pairing secret.
 

@@ -13,10 +13,11 @@ MIDI controllers, OSC and Stream Deck via Bitfocus Companion.
   dialogs, cursors or spinners on the audience screen.
 - **Fast** — live actions react in under 100 ms on LAN; upcoming slides are pre-rendered.
 
-> **Status:** early development (phase 2). PDF, image, video, audio, text/lyrics and timer cues,
-> transitions, overlays, a stage display, one projector output, keyboard/clicker control and
-> phone remotes with pairing work today. See the [roadmap](#roadmap) and the
-> [user guide](docs/user/README.md).
+> **Status:** early development (phase 4). PDF, PowerPoint/Keynote, image, video, audio,
+> text/lyrics, timer, web page and screen capture cues, transitions, overlays, several outputs
+> and stage displays, phone remotes with laser pointer, drawing and file upload, a second
+> computer as controller, MIDI, OSC, an HTTP API and Bitfocus Companion work today. See the
+> [roadmap](#roadmap) and the [user guide](docs/user/README.md).
 
 ## Quick start (development)
 
@@ -59,12 +60,15 @@ More in [docs/dev/setup.md](docs/dev/setup.md).
 | `crates/protocol`    | Wire protocol types; generates TypeScript via ts-rs             |
 | `crates/render`      | PDF (PDFium) and image rendering with a disk cache              |
 | `crates/server`      | Embedded HTTP/WebSocket server: pairing, devices, media, autosave |
+| `crates/capture`     | Screen and window capture                                       |
+| `crates/control`     | MIDI and OSC control surfaces                                   |
+| `integrations/companion` | Bitfocus Companion (Stream Deck) module                      |
 | `packages/ui`        | Shared Svelte component library, design tokens and i18n         |
 | `packages/protocol`  | Generated TypeScript protocol types                             |
 | `docs/`              | User guides, developer docs, ADRs and phase plans               |
 
-Further crates (`capture`, `control`, `relay`, …) are added in the phase that needs
-them; see [docs/dev/architecture.md](docs/dev/architecture.md).
+Further crates (e.g. `relay`) are added in the phase that needs them; see
+[docs/dev/architecture.md](docs/dev/architecture.md).
 
 ## Roadmap
 
