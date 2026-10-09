@@ -9,6 +9,7 @@
   import ConnectivityPanel from "./ConnectivityPanel.svelte";
   import ControllerPanel from "./ControllerPanel.svelte";
   import HotspotPanel from "./HotspotPanel.svelte";
+  import OpenSlidesPanel from "./OpenSlidesPanel.svelte";
 
   interface Props {
     conn: HostConnection;
@@ -256,6 +257,7 @@
     {/if}
 
     <ConnectivityPanel {conn} />
+    <OpenSlidesPanel {conn} />
 
     {#if !isController()}
       <HotspotPanel />

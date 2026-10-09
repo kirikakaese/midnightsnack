@@ -81,7 +81,9 @@
     if (m) setTimer({ mode: m });
   }
 
-  const ownTheme = $derived(cue?.text?.theme ?? cue?.timer?.theme ?? null);
+  const ownTheme = $derived(
+    cue?.text?.theme ?? cue?.timer?.theme ?? cue?.openslides?.theme ?? null,
+  );
   function setTheme(theme: TextTheme | null) {
     conn.action({ action: "set_cue_theme", cue_id: id(), theme });
   }
@@ -209,7 +211,7 @@
       </label>
     {/if}
 
-    {#if cue.text || cue.timer}
+    {#if cue.text || cue.timer || cue.openslides}
       <h3>{t("inspector.look")}</h3>
       <label class="check">
         <input
