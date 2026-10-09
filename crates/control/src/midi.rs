@@ -2,9 +2,7 @@
 //! MIDI input: decoding note/CC messages into triggers, matching bindings, and listening on all
 //! connected input ports (re-scanned so controllers can be plugged in during a show).
 
-use std::collections::{HashMap, HashSet};
-use std::sync::mpsc;
-use std::time::Duration;
+use std::collections::HashSet;
 
 use midnightsnack_protocol::{Action, MidiBinding, MidiKind, MidiTrigger};
 
@@ -68,85 +66,100 @@ pub fn bind(bindings: &mut Vec<MidiBinding>, trigger: MidiTrigger, action: Actio
     bindings.push(MidiBinding { trigger, action });
 }
 
-/// Names of the MIDI input ports currently available.
-pub fn port_names() -> Vec<String> {
-    let Ok(input) = midir::MidiInput::new("midnightsnack") else {
-        return Vec::new();
-    };
-    input
-        .ports()
-        .iter()
-        .filter_map(|p| input.port_name(p).ok())
-        .collect()
-}
+/// Talking to the operating system's MIDI ports.
+#[cfg(feature = "midi-io")]
+mod io {
+    use std::collections::HashMap;
+    use std::sync::mpsc;
+    use std::time::Duration;
 
-/// Listens on every MIDI input port and sends decoded presses. Ports are re-scanned every
-/// two seconds; the listener stops when the receiver is dropped.
-pub struct MidiListener;
+    use super::{Decoder, Press};
 
-impl MidiListener {
-    pub fn spawn(tx: mpsc::Sender<Press>) {
-        std::thread::Builder::new()
-            .name("midnightsnack-midi".into())
-            .spawn(move || run(tx))
-            .expect("spawn MIDI thread");
+    /// Names of the MIDI input ports currently available.
+    pub fn port_names() -> Vec<String> {
+        let Ok(input) = midir::MidiInput::new("midnightsnack") else {
+            return Vec::new();
+        };
+        input
+            .ports()
+            .iter()
+            .filter_map(|p| input.port_name(p).ok())
+            .collect()
     }
-}
 
-fn run(tx: mpsc::Sender<Press>) {
-    let (raw_tx, raw_rx) = mpsc::channel::<Vec<u8>>();
-    let mut connections: HashMap<String, midir::MidiInputConnection<()>> = HashMap::new();
-    let mut decoder = Decoder::default();
-    loop {
-        // Connect new ports, forget vanished ones.
-        if let Ok(input) = midir::MidiInput::new("midnightsnack") {
-            let ports = input.ports();
-            let names: Vec<(String, midir::MidiInputPort)> = ports
-                .into_iter()
-                .filter_map(|p| input.port_name(&p).ok().map(|n| (n, p)))
-                .collect();
-            connections.retain(|name, _| names.iter().any(|(n, _)| n == name));
-            for (name, port) in names {
-                if connections.contains_key(&name) || name.contains("midnightsnack") {
-                    continue;
-                }
-                let Ok(input) = midir::MidiInput::new("midnightsnack") else {
-                    continue;
-                };
-                let raw = raw_tx.clone();
-                match input.connect(
-                    &port,
-                    "midnightsnack-in",
-                    move |_, msg, _| {
-                        let _ = raw.send(msg.to_vec());
-                    },
-                    (),
-                ) {
-                    Ok(conn) => {
-                        tracing::info!(port = %name, "MIDI input connected");
-                        connections.insert(name, conn);
-                    }
-                    Err(e) => tracing::warn!(port = %name, error = %e, "cannot open MIDI input"),
-                }
-            }
+    /// Listens on every MIDI input port and sends decoded presses. Ports are re-scanned every
+    /// two seconds; the listener stops when the receiver is dropped.
+    pub struct MidiListener;
+
+    impl MidiListener {
+        pub fn spawn(tx: mpsc::Sender<Press>) {
+            std::thread::Builder::new()
+                .name("midnightsnack-midi".into())
+                .spawn(move || run(tx))
+                .expect("spawn MIDI thread");
         }
-        // Forward messages until the next rescan.
-        let deadline = std::time::Instant::now() + Duration::from_secs(2);
-        while let Some(left) = deadline.checked_duration_since(std::time::Instant::now()) {
-            match raw_rx.recv_timeout(left) {
-                Ok(msg) => {
-                    if let Some(press) = decoder.decode(&msg) {
-                        if tx.send(press).is_err() {
-                            return;
+    }
+
+    fn run(tx: mpsc::Sender<Press>) {
+        let (raw_tx, raw_rx) = mpsc::channel::<Vec<u8>>();
+        let mut connections: HashMap<String, midir::MidiInputConnection<()>> = HashMap::new();
+        let mut decoder = Decoder::default();
+        loop {
+            // Connect new ports, forget vanished ones.
+            if let Ok(input) = midir::MidiInput::new("midnightsnack") {
+                let ports = input.ports();
+                let names: Vec<(String, midir::MidiInputPort)> = ports
+                    .into_iter()
+                    .filter_map(|p| input.port_name(&p).ok().map(|n| (n, p)))
+                    .collect();
+                connections.retain(|name, _| names.iter().any(|(n, _)| n == name));
+                for (name, port) in names {
+                    if connections.contains_key(&name) || name.contains("midnightsnack") {
+                        continue;
+                    }
+                    let Ok(input) = midir::MidiInput::new("midnightsnack") else {
+                        continue;
+                    };
+                    let raw = raw_tx.clone();
+                    match input.connect(
+                        &port,
+                        "midnightsnack-in",
+                        move |_, msg, _| {
+                            let _ = raw.send(msg.to_vec());
+                        },
+                        (),
+                    ) {
+                        Ok(conn) => {
+                            tracing::info!(port = %name, "MIDI input connected");
+                            connections.insert(name, conn);
+                        }
+                        Err(e) => {
+                            tracing::warn!(port = %name, error = %e, "cannot open MIDI input")
                         }
                     }
                 }
-                Err(mpsc::RecvTimeoutError::Timeout) => break,
-                Err(mpsc::RecvTimeoutError::Disconnected) => return,
+            }
+            // Forward messages until the next rescan.
+            let deadline = std::time::Instant::now() + Duration::from_secs(2);
+            while let Some(left) = deadline.checked_duration_since(std::time::Instant::now()) {
+                match raw_rx.recv_timeout(left) {
+                    Ok(msg) => {
+                        if let Some(press) = decoder.decode(&msg) {
+                            if tx.send(press).is_err() {
+                                return;
+                            }
+                        }
+                    }
+                    Err(mpsc::RecvTimeoutError::Timeout) => break,
+                    Err(mpsc::RecvTimeoutError::Disconnected) => return,
+                }
             }
         }
     }
 }
+
+#[cfg(feature = "midi-io")]
+pub use io::{port_names, MidiListener};
 
 #[cfg(test)]
 mod tests {

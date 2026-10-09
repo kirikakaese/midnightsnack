@@ -17,7 +17,7 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 keepawake = "0.6"
-midnightsnack-control.workspace = true
+midnightsnack-control = { workspace = true, features = ["midi-io"] }
 midnightsnack-core.workspace = true
 midnightsnack-protocol.workspace = true
 midnightsnack-server = { path = "../../../crates/server" }
