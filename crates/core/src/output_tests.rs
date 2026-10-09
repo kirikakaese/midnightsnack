@@ -317,3 +317,46 @@ fn output_permissions() {
         }
     ));
 }
+
+#[test]
+fn web_cues_forward_next_and_prev_as_keys() {
+    let mut e = Engine::default();
+    let web = WebInfo {
+        url: "https://example.org/reveal/".into(),
+        zoom: 100,
+        block_navigation: true,
+        forward_keys: true,
+        persist_session: false,
+        openslides: false,
+    };
+    e.apply(
+        &Action::AddWeb {
+            name: "Deck".into(),
+            web,
+            at_index: None,
+        },
+        0,
+    )
+    .unwrap();
+    e.insert_cues(vec![pdf("after", 1)], None);
+    e.apply(&Action::Go, 0).unwrap();
+    let web_id = e.show().cues[0].id.clone();
+    assert_eq!(e.program().unwrap().cue_id, web_id);
+    e.apply(&Action::Next, 0).unwrap();
+    e.apply(&Action::Next, 0).unwrap();
+    e.apply(&Action::Prev, 0).unwrap();
+    let nav = e.live_state(0).web_nav.unwrap();
+    assert_eq!(
+        (nav.forward, nav.seq, nav.cue_id),
+        (false, 3, web_id.clone())
+    );
+    assert_eq!(e.program().unwrap().cue_id, web_id, "still on the web cue");
+    // Presenters can step through the page.
+    assert!(crate::permissions::check(Role::Presenter, false, &Action::Next, &e).is_ok());
+    // The cue is left with next cue.
+    e.apply(&Action::NextCue, 0).unwrap();
+    assert_eq!(
+        e.show().cue(&e.program().unwrap().cue_id).unwrap().name,
+        "after"
+    );
+}

@@ -6,6 +6,7 @@ import type { OutputLive } from "./OutputLive";
 import type { Position } from "./Position";
 import type { Stopwatch } from "./Stopwatch";
 import type { TestPattern } from "./TestPattern";
+import type { WebNav } from "./WebNav";
 
 /**
  * Live show state. Sent on every change.
@@ -56,6 +57,10 @@ export type LiveState = {
    * Capture cues whose source is currently unavailable.
    */
   capture_lost: Array<string>;
+  /**
+   * Last next/prev forwarded to the live web page.
+   */
+  web_nav: WebNav | null;
   /**
    * When the program will advance automatically.
    */

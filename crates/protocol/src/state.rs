@@ -452,6 +452,17 @@ pub struct OutputLive {
     pub position: Option<Position>,
 }
 
+/// Next/prev forwarded to a web page cue (arrow keys), numbered so each press is delivered once.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct WebNav {
+    pub cue_id: CueId,
+    /// `true` = next (→), `false` = previous (←).
+    pub forward: bool,
+    #[ts(type = "number")]
+    pub seq: u64,
+}
+
 /// Live show state. Sent on every change.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export)]
@@ -481,6 +492,8 @@ pub struct LiveState {
     pub test_pattern: Option<TestPattern>,
     /// Capture cues whose source is currently unavailable.
     pub capture_lost: Vec<CueId>,
+    /// Last next/prev forwarded to the live web page.
+    pub web_nav: Option<WebNav>,
     /// When the program will advance automatically.
     #[ts(type = "number | null")]
     pub auto_advance_at_ms: Option<i64>,

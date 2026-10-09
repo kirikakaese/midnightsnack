@@ -183,6 +183,11 @@ fn server_messages_round_trip() {
                 }],
                 test_pattern: Some(TestPattern::Bars),
                 capture_lost: vec![],
+                web_nav: Some(WebNav {
+                    cue_id: "c1".into(),
+                    forward: true,
+                    seq: 4,
+                }),
                 host_time_ms: 2000,
                 revision: 9,
             },

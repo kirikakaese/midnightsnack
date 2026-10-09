@@ -90,8 +90,9 @@ pub fn check(role: Role, local: bool, action: &Action, engine: &Engine) -> Resul
     if is_local_only(action) && !local {
         return Err(ErrorCode::LocalOnly);
     }
-    // Presenters may only move within the cue that is currently live.
-    if role == Role::Presenter {
+    // Presenters may only move within the cue that is currently live (for a web page with key
+    // forwarding, next/prev stay inside the page).
+    if role == Role::Presenter && !engine.forwards_keys() {
         let program_cue = engine.program().map(|p| p.cue_id.clone());
         let target = match action {
             Action::Next | Action::Go => engine.next_position(),

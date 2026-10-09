@@ -43,4 +43,5 @@ export type * from "./TimerMode";
 export type * from "./Transition";
 export type * from "./TransitionKind";
 export type * from "./WebInfo";
+export type * from "./WebNav";
 export * from "./constants";

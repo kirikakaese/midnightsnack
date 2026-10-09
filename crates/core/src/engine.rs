@@ -63,6 +63,7 @@ struct Live {
     outputs: BTreeMap<String, Option<Position>>,
     test_pattern: Option<TestPattern>,
     capture_lost: Vec<String>,
+    web_nav: Option<crate::protocol::WebNav>,
     blackout: bool,
     logo: bool,
     show_timer: Stopwatch,
@@ -201,6 +202,31 @@ impl Engine {
             .is_some_and(|c| p.slide < c.slide_count())
     }
 
+    /// The live cue is a web page that receives next/prev as arrow keys.
+    pub fn forwards_keys(&self) -> bool {
+        self.live
+            .program
+            .as_ref()
+            .and_then(|p| self.show.cue(&p.cue_id))
+            .is_some_and(|c| matches!(&c.content, CueContent::Web { web } if web.forward_keys))
+    }
+
+    fn forward_key(&mut self, forward: bool) -> Change {
+        let cue_id = self
+            .live
+            .program
+            .as_ref()
+            .map(|p| p.cue_id.clone())
+            .unwrap_or_default();
+        let seq = self.live.web_nav.as_ref().map_or(1, |n| n.seq + 1);
+        self.live.web_nav = Some(crate::protocol::WebNav {
+            cue_id,
+            forward,
+            seq,
+        });
+        Change::LIVE
+    }
+
     /// Position `next` would move to.
     pub fn next_position(&self) -> Option<Position> {
         let Some(p) = &self.live.program else {
@@ -335,6 +361,7 @@ impl Engine {
                 .collect(),
             test_pattern: self.live.test_pattern,
             capture_lost: self.live.capture_lost.clone(),
+            web_nav: self.live.web_nav.clone(),
             auto_advance_at_ms: self.auto_advance_at(),
             host_time_ms: now_ms,
             revision: self.live_revision,
@@ -508,6 +535,8 @@ impl Engine {
     fn apply_inner(&mut self, action: &Action, now_ms: i64) -> Result<Change, ErrorCode> {
         use Action::*;
         Ok(match action {
+            Go | Next if self.forwards_keys() => self.forward_key(true),
+            Prev if self.forwards_keys() => self.forward_key(false),
             Go | Next => {
                 let target = self.next_position();
                 match target {
