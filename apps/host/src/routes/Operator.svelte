@@ -257,7 +257,7 @@
   }
   .monitors {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     gap: var(--ms-gap);
   }
   .monitor header {
@@ -271,8 +271,17 @@
     display: flex;
     gap: 2px;
     margin-left: auto;
+    flex-shrink: 0;
+  }
+  .pointer-tools :global(.ms-btn.ms-btn) {
+    min-height: 26px;
+    min-width: 26px;
+    padding: 0 8px;
+    font-size: 0.8rem;
+    white-space: nowrap;
   }
   .where {
+    min-width: 0;
     color: var(--ms-text-muted);
     overflow: hidden;
     text-overflow: ellipsis;

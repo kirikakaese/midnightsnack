@@ -49,15 +49,16 @@
     border-radius: var(--ms-radius);
     overflow: hidden;
   }
+  /* Tabs wrap onto a second row rather than hiding off the edge of narrow panels. */
   .list {
     display: flex;
+    flex-wrap: wrap;
     border-bottom: 1px solid var(--ms-border);
-    overflow-x: auto;
   }
   button {
-    flex: 1;
+    flex: 1 0 auto;
     min-height: 40px;
-    padding: 0 10px;
+    padding: 0 8px;
     border: 0;
     border-bottom: 3px solid transparent;
     background: transparent;

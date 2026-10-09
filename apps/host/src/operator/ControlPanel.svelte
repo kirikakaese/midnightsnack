@@ -219,10 +219,12 @@
 <style>
   .control {
     display: grid;
+    grid-template-columns: minmax(0, 1fr);
     gap: 14px;
   }
   section {
     display: grid;
+    grid-template-columns: minmax(0, 1fr);
     gap: 8px;
   }
   .head {

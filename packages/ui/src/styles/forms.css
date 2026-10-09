@@ -2,6 +2,8 @@
 /* Shared form styling for operator and remote. Opt in with class="ms-form". */
 .ms-form {
   display: grid;
+  /* Never wider than the panel, however long a value is. */
+  grid-template-columns: minmax(0, 1fr);
   gap: 10px;
 }
 .ms-form label,

@@ -355,12 +355,6 @@
             </button>
           {/if}
           <span class="tools">
-            <button
-              class="go"
-              aria-label={t("cue.go_live")}
-              disabled={cue.slide_count === 0}
-              onclick={() => go(cue)}>▶</button
-            >
             <button aria-label={t("cue.rename")} onclick={() => startRename(cue)}>✎</button>
             <button aria-label={t("cue.move_up")} disabled={i === 0} onclick={() => move(cue, -1)}
               >↑</button
@@ -373,6 +367,13 @@
             <button
               aria-label={t("cue.remove")}
               onclick={() => conn.action({ action: "remove_cue", cue_id: cue.id })}>✕</button
+            >
+            <!-- Last, so revealing the other tools never moves it under the pointer. -->
+            <button
+              class="go"
+              aria-label={t("cue.go_live")}
+              disabled={cue.slide_count === 0}
+              onclick={() => go(cue)}>▶</button
             >
           </span>
         </li>
