@@ -1131,7 +1131,13 @@ impl Engine {
             | RejectUpload { .. }
             | SetAutoAcceptUploads { .. }
             | SetApiLocalOnly { .. }
-            | ConfigureOsc { .. } => return Err(ErrorCode::InvalidState),
+            | ConfigureOsc { .. }
+            | ConfigureRelay { .. }
+            | ResetRelayIdentity
+            | SetHttps { .. }
+            | RenewCertificate
+            | RenameDevice { .. }
+            | ForgetOfflineDevices => return Err(ErrorCode::InvalidState),
         })
     }
 

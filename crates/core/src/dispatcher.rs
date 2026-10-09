@@ -68,6 +68,12 @@ pub fn is_host_action(action: &Action) -> bool {
             | SetAutoAcceptUploads { .. }
             | SetApiLocalOnly { .. }
             | ConfigureOsc { .. }
+            | ConfigureRelay { .. }
+            | ResetRelayIdentity
+            | SetHttps { .. }
+            | RenewCertificate
+            | RenameDevice { .. }
+            | ForgetOfflineDevices
     )
 }
 

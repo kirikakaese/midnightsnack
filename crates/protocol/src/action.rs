@@ -83,6 +83,23 @@ pub enum Action {
         osc: OscSettings,
     },
 
+    // --- connectivity ---
+    /// Connects to a relay (or stops). `access_token: None` keeps the stored token; an empty
+    /// string removes it.
+    ConfigureRelay {
+        enabled: bool,
+        url: String,
+        access_token: Option<String>,
+    },
+    /// New relay keys and host id: every relay link so far stops working.
+    ResetRelayIdentity,
+    /// Turns the HTTPS server on or off.
+    SetHttps {
+        on: bool,
+    },
+    /// Replaces the HTTPS certificate with a new one.
+    RenewCertificate,
+
     // --- upload inbox ---
     /// Adds an uploaded file to the show.
     AcceptUpload {
@@ -272,6 +289,12 @@ pub enum Action {
     RevokeDevice {
         device_id: String,
     },
+    RenameDevice {
+        device_id: String,
+        name: String,
+    },
+    /// Forgets every paired device that is not connected (API keys are kept).
+    ForgetOfflineDevices,
     DisconnectAll,
     SetAutoApprove {
         role: Option<Role>,

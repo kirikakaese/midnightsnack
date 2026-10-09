@@ -47,6 +47,10 @@ export type Action =
   | { action: "clear_drawing" }
   | { action: "set_api_local_only"; on: boolean }
   | { action: "configure_osc"; osc: OscSettings }
+  | { action: "configure_relay"; enabled: boolean; url: string; access_token: string | null }
+  | { action: "reset_relay_identity" }
+  | { action: "set_https"; on: boolean }
+  | { action: "renew_certificate" }
   | { action: "accept_upload"; upload_id: string; at_index: number | null }
   | { action: "reject_upload"; upload_id: string }
   | { action: "set_auto_accept_uploads"; on: boolean }
@@ -92,5 +96,7 @@ export type Action =
   | { action: "deny_pairing"; request_id: string }
   | { action: "set_device_role"; device_id: string; role: Role }
   | { action: "revoke_device"; device_id: string }
+  | { action: "rename_device"; device_id: string; name: string }
+  | { action: "forget_offline_devices" }
   | { action: "disconnect_all" }
   | { action: "set_auto_approve"; role: Role | null };

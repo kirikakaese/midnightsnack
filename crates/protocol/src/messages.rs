@@ -3,8 +3,8 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::{
-    Action, CaptureTarget, ControlSettings, DeviceInfo, ErrorCode, InboxItem, LiveState,
-    PairingInfo, PendingPairing, PointerMode, Role, ShowSnapshot,
+    Action, CaptureTarget, ConnectivityInfo, ControlSettings, DeviceInfo, ErrorCode, InboxItem,
+    LiveState, PairingInfo, PendingPairing, PointerMode, Role, Routes, ShowSnapshot,
 };
 
 /// Static information about a host, available before pairing (`GET /api/v1/info`).
@@ -102,6 +102,14 @@ pub enum ServerMessage {
     /// Admins only.
     Pairing {
         pairing: PairingInfo,
+    },
+    /// Admins only: network interfaces, HTTPS and relay status.
+    Connectivity {
+        connectivity: ConnectivityInfo,
+    },
+    /// Paired remotes: other ways to reach the host (fallback to the relay and back).
+    Routes {
+        routes: Routes,
     },
     /// Admins only: uploaded files waiting for a decision.
     Inbox {
