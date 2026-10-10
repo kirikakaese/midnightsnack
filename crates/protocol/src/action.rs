@@ -191,6 +191,10 @@ pub enum Action {
     AddBlank {
         color: String,
         at_index: Option<u32>,
+        /// Cue name (the operator's language); "Blank" when missing.
+        #[serde(default)]
+        #[ts(optional)]
+        name: Option<String>,
     },
     AddText {
         name: String,

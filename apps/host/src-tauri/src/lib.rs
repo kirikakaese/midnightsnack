@@ -20,7 +20,7 @@ use midnightsnack_core::APP_VERSION;
 use midnightsnack_protocol::{HostInfo, MidiTrigger, OutputFeed, DEFAULT_PORT, PROTOCOL_VERSION};
 use midnightsnack_server::{start, state::lock, ServerConfig, ServerHandle};
 use serde::Serialize;
-use tauri::{AppHandle, Manager, State, Webview};
+use tauri::{AppHandle, Emitter, Manager, State, Webview};
 
 use crate::output::DisplayInfo;
 use crate::settings::{HostSettings, Placement};
@@ -271,6 +271,32 @@ fn set_midi_settings(state: State<'_, HostState>, settings: midi::MidiSettings) 
     state.save_settings();
 }
 
+#[tauri::command]
+fn language(state: State<'_, HostState>) -> Option<String> {
+    state
+        .settings
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .language
+        .clone()
+}
+
+/// Stores the language and tells every window (operator, outputs, controllers) to switch.
+#[tauri::command]
+fn set_language(app: AppHandle, state: State<'_, HostState>, language: Option<String>) {
+    let language = language.filter(|l| {
+        !l.is_empty() && l.len() <= 16 && l.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+    });
+    state
+        .settings
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .language
+        .clone_from(&language);
+    state.save_settings();
+    let _ = app.emit("language-changed", language);
+}
+
 /// Waits up to 10 s for the next MIDI press; `null` on timeout.
 #[tauri::command]
 async fn midi_learn(learn: State<'_, midi::Learn>) -> Result<Option<MidiTrigger>, ()> {
@@ -420,6 +446,8 @@ pub fn run() {
             midi_settings,
             set_midi_settings,
             midi_learn,
+            language,
+            set_language,
             controller::discover_hosts,
             controller::remote_hosts,
             controller::forget_remote,

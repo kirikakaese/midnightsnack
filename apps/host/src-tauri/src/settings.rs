@@ -31,6 +31,8 @@ pub struct HostSettings {
     pub midi: crate::midi::MidiSettings,
     /// Hosts this computer controls (controller mode).
     pub remotes: Vec<crate::controller::RemoteHost>,
+    /// Language of the host's windows (`en`, `de`, …); `None` follows the system.
+    pub language: Option<String>,
     // Phase 1/2 fields, migrated into `outputs["main"]`.
     #[serde(skip_serializing)]
     output_display: Option<String>,

@@ -85,6 +85,12 @@ export const host = {
   /** Resolves with the next MIDI press, or `null` after 10 s. */
   midiLearn: () => invoke<MidiTrigger | null>("midi_learn"),
   uiReady: () => invoke<void>("ui_ready"),
+  /** A show opened from the file manager and not opened yet, if any (taken once). */
+  takePendingOpen: () => invoke<string | null>("take_pending_open"),
+  /** The chosen language, or `null` to follow the system. */
+  language: () => invoke<string | null>("language"),
+  /** Stores the language and switches every window (event `language-changed`). */
+  setLanguage: (language: string | null) => invoke<void>("set_language", { language }),
   discoverHosts: () => invoke<FoundHost[]>("discover_hosts"),
   remoteHosts: () => invoke<RemoteHost[]>("remote_hosts"),
   forgetRemote: (id: string) => invoke<void>("forget_remote", { id }),

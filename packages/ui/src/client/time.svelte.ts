@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import type { Stopwatch } from "@midnightsnack/protocol";
+import { getLocale } from "../i18n/index.svelte";
 
 /** A clock that ticks reactively. Create one per view. */
 export class Ticker {
@@ -33,13 +34,15 @@ export function formatDuration(ms: number): string {
   return h > 0 ? `${h}:${String(m).padStart(2, "0")}:${ss}` : `${m}:${ss}`;
 }
 
-export function formatClock(epochMs: number, locale?: string): string {
+/** Wall-clock time as `HH:MM:SS` (24 h) in the current language's digits and separators. */
+export function formatClock(epochMs: number, locale: string = getLocale()): string {
   // A one-off formatter, not reactive state.
   // eslint-disable-next-line svelte/prefer-svelte-reactivity
   return new Date(epochMs).toLocaleTimeString(locale, {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
+    hourCycle: "h23",
   });
 }
 

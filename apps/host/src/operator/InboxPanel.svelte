@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 <!-- Files sent from devices, waiting to be added to the show or rejected. -->
 <script lang="ts">
-  import { Button, t, type HostConnection } from "@midnightsnack/ui";
+  import { Button, getLocale, t, type HostConnection } from "@midnightsnack/ui";
 
   interface Props {
     conn: HostConnection;
@@ -9,8 +9,12 @@
   let { conn }: Props = $props();
 
   function size(bytes: number): string {
-    if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-    return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+    const mb = bytes >= 1024 * 1024;
+    return new Intl.NumberFormat(getLocale(), {
+      style: "unit",
+      unit: mb ? "megabyte" : "kilobyte",
+      maximumFractionDigits: mb ? 1 : 0,
+    }).format(mb ? bytes / 1024 / 1024 : Math.max(1, Math.round(bytes / 1024)));
   }
 
   /** Right after the cue that is live, or at the end when nothing is live. */

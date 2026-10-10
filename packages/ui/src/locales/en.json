@@ -1,6 +1,5 @@
 {
   "app.name": "midnightsnack",
-  "app.tagline": "Presentation host with remote control",
   "action.go": "GO",
   "status.connected": "Connected",
   "status.connecting": "Connecting…",
@@ -75,7 +74,6 @@
   "output.move": "Move output",
   "output.close": "Close output",
   "output.refresh": "Refresh displays",
-  "connect.title": "Connect a remote",
   "connect.pin": "PIN",
   "connect.qr_alt": "QR code to join from a phone",
   "connect.auto_approve": "Approve new devices automatically as",
@@ -110,7 +108,6 @@
   "remote.notes": "Notes",
   "remote.stage_view": "Stage view",
   "remote.control_view": "Controls",
-  "remote.read_only": "Read-only",
   "error.protocol_mismatch": "This remote is not compatible with the host version.",
   "error.malformed_message": "The host could not understand a message.",
   "error.unauthorized": "This device is not paired.",
@@ -531,5 +528,9 @@
   "openslides.error.unreachable": "OpenSlides cannot be reached; retrying.",
   "openslides.error.unauthorized": "Wrong username or password, or no access.",
   "openslides.error.meeting_not_found": "The meeting does not exist or this account cannot see it.",
-  "openslides.error.incompatible": "This does not look like an OpenSlides 4 server."
+  "openslides.error.incompatible": "This does not look like an OpenSlides 4 server.",
+  "settings.language": "Language",
+  "settings.language_system": "Like the system",
+  "settings.language_hint": "Used by this computer's windows. Phones follow their own language settings.",
+  "settings.language_browser": "Like the browser"
 }

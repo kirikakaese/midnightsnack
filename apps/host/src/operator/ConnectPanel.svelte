@@ -2,7 +2,7 @@
 <!-- Pairing (QR code and PIN), waiting requests, paired devices and how remotes connect. -->
 <script lang="ts">
   import type { DeviceInfo, JoinLink, Role } from "@midnightsnack/protocol";
-  import { Button, t, type HostConnection } from "@midnightsnack/ui";
+  import { Button, getLocale, t, type HostConnection } from "@midnightsnack/ui";
   import { ask } from "@tauri-apps/plugin-dialog";
   import { host } from "../lib/host";
   import { isController } from "../lib/mode";
@@ -95,7 +95,7 @@
     }
   }
 
-  const ago = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
+  const ago = $derived(new Intl.RelativeTimeFormat(getLocale(), { numeric: "auto" }));
   function lastSeen(ms: number | null): string {
     if (ms === null) return t("devices.never_seen");
     const minutes = Math.round((ms - conn.hostNow()) / 60_000);

@@ -12,6 +12,7 @@ import {
 const TOKEN_KEY = "midnightsnack.token";
 const NAME_KEY = "midnightsnack.deviceName";
 const ROUTES_KEY = "midnightsnack.routes";
+const LANGUAGE_KEY = "midnightsnack.language";
 
 function get(key: string): string | null {
   try {
@@ -29,6 +30,10 @@ function set(key: string, value: string | null): void {
     // Private mode or storage disabled: the session simply lasts until reload.
   }
 }
+
+/** The language chosen on this phone; `null` follows the browser. */
+export const loadLanguage = (): string | null => get(LANGUAGE_KEY);
+export const saveLanguage = (code: string | null): void => set(LANGUAGE_KEY, code);
 
 /** Where the host is: on this page's origin (LAN, HTTPS) or behind the relay serving the page. */
 export type HostLink = { kind: "direct" } | { kind: "relay"; hostId: string; key: string | null };

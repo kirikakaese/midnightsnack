@@ -40,7 +40,8 @@ TypeScript.
 
 Never hard-code user-facing strings. Add a key to `packages/ui/src/locales/en.json` and use
 `t("your.key")`. Rust code reports errors as stable codes (see `ErrorCode` in
-`crates/protocol`), which the frontend translates.
+`crates/protocol`), which the frontend translates. Translations: see
+[docs/dev/translating.md](docs/dev/translating.md).
 
 ## Architecture decisions
 

@@ -1122,12 +1122,24 @@ impl Engine {
                 Change::BOTH
             }
             RemoveCue { cue_id } => self.remove_cue(cue_id, now_ms)?,
-            AddBlank { color, at_index } => {
+            AddBlank {
+                color,
+                at_index,
+                name,
+            } => {
                 if !is_valid_color(color) {
                     return Err(ErrorCode::InvalidState);
                 }
+                let name = name
+                    .as_deref()
+                    .map(|n| clean_text(n, 200))
+                    .unwrap_or_default();
                 let cue = Cue::new(
-                    "Blank",
+                    if name.is_empty() {
+                        "Blank".into()
+                    } else {
+                        name
+                    },
                     CueContent::Blank {
                         color: color.clone(),
                     },
@@ -1930,11 +1942,13 @@ pub(crate) mod tests {
             &Action::AddBlank {
                 color: "#000".into(),
                 at_index: Some(0),
+                name: Some(" Schwarz\u{7} ".into()),
             },
             0,
         )
         .unwrap();
         assert_eq!(e.show().cues.len(), 3);
+        assert_eq!(e.show().cues[0].name, "Schwarz");
         assert!(e.is_dirty());
         e.mark_saved("/x.msnack".into());
         assert!(!e.is_dirty());

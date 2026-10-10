@@ -78,7 +78,15 @@ export type Action =
   | { action: "set_cue_color"; cue_id: string; color: string | null }
   | { action: "move_cue"; cue_id: string; to_index: number }
   | { action: "remove_cue"; cue_id: string }
-  | { action: "add_blank"; color: string; at_index: number | null }
+  | {
+      action: "add_blank";
+      color: string;
+      at_index: number | null;
+      /**
+       * Cue name (the operator's language); "Blank" when missing.
+       */
+      name?: string;
+    }
   | { action: "add_text"; name: string; text: string; lyrics: boolean; at_index: number | null }
   | { action: "set_cue_text"; cue_id: string; text: string; lyrics: boolean }
   | { action: "add_timer"; name: string; timer: TimerCue; at_index: number | null }

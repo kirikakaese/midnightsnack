@@ -1,9 +1,16 @@
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 <script lang="ts">
-  import { Button, Panel, t } from "@midnightsnack/ui";
+  import { Button, LANGUAGES, Panel, preferredLocale, setLocale, t } from "@midnightsnack/ui";
   import { onDestroy, untrack } from "svelte";
   import { pairingStatus, requestPairing, type PairingFailure } from "../lib/api";
-  import { guessDeviceName, makeTransport, storage, type HostLink } from "../lib/storage";
+  import {
+    guessDeviceName,
+    loadLanguage,
+    makeTransport,
+    saveLanguage,
+    storage,
+    type HostLink,
+  } from "../lib/storage";
 
   interface Props {
     link: HostLink;
@@ -20,6 +27,13 @@
   let phase = $state<"form" | "waiting" | "denied">("form");
   let busy = $state(false);
   let poll: ReturnType<typeof setTimeout> | undefined;
+  let language = $state(loadLanguage() ?? "");
+
+  function chooseLanguage(code: string) {
+    language = code;
+    saveLanguage(code || null);
+    setLocale(preferredLocale(code || null));
+  }
 
   onDestroy(() => {
     clearTimeout(poll);
@@ -91,6 +105,15 @@
       <p>{t("remote.scan_again")}</p>
     {/if}
   </Panel>
+  <label class="language">
+    <span>{t("settings.language")}</span>
+    <select value={language} onchange={(e) => chooseLanguage(e.currentTarget.value)}>
+      <option value="">{t("settings.language_browser")}</option>
+      {#each LANGUAGES as l (l.code)}
+        <option value={l.code} lang={l.code}>{l.name}</option>
+      {/each}
+    </select>
+  </label>
 </main>
 
 <style>
@@ -135,6 +158,22 @@
   }
   .waiting {
     font-size: 1.1rem;
+  }
+  .language {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.9rem;
+    color: var(--ms-text-muted);
+  }
+  .language select {
+    font: inherit;
+    background: var(--ms-surface-2);
+    color: var(--ms-text);
+    border: 1px solid var(--ms-border);
+    border-radius: var(--ms-radius-sm);
+    padding: 4px 6px;
   }
   .via {
     margin: 0 0 12px;
