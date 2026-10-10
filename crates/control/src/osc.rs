@@ -50,8 +50,62 @@ pub enum OscError {
     BadArguments(String),
 }
 
+/// Deepest bundle nesting accepted. The decoder recurses into nested bundles and arrays, so a
+/// datagram with thousands of levels would overflow the stack before any authentication.
+pub const MAX_BUNDLE_DEPTH: usize = 4;
+/// Deepest array nesting (`[[…]]` in the type tags) accepted in a message.
+pub const MAX_ARRAY_DEPTH: usize = 4;
+
+/// Checks a message's type tags for arrays nested deeper than [`MAX_ARRAY_DEPTH`].
+fn arrays_ok(message: &[u8]) -> bool {
+    // Address, NUL-terminated and padded to 4 bytes, then the type tag string.
+    let Some(end) = message.iter().position(|&b| b == 0) else {
+        return false;
+    };
+    let tags = message.get((end / 4 + 1) * 4..).unwrap_or_default();
+    let mut depth = 0usize;
+    for &b in tags.iter().take_while(|&&b| b != 0) {
+        match b {
+            b'[' => {
+                depth += 1;
+                if depth > MAX_ARRAY_DEPTH {
+                    return false;
+                }
+            }
+            b']' => depth = depth.saturating_sub(1),
+            _ => {}
+        }
+    }
+    true
+}
+
+/// Checks the framing, without decoding, for nesting deeper than the limits.
+fn nesting_ok(packet: &[u8], depth_left: usize) -> bool {
+    let Some(mut rest) = packet.strip_prefix(b"#bundle\0") else {
+        return arrays_ok(packet);
+    };
+    if depth_left == 0 || rest.len() < 8 {
+        return false;
+    }
+    rest = &rest[8..]; // Time tag.
+    while !rest.is_empty() {
+        let Some((len, tail)) = rest.split_first_chunk::<4>() else {
+            return false;
+        };
+        let len = u32::from_be_bytes(*len) as usize;
+        if len > tail.len() || !nesting_ok(&tail[..len], depth_left - 1) {
+            return false;
+        }
+        rest = &tail[len..];
+    }
+    true
+}
+
 /// Decodes a datagram (message or bundle) into commands.
 pub fn decode(datagram: &[u8]) -> Result<Vec<Result<Command, OscError>>, OscError> {
+    if !nesting_ok(datagram, MAX_BUNDLE_DEPTH) {
+        return Err(OscError::Decode);
+    }
     let (_, packet) = rosc::decoder::decode_udp(datagram).map_err(|_| OscError::Decode)?;
     let mut out = Vec::new();
     collect(packet, &mut out);
@@ -261,6 +315,47 @@ mod tests {
             addr: addr.into(),
             args,
         }
+    }
+
+    fn nested(depth: usize) -> Vec<u8> {
+        let mut packet =
+            rosc::encoder::encode(&OscPacket::Message(m("/midnightsnack/go", vec![]))).unwrap();
+        for _ in 0..depth {
+            let mut b = b"#bundle\0".to_vec();
+            b.extend_from_slice(&[0, 0, 0, 0, 0, 0, 0, 1]);
+            b.extend_from_slice(&(packet.len() as u32).to_be_bytes());
+            b.extend_from_slice(&packet);
+            packet = b;
+        }
+        packet
+    }
+
+    #[test]
+    fn deeply_nested_bundles_are_refused_without_recursing() {
+        assert_eq!(
+            decode(&nested(MAX_BUNDLE_DEPTH)).unwrap(),
+            vec![Ok(Command::Action(Action::Go))]
+        );
+        assert_eq!(decode(&nested(MAX_BUNDLE_DEPTH + 1)), Err(OscError::Decode));
+        // Used to overflow the stack inside the decoder (about 2,500 levels, ~50 KB).
+        assert_eq!(decode(&nested(5000)), Err(OscError::Decode));
+        // Nested arrays recurse in the decoder as well.
+        let array = |n: usize| {
+            let mut b = b"/midnightsnack/go\0\0\0".to_vec();
+            b.push(b',');
+            b.extend("[".repeat(n).bytes().chain("]".repeat(n).bytes()));
+            b.push(0);
+            while b.len() % 4 != 0 {
+                b.push(0);
+            }
+            b
+        };
+        assert!(decode(&array(MAX_ARRAY_DEPTH)).is_ok());
+        assert_eq!(decode(&array(30_000)), Err(OscError::Decode));
+        // Truncated framing.
+        let mut bad = nested(2);
+        bad.truncate(bad.len() - 3);
+        assert_eq!(decode(&bad), Err(OscError::Decode));
     }
 
     fn cmd(addr: &str, args: Vec<OscType>) -> Result<Command, OscError> {

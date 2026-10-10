@@ -24,4 +24,5 @@ export type ErrorCode =
   | "conversion_failed"
   | "capture_permission"
   | "file_too_large"
+  | "inbox_full"
   | "internal";

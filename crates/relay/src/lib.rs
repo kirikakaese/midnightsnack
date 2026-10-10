@@ -10,7 +10,7 @@
 
 use std::collections::HashMap;
 use std::net::SocketAddr;
-use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
@@ -39,8 +39,12 @@ const PING_INTERVAL: Duration = Duration::from_secs(20);
 const IDLE_TIMEOUT: Duration = Duration::from_secs(65);
 /// Messages waiting for a remote before it counts as too slow and is dropped.
 const REMOTE_QUEUE: usize = 512;
-/// Messages waiting for the host link.
-const HOST_QUEUE: usize = 2048;
+/// Bytes waiting for a remote before it counts as too slow and is dropped.
+const REMOTE_QUEUE_BYTES: usize = 2 * 1024 * 1024;
+/// Messages waiting for the host link (remotes wait while it is full).
+const HOST_QUEUE: usize = 256;
+/// A remote that does not take a message within this time is dropped.
+const SEND_TIMEOUT: Duration = Duration::from_secs(20);
 /// Largest WebSocket message accepted (a Noise message plus the link header).
 const MAX_MESSAGE: usize = NOISE_MAX_MESSAGE + 5;
 
@@ -60,6 +64,8 @@ pub struct RelayConfig {
     pub max_remotes_per_host: usize,
     /// Sustained messages per second a remote may send (bursts up to twice that).
     pub remote_rate: u32,
+    /// Bytes waiting for remotes across all hosts; beyond it, slow remotes are dropped.
+    pub max_queued_bytes: usize,
 }
 
 impl Default for RelayConfig {
@@ -69,6 +75,7 @@ impl Default for RelayConfig {
             max_hosts: 200,
             max_remotes_per_host: 64,
             remote_rate: 400,
+            max_queued_bytes: 256 * 1024 * 1024,
         }
     }
 }
@@ -76,8 +83,14 @@ impl Default for RelayConfig {
 struct HostEntry {
     generation: u64,
     to_host: mpsc::Sender<Vec<u8>>,
-    channels: Mutex<HashMap<u32, mpsc::Sender<Vec<u8>>>>,
+    channels: Mutex<HashMap<u32, RemoteQueue>>,
     cancel: CancellationToken,
+}
+
+/// Messages for one remote, with the bytes they hold.
+struct RemoteQueue {
+    tx: mpsc::Sender<Vec<u8>>,
+    bytes: Arc<AtomicUsize>,
 }
 
 pub struct Relay {
@@ -85,6 +98,8 @@ pub struct Relay {
     hosts: Mutex<HashMap<String, Arc<HostEntry>>>,
     next_channel: AtomicU32,
     generation: AtomicU64,
+    /// Bytes waiting in all remote queues.
+    queued: AtomicUsize,
 }
 
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -98,12 +113,18 @@ impl Relay {
             hosts: Mutex::new(HashMap::new()),
             next_channel: AtomicU32::new(1),
             generation: AtomicU64::new(1),
+            queued: AtomicUsize::new(0),
         })
     }
 
     /// Hosts currently connected.
     pub fn host_count(&self) -> usize {
         lock(&self.hosts).len()
+    }
+
+    /// Bytes waiting to be sent to remotes.
+    pub fn queued_bytes(&self) -> usize {
+        self.queued.load(Ordering::Relaxed)
     }
 
     fn host(&self, id: &str) -> Option<Arc<HostEntry>> {
@@ -221,8 +242,20 @@ async fn run_host(relay: Arc<Relay>, id: String, mut socket: WebSocket) {
         cancel: CancellationToken::new(),
     });
     // A reconnecting host (same secret) replaces its old link.
-    if let Some(old) = lock(&relay.hosts).insert(id.clone(), entry.clone()) {
-        old.cancel.cancel();
+    let admitted = {
+        let mut hosts = lock(&relay.hosts);
+        // Checked again: other hosts may have connected during the upgrade.
+        let full = hosts.len() >= relay.config.max_hosts && !hosts.contains_key(&id);
+        if !full {
+            if let Some(old) = hosts.insert(id.clone(), entry.clone()) {
+                old.cancel.cancel();
+            }
+        }
+        !full
+    };
+    if !admitted {
+        let _ = socket.send(Message::Close(None)).await;
+        return;
     }
     tracing::info!(host = short(&id), "host connected");
 
@@ -244,15 +277,21 @@ async fn run_host(relay: Arc<Relay>, id: String, mut socket: WebSocket) {
                 let channel = u32::from_be_bytes(bytes[1..5].try_into().expect("4 bytes"));
                 match bytes[0] {
                     tunnel::link::DATA => {
-                        let tx = lock(&entry.channels).get(&channel).cloned();
-                        if let Some(tx) = tx {
-                            if tx.try_send(bytes[5..].to_vec()).is_err() {
-                                // The remote does not keep up (or is gone): drop it.
-                                lock(&entry.channels).remove(&channel);
-                                let _ = entry
-                                    .to_host
-                                    .try_send(link_message(tunnel::link::CLOSE, channel, &[]));
-                            }
+                        let mut channels = lock(&entry.channels);
+                        let Some(q) = channels.get(&channel) else { continue };
+                        let len = bytes.len() - 5;
+                        let fits = q.bytes.load(Ordering::Relaxed) + len <= REMOTE_QUEUE_BYTES
+                            && relay.queued.load(Ordering::Relaxed) + len
+                                <= relay.config.max_queued_bytes;
+                        if fits && q.tx.try_send(bytes[5..].to_vec()).is_ok() {
+                            q.bytes.fetch_add(len, Ordering::Relaxed);
+                            relay.queued.fetch_add(len, Ordering::Relaxed);
+                        } else {
+                            // The remote does not keep up (or is gone): drop it.
+                            channels.remove(&channel);
+                            let _ = entry
+                                .to_host
+                                .try_send(link_message(tunnel::link::CLOSE, channel, &[]));
                         }
                     }
                     tunnel::link::CLOSE => {
@@ -345,24 +384,31 @@ async fn run_remote(relay: Arc<Relay>, host_id: String, mut socket: WebSocket) {
     let Some(host) = relay.host(&host_id) else {
         return close_with(socket, relay_close::HOST_OFFLINE, "host offline").await;
     };
-    let channel = loop {
-        let c = relay.next_channel.fetch_add(1, Ordering::Relaxed);
-        if c != 0 {
-            break c;
-        }
-    };
     let (tx, mut rx) = mpsc::channel::<Vec<u8>>(REMOTE_QUEUE);
+    let queued = Arc::new(AtomicUsize::new(0));
     let admitted = {
         let mut channels = lock(&host.channels);
-        let ok = channels.len() < relay.config.max_remotes_per_host;
-        if ok {
-            channels.insert(channel, tx);
-        }
-        ok
+        (channels.len() < relay.config.max_remotes_per_host).then(|| {
+            // Ids wrap around after 2³² remotes; skip 0 and ids still in use.
+            let channel = loop {
+                let c = relay.next_channel.fetch_add(1, Ordering::Relaxed);
+                if c != 0 && !channels.contains_key(&c) {
+                    break c;
+                }
+            };
+            channels.insert(
+                channel,
+                RemoteQueue {
+                    tx,
+                    bytes: queued.clone(),
+                },
+            );
+            channel
+        })
     };
-    if !admitted {
+    let Some(channel) = admitted else {
         return close_with(socket, relay_close::HOST_FULL, "host full").await;
-    }
+    };
     if host
         .to_host
         .send(link_message(tunnel::link::OPEN, channel, &[]))
@@ -403,7 +449,10 @@ async fn run_remote(relay: Arc<Relay>, host_id: String, mut socket: WebSocket) {
                         .is_some_and(|h| h.generation == host.generation);
                     break Some(if online { relay_close::CLOSED_BY_HOST } else { relay_close::HOST_OFFLINE });
                 };
-                if socket.send(Message::Binary(out.into())).await.is_err() {
+                queued.fetch_sub(out.len(), Ordering::Relaxed);
+                relay.queued.fetch_sub(out.len(), Ordering::Relaxed);
+                let sent = tokio::time::timeout(SEND_TIMEOUT, socket.send(Message::Binary(out.into())));
+                if !matches!(sent.await, Ok(Ok(()))) {
                     break None;
                 }
             }
@@ -418,6 +467,10 @@ async fn run_remote(relay: Arc<Relay>, host_id: String, mut socket: WebSocket) {
         }
     };
     let removed = lock(&host.channels).remove(&channel).is_some();
+    // Nothing is queued for this remote any more (the host only queues under the lock).
+    relay
+        .queued
+        .fetch_sub(queued.swap(0, Ordering::Relaxed), Ordering::Relaxed);
     if removed {
         let _ = host
             .to_host

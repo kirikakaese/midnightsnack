@@ -307,6 +307,7 @@
   "upload.waiting": "Sent. The operator decides whether to add it.",
   "upload.added": "{name} was added to the show.",
   "error.file_too_large": "The file is too large for this host.",
+  "error.inbox_full": "Too many files are waiting for the operator. Try again once they are added or rejected.",
   "inbox.title": "Inbox",
   "inbox.from": "{size} from {device}",
   "inbox.add": "Add",

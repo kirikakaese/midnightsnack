@@ -504,4 +504,81 @@ async fn relays_with_an_access_token_refuse_other_hosts() {
     assert_eq!(relay.host_count(), 1);
     let status = handle.state.connectivity().relay;
     assert!(status.has_access_token);
+
+    // The token is not sent to another relay.
+    handle
+        .state
+        .perform(
+            Origin::LOCAL_ADMIN,
+            Action::ConfigureRelay {
+                enabled: false,
+                url: "https://elsewhere.example.org".into(),
+                access_token: None,
+            },
+        )
+        .await
+        .unwrap();
+    assert!(!handle.state.connectivity().relay.has_access_token);
+}
+
+/// A remote that stops reading is dropped once its queue holds a few megabytes, instead of
+/// the relay buffering everything the host sends.
+#[tokio::test]
+async fn relays_drop_remotes_that_do_not_read() {
+    use tokio_tungstenite::tungstenite::client::IntoClientRequest;
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let relay = midnightsnack_relay::Relay::new(Default::default());
+    tokio::spawn(midnightsnack_relay::serve(listener, relay.clone()));
+
+    let secret = [7u8; 32];
+    let id = midnightsnack_relay::host_id_for_secret(&secret);
+    let mut req = format!("ws://{addr}/relay/v1/host")
+        .into_client_request()
+        .unwrap();
+    req.headers_mut().insert(
+        "authorization",
+        format!("Bearer {}", B64.encode(secret)).parse().unwrap(),
+    );
+    let (mut host, _) = tokio_tungstenite::connect_async(req).await.unwrap();
+    // A remote that connects and then never reads.
+    let (_stalled, _) =
+        tokio_tungstenite::connect_async(format!("ws://{addr}/relay/v1/remote/{id}"))
+            .await
+            .unwrap();
+    let channel = loop {
+        match host.next().await.unwrap().unwrap() {
+            Message::Binary(b) if b[0] == tunnel::link::OPEN => {
+                break u32::from_be_bytes(b[1..5].try_into().unwrap())
+            }
+            _ => {}
+        }
+    };
+    let mut data = vec![tunnel::link::DATA];
+    data.extend_from_slice(&channel.to_be_bytes());
+    data.extend(std::iter::repeat_n(0u8, 60_000));
+    let (mut host_tx, mut host_rx) = host.split();
+    let closed = async move {
+        loop {
+            match host_rx.next().await {
+                Some(Ok(Message::Binary(b))) if b[0] == tunnel::link::CLOSE => return,
+                Some(Ok(_)) => {}
+                _ => panic!("host link ended"),
+            }
+        }
+    };
+    tokio::pin!(closed);
+    // Up to 120 MB, far more than the socket buffers and the queue hold.
+    // The remote is dropped after its queue (2 MB) and the socket buffers are full: well
+    // before the 512 queued messages (30 MB) that used to be the only limit.
+    let mut sent = 0;
+    loop {
+        tokio::select! {
+            _ = &mut closed => break,
+            r = host_tx.send(Message::Binary(data.clone().into())) => r.unwrap(),
+        }
+        sent += 1;
+        assert!(relay.queued_bytes() <= 2 * 1024 * 1024 + 60_000);
+        assert!(sent < 300, "the stalled remote was not dropped");
+    }
 }

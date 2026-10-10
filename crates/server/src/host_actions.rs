@@ -127,11 +127,14 @@ pub async fn run(state: &Arc<AppState>, action: Action) -> Result<(), ErrorCode>
             }
             {
                 let mut s = lock(&state.settings);
+                // The stored token is only ever sent to the relay it was entered for.
+                let same_relay = s.relay.url == url;
                 s.relay.enabled = enabled;
                 s.relay.url = url;
                 match access_token {
                     Some(t) if t.trim().is_empty() => s.relay.access_token = None,
                     Some(t) => s.relay.access_token = Some(t.trim().to_owned()),
+                    None if !same_relay => s.relay.access_token = None,
                     None => {}
                 }
             }
@@ -157,16 +160,20 @@ pub async fn run(state: &Arc<AppState>, action: Action) -> Result<(), ErrorCode>
                 return Err(ErrorCode::InvalidState);
             }
             let username: String = username.trim().chars().take(256).collect();
-            if let Some(p) = password {
-                if p.chars().count() > 1024 {
-                    return Err(ErrorCode::InvalidState);
-                }
-                crate::openslides_service::save_password(state, &p);
+            if password.as_ref().is_some_and(|p| p.chars().count() > 1024) {
+                return Err(ErrorCode::InvalidState);
             }
             {
                 let mut s = lock(&state.settings);
-                // A new server or account starts without a meeting unless one is given.
+                // A new server or account starts without a meeting unless one is given, and
+                // without the stored password: it is only ever sent to the server it was
+                // entered for.
                 let same_account = s.openslides.url == url && s.openslides.username == username;
+                match &password {
+                    Some(p) => crate::openslides_service::save_password(state, p),
+                    None if !same_account => crate::openslides_service::save_password(state, ""),
+                    None => {}
+                }
                 s.openslides.enabled = enabled;
                 s.openslides.url = url;
                 s.openslides.username = username;
@@ -468,6 +475,72 @@ pub async fn refresh_conversions(state: Arc<AppState>) {
     }
 }
 
+/// What a media reference in a show may point to.
+#[derive(Clone, Copy)]
+enum MediaKind {
+    Pdf,
+    Presentation,
+    Image,
+    Media,
+}
+
+/// A video or audio file, by extension.
+pub(crate) fn is_media_file(path: &Path) -> bool {
+    has_media_type(path, MediaKind::Media)
+}
+
+fn has_media_type(path: &Path, kind: MediaKind) -> bool {
+    let ext = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(str::to_ascii_lowercase)
+        .unwrap_or_default();
+    match kind {
+        MediaKind::Pdf => ext == "pdf",
+        MediaKind::Presentation => OfficeKind::from_path(path).is_some(),
+        MediaKind::Image => is_supported_image(path),
+        MediaKind::Media => {
+            VIDEO_EXTENSIONS.contains(&ext.as_str()) || AUDIO_EXTENSIONS.contains(&ext.as_str())
+        }
+    }
+}
+
+/// A show file is not trusted: every file it points to must be of the type its cue shows
+/// (so a shared show cannot make the host serve, say, an SSH key to phones), also after
+/// following symbolic links, and web and capture cues must be valid.
+pub(crate) fn check_opened_show(show: &Show) -> Result<(), ErrorCode> {
+    midnightsnack_core::engine::validate_show_content(show)
+        .map_err(|_| ErrorCode::ShowFileInvalid)?;
+    let mut refs: Vec<(&MediaRef, MediaKind)> = Vec::new();
+    for cue in &show.cues {
+        match &cue.content {
+            CueContent::Pdf { file, source, .. } => {
+                refs.push((file, MediaKind::Pdf));
+                refs.extend(source.iter().map(|s| (s, MediaKind::Presentation)));
+            }
+            CueContent::Image { file } => refs.push((file, MediaKind::Image)),
+            CueContent::ImageFolder { files } => {
+                refs.extend(files.iter().map(|f| (f, MediaKind::Image)))
+            }
+            CueContent::Media { file, .. } => refs.push((file, MediaKind::Media)),
+            _ => {}
+        }
+    }
+    refs.extend(show.assets.iter().map(|a| (&a.file, MediaKind::Image)));
+    for (media, kind) in refs {
+        let Some(path) = show.resolve(media) else {
+            continue;
+        };
+        let ok = has_media_type(&path, kind)
+            && std::fs::canonicalize(&path).map_or(true, |real| has_media_type(&real, kind));
+        if !ok {
+            tracing::warn!(path = %path.display(), "show refers to a file of the wrong type");
+            return Err(ErrorCode::ShowFileInvalid);
+        }
+    }
+    Ok(())
+}
+
 async fn open_show(state: &Arc<AppState>, path: PathBuf) -> Result<(), ErrorCode> {
     let extract = shows_dir(state).join(uuid::Uuid::new_v4().to_string());
     let p = path.clone();
@@ -478,6 +551,7 @@ async fn open_show(state: &Arc<AppState>, path: PathBuf) -> Result<(), ErrorCode
             tracing::warn!(error = %e, "failed to open show");
             e.code()
         })?;
+    check_opened_show(&show)?;
     state.render.cancel_prefetch();
     let c = lock(&state.engine).replace_show(show, Some(path));
     state.after_change(c);

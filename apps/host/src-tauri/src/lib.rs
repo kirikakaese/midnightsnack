@@ -73,7 +73,10 @@ fn connection_info(webview: Webview, state: State<'_, HostState>) -> ConnectionI
     let s = &state.server;
     let output_id = output::output_id(webview.label()).map(str::to_owned);
     let token = match &output_id {
-        None => s.operator_token.clone(),
+        // Only the operator window gets the admin token; any other webview (a web cue that
+        // navigated to the app, a controller window whose host was forgotten) gets none.
+        None if webview.label() == "operator" => s.operator_token.clone(),
+        None => String::new(),
         Some(id) => {
             let engine = lock(&s.state.engine);
             let stage = engine

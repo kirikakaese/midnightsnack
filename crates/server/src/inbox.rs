@@ -3,6 +3,7 @@
 //! (the file becomes a cue) or rejects them (the file is deleted). Uploads by admins, and all
 //! uploads while auto-accept is on, become cues right away.
 
+use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -35,11 +36,37 @@ pub const UPLOAD_EXTENSIONS: &[&str] = &[
 struct Entry {
     item: InboxItem,
     path: PathBuf,
+    device_id: String,
 }
+
+/// Uploads waiting (or arriving) per device; more are refused until the operator decides.
+pub const MAX_PENDING_PER_DEVICE: usize = 8;
+/// Bytes of all waiting uploads together.
+pub const MAX_PENDING_BYTES: u64 = 8 * 1024 * 1024 * 1024;
 
 #[derive(Default)]
 pub struct Inbox {
     entries: Vec<Entry>,
+    /// Device id → uploads in progress.
+    arriving: HashMap<String, usize>,
+}
+
+/// Counts an upload as arriving until dropped.
+struct Arriving<'a> {
+    state: &'a AppState,
+    device_id: String,
+}
+
+impl Drop for Arriving<'_> {
+    fn drop(&mut self) {
+        let mut inbox = lock(&self.state.inbox);
+        if let Some(n) = inbox.arriving.get_mut(&self.device_id) {
+            *n -= 1;
+            if *n == 0 {
+                inbox.arriving.remove(&self.device_id);
+            }
+        }
+    }
 }
 
 impl Inbox {
@@ -147,6 +174,28 @@ pub async fn upload(
         return Err(too_large);
     }
 
+    // A device cannot fill the disk faster than the operator can reject its files.
+    let _arriving = {
+        let mut inbox = lock(&state.inbox);
+        let waiting = inbox
+            .entries
+            .iter()
+            .filter(|e| e.device_id == device.id)
+            .count();
+        let arriving = inbox.arriving.get(&device.id).copied().unwrap_or(0);
+        let pending_bytes: u64 = inbox.entries.iter().map(|e| e.item.size).sum();
+        if waiting + arriving >= MAX_PENDING_PER_DEVICE
+            || pending_bytes + declared.unwrap_or(0) > MAX_PENDING_BYTES
+        {
+            return Err(ErrorCode::InboxFull.into());
+        }
+        *inbox.arriving.entry(device.id.clone()).or_default() += 1;
+        Arriving {
+            state: &state,
+            device_id: device.id.clone(),
+        }
+    };
+
     let id = uuid::Uuid::new_v4().simple().to_string();
     let dir = inbox_dir(&state).join(&id);
     tokio::fs::create_dir_all(&dir)
@@ -175,6 +224,7 @@ pub async fn upload(
             received_ms: now_ms(),
         },
         path,
+        device_id: device.id.clone(),
     });
     let auto = device.role == Role::Admin || lock(&state.settings).auto_accept_uploads;
     if auto {

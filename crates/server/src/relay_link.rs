@@ -43,6 +43,11 @@ const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
 const RECONNECT_MIN: Duration = Duration::from_secs(1);
 const RECONNECT_MAX: Duration = Duration::from_secs(30);
+/// Shortest interval between updates of the relay's device count.
+const STATUS_EVERY: Duration = Duration::from_millis(500);
+/// A channel without a session or HTTP exchange is closed after this long, so holders of the
+/// relay link cannot keep the host's channel slots taken.
+const CHANNEL_IDLE: Duration = Duration::from_secs(60);
 /// Queued Noise messages per channel before a channel that cannot keep up is dropped.
 const CHANNEL_QUEUE: usize = 128;
 /// Response headers passed through the tunnel.
@@ -126,7 +131,7 @@ impl RelayIdentity {
 
     pub fn save(&self, dir: &Path) {
         let path = dir.join("relay-identity.json");
-        if let Err(e) = crate::util::write_secret_json(&path, self) {
+        if let Err(e) = crate::util::write_json_atomic(&path, self) {
             tracing::error!(error = %e, "failed to save relay identity");
         }
     }
@@ -169,17 +174,33 @@ pub fn is_relay_ip(ip: IpAddr) -> bool {
 }
 
 /// The relay's base URL in canonical form (`https://host[:port][/path]`, no trailing slash).
+/// Plain `http://` only for relays on this computer or the local network: elsewhere the host
+/// secret and the remote page would cross the internet unencrypted.
 pub fn normalize_url(url: &str) -> Result<String, RelayError> {
     let url = url.trim().trim_end_matches('/');
     let uri: Uri = url.parse().map_err(|_| RelayError::InvalidUrl)?;
-    match uri.scheme_str() {
-        Some("https") | Some("http") => {}
-        _ => return Err(RelayError::InvalidUrl),
-    }
-    if uri.host().is_none_or(str::is_empty) || uri.query().is_some() {
+    let host = uri.host().unwrap_or_default();
+    let has_userinfo = uri.authority().is_some_and(|a| a.as_str().contains('@'));
+    if host.is_empty() || uri.query().is_some() || has_userinfo {
         return Err(RelayError::InvalidUrl);
     }
+    match uri.scheme_str() {
+        Some("https") => {}
+        Some("http") if is_local_host(host) => {}
+        _ => return Err(RelayError::InvalidUrl),
+    }
     Ok(url.to_owned())
+}
+
+fn is_local_host(host: &str) -> bool {
+    let host = host.trim_start_matches('[').trim_end_matches(']');
+    match host.parse::<IpAddr>() {
+        Ok(IpAddr::V4(ip)) => ip.is_loopback() || ip.is_private() || ip.is_link_local(),
+        Ok(IpAddr::V6(ip)) => {
+            ip.is_loopback() || ip.is_unique_local() || ip.is_unicast_link_local()
+        }
+        Err(_) => host == "localhost" || host.ends_with(".local") || host.ends_with(".localhost"),
+    }
 }
 
 /// Keeps the relay link up while it is enabled, reconnecting with backoff.
@@ -365,7 +386,22 @@ async fn serve_link(state: &Arc<AppState>, router: &Router, identity: &RelayIden
     };
     let reader = async {
         let mut channels: HashMap<u32, mpsc::Sender<Vec<u8>>> = HashMap::new();
-        while let Some(msg) = stream.next().await {
+        // The device count goes to every session; remotes coming and going quickly must not
+        // flood them, so it is published at most every STATUS_EVERY.
+        let mut published: Option<tokio::time::Instant> = None;
+        let mut unpublished = false;
+        loop {
+            let msg = tokio::select! {
+                m = stream.next() => m,
+                _ = tokio::time::sleep(STATUS_EVERY), if unpublished => {
+                    channels.retain(|_, tx| !tx.is_closed());
+                    set_status(state, RelayState::Connected, None, channels.len() as u32);
+                    published = Some(tokio::time::Instant::now());
+                    unpublished = false;
+                    continue;
+                }
+            };
+            let Some(msg) = msg else { break };
             let bytes = match msg {
                 Ok(WsMessage::Binary(b)) => b,
                 Ok(WsMessage::Close(_)) | Err(_) => break,
@@ -410,7 +446,13 @@ async fn serve_link(state: &Arc<AppState>, router: &Router, identity: &RelayIden
                 }
                 _ => {}
             }
-            set_status(state, RelayState::Connected, None, channels.len() as u32);
+            if published.is_none_or(|t| t.elapsed() >= STATUS_EVERY) {
+                set_status(state, RelayState::Connected, None, channels.len() as u32);
+                published = Some(tokio::time::Instant::now());
+                unpublished = false;
+            } else {
+                unpublished = true;
+            }
         }
     };
     tokio::select! {
@@ -516,8 +558,20 @@ async fn channel_task(
         ws_message: Reassembler::default(),
         streams: HashMap::new(),
     };
+    let mut idle_check = tokio::time::interval(CHANNEL_IDLE / 4);
+    let mut busy_at = tokio::time::Instant::now();
     loop {
+        if ch.ws.is_some() || !ch.streams.is_empty() {
+            busy_at = tokio::time::Instant::now();
+        }
         let frame = tokio::select! {
+            _ = idle_check.tick() => {
+                if busy_at.elapsed() >= CHANNEL_IDLE {
+                    tracing::debug!(channel, "idle relay channel closed");
+                    break;
+                }
+                continue;
+            }
             m = inbound.recv() => {
                 let Some(m) = m else { break };
                 let Ok(n) = transport.read_message(&m, &mut buf) else {
@@ -676,6 +730,10 @@ fn body_stream(
 /// Paths a remote may request through the relay. Video/audio files and capture streams are not
 /// offered over the relay.
 fn tunnel_allowed(path: &str) -> bool {
+    // A fragment would be dropped when parsing, after this check.
+    if path.contains('#') {
+        return false;
+    }
     let path = path.split('?').next().unwrap_or_default();
     path.starts_with("/api/v1/")
         && path != "/api/v1/ws"
@@ -828,12 +886,23 @@ mod tests {
             normalize_url("http://127.0.0.1:8080/sub").unwrap(),
             "http://127.0.0.1:8080/sub"
         );
+        for local in [
+            "http://192.168.1.20:8080",
+            "http://relay.local",
+            "http://[::1]:9",
+        ] {
+            assert!(normalize_url(local).is_ok(), "{local}");
+        }
         for bad in [
             "",
             "relay.example.org",
             "ftp://x",
             "https://",
             "https://x/?a=1",
+            // Plain HTTP across the internet, credentials in the URL.
+            "http://relay.example.org",
+            "http://203.0.113.5:8080",
+            "https://user:secret@relay.example.org",
         ] {
             assert_eq!(normalize_url(bad), Err(RelayError::InvalidUrl), "{bad}");
         }
@@ -848,5 +917,6 @@ mod tests {
         assert!(!tunnel_allowed("/api/v1/media/file/c?k=x"));
         assert!(!tunnel_allowed("/api/v1/media/capture/c"));
         assert!(!tunnel_allowed("/index.html"));
+        assert!(!tunnel_allowed("/api/v1/ws#x"));
     }
 }

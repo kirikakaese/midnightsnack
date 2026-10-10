@@ -486,7 +486,7 @@ async fn handle_message(state: &Arc<AppState>, conn: &Conn, text: &str) -> Optio
                     code: ErrorCode::Forbidden,
                 });
             }
-            let name: String = name.trim().chars().take(60).collect();
+            let name: String = crate::devices::clean_name(&name).chars().take(60).collect();
             if name.is_empty() {
                 return Some(ServerMessage::Error {
                     code: ErrorCode::InvalidState,

@@ -26,12 +26,13 @@ pub fn sha256_hex(s: &str) -> String {
     hex(&Sha256::digest(s.as_bytes()))
 }
 
-/// Writes JSON atomically (temp file + rename).
+/// Writes JSON atomically (temp file + rename), readable only by the current user: settings,
+/// devices, autosaved shows and keys all stay private to the user running the host.
 pub fn write_json_atomic<T: serde::Serialize>(path: &Path, value: &T) -> std::io::Result<()> {
     let dir = path.parent().unwrap_or(Path::new("."));
     std::fs::create_dir_all(dir)?;
     let tmp = path.with_extension("json.tmp");
-    std::fs::write(&tmp, serde_json::to_vec_pretty(value)?)?;
+    write_private(&tmp, &serde_json::to_vec_pretty(value)?)?;
     std::fs::rename(tmp, path)
 }
 
@@ -44,15 +45,6 @@ pub fn read_json<T: serde::de::DeserializeOwned>(path: &Path) -> Option<T> {
             None
         }
     }
-}
-
-/// Like [`write_json_atomic`], readable only by the current user (keys, secrets).
-pub fn write_secret_json<T: serde::Serialize>(path: &Path, value: &T) -> std::io::Result<()> {
-    let dir = path.parent().unwrap_or(Path::new("."));
-    std::fs::create_dir_all(dir)?;
-    let tmp = path.with_extension("json.tmp");
-    write_private(&tmp, &serde_json::to_vec_pretty(value)?)?;
-    std::fs::rename(tmp, path)
 }
 
 /// Writes a file that only the current user can read (on Unix; elsewhere the user profile's

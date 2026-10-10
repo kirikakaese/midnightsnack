@@ -77,7 +77,20 @@ pub struct Pairing {
     pub auto_approve: Option<Role>,
     requests: HashMap<String, Request>,
     failures: HashMap<IpAddr, Failures>,
-    global: Failures,
+    /// Failed attempts across clients, kept apart by how they pair (with the QR code's token,
+    /// with the PIN alone, through the relay), so flooding one way does not lock the others.
+    global: [Failures; 3],
+}
+
+/// Which global bucket an attempt counts against.
+fn bucket(address: IpAddr, pin_only: bool) -> usize {
+    if crate::relay_link::is_relay_ip(address) {
+        2
+    } else if pin_only {
+        1
+    } else {
+        0
+    }
 }
 
 /// Outcome of a valid pairing request.
@@ -96,7 +109,7 @@ impl Pairing {
             auto_approve,
             requests: HashMap::new(),
             failures: HashMap::new(),
-            global: Failures::default(),
+            global: Default::default(),
         }
     }
 
@@ -131,12 +144,15 @@ impl Pairing {
     ) -> Result<Submitted, ErrorCode> {
         let now = Instant::now();
         self.gc(now);
-        if self.global.locked(now) || self.failures.get(&address).is_some_and(|f| f.locked(now)) {
-            return Err(ErrorCode::PairingLocked);
-        }
         // Without the QR code's join token (e.g. a second computer typing the PIN), the request
         // always needs the operator's approval.
         let pin_only = join_token.is_empty() && self.auto_approve.is_none();
+        let bucket = bucket(address, pin_only);
+        if self.global[bucket].locked(now)
+            || self.failures.get(&address).is_some_and(|f| f.locked(now))
+        {
+            return Err(ErrorCode::PairingLocked);
+        }
         let token_ok = pin_only || constant_time_eq(join_token, &self.join_token);
         let pin_ok = constant_time_eq(pin.trim(), &self.pin);
         if !(token_ok && pin_ok) {
@@ -145,7 +161,9 @@ impl Pairing {
                 .entry(address)
                 .or_default()
                 .record(now, MAX_FAILURES_PER_CLIENT);
-            let global_locked = self.global.record(now, MAX_FAILURES_GLOBAL);
+            // A wrong join token can never pair (it is 128 bits), so it only counts against
+            // its sender; wrong PINs count against everyone pairing the same way.
+            let global_locked = token_ok && self.global[bucket].record(now, MAX_FAILURES_GLOBAL);
             if locked || global_locked {
                 tracing::warn!(%address, global_locked, "pairing locked after failed attempts");
                 return Err(ErrorCode::PairingLocked);
@@ -400,6 +418,41 @@ mod tests {
         }
         assert!(locked);
         assert_eq!(ok(&mut p, IP).err(), Some(ErrorCode::PairingLocked));
+    }
+
+    #[test]
+    fn global_lockout_is_kept_apart_by_pairing_way() {
+        let mut p = Pairing::new(None);
+        let ip = |i: u32| {
+            IpAddr::V4(std::net::Ipv4Addr::new(
+                10,
+                1,
+                (i / 250) as u8,
+                (i % 250) as u8,
+            ))
+        };
+        // Guessing with a stale or made-up join token locks nobody else out.
+        for i in 0..MAX_FAILURES_GLOBAL * 2 {
+            let _ = p.submit("not-the-token", "123456", "x", ip(i));
+        }
+        assert!(ok(&mut p, IP).is_ok());
+        // Wrong PINs through the relay do not lock pairing on the local network.
+        let relay = |i: u32| crate::relay_link::relay_addr(i).ip();
+        let wrong = if p.pin() == "000000" {
+            "111111"
+        } else {
+            "000000"
+        };
+        for i in 0..MAX_FAILURES_GLOBAL {
+            let t = p.join_token().to_owned();
+            let _ = p.submit(&t, wrong, "x", relay(i + 1));
+        }
+        let (t, pin) = (p.join_token().to_owned(), p.pin().to_owned());
+        assert_eq!(
+            p.submit(&t, &pin, "x", relay(999)).err(),
+            Some(ErrorCode::PairingLocked)
+        );
+        assert!(ok(&mut p, IP2).is_ok());
     }
 
     #[test]

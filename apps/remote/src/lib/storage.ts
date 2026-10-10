@@ -43,9 +43,13 @@ export function currentLink(): HostLink {
   const m = /^\/r\/([A-Za-z0-9_-]{8,64})\/?$/.exec(window.location.pathname);
   if (!m) return { kind: "direct" };
   const hostId = m[1]!;
+  // A host's key never changes for its id (a new relay identity is a new id), so a key once
+  // stored wins over one in a link: a crafted link cannot swap it.
+  const keyName = `midnightsnack.relay.${hostId}.key`;
+  const stored = get(keyName);
   const fromUrl = fragmentParam("k");
-  if (fromUrl) set(`midnightsnack.relay.${hostId}.key`, fromUrl);
-  return { kind: "relay", hostId, key: fromUrl ?? get(`midnightsnack.relay.${hostId}.key`) };
+  if (fromUrl && !stored) set(keyName, fromUrl);
+  return { kind: "relay", hostId, key: stored ?? fromUrl };
 }
 
 function tokenKey(link: HostLink): string {
