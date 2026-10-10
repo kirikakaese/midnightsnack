@@ -48,7 +48,11 @@
     "linux": {
       "deb": {
         "depends": ["gstreamer1.0-plugins-base", "gstreamer1.0-plugins-good"],
-        "recommends": ["libreoffice-impress", "gstreamer1.0-libav", "gstreamer1.0-plugins-bad"]
+        "recommends": ["libreoffice-impress", "gstreamer1.0-libav", "gstreamer1.0-plugins-bad"],
+        "desktopTemplate": "linux/midnightsnack.desktop",
+        "files": {
+          "/usr/share/mime/packages/midnightsnack.xml": "linux/midnightsnack-mime.xml"
+        }
       },
       "appimage": {
         "bundleMediaFramework": true
