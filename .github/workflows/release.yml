@@ -96,7 +96,7 @@ jobs:
             exit 1
           fi
           prerelease=false
-          if [[ "$version" == *-* || "$version" == 0.* ]]; then prerelease=true; fi
+          if [[ "$version" == *-* ]]; then prerelease=true; fi
           echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
           if [ -n "$UPDATER_PUBKEY" ] && [ "$HAS_PRIVATE_KEY" = true ]; then
             echo "updater-config=--config src-tauri/tauri.updater.conf.json" >> "$GITHUB_OUTPUT"

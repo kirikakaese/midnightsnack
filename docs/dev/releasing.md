@@ -31,8 +31,8 @@ that version. Nothing is public until the draft is published.
 6. **Pull request.** Open `release/vX.Y.Z` against `main`, wait for green CI, merge.
 7. **Tag.** Create the tag on the merge commit (GitHub → Releases → *Draft a new release* →
    choose a tag, or `git tag vX.Y.Z <commit> && git push origin vX.Y.Z`). The workflow builds
-   everything into a draft release; tags with a suffix and versions below 1.0 become
-   prereleases.
+   everything into a draft release; tags with a suffix (`-rc.1`, `-beta.1`) become
+   prereleases, all others stable releases.
 8. **Check the draft.** Download each installer once and start it; check the relay image with
    `docker run --rm ghcr.io/<owner>/deck-relay:<version> --version`.
 9. **Publish** the draft. The `Update feeds` job then offers it to the in-app updater (below).
@@ -117,7 +117,9 @@ later, add the certificates as repository secrets and pass them to `tauri-action
 `APPLE_ID`/`APPLE_PASSWORD`/`APPLE_TEAM_ID` for notarization; Windows: a certificate in
 `bundle.windows.certificateThumbprint` or a `signCommand`). See the Tauri distribution guides.
 
-## Pre-releases during development
+## Before 1.0
 
-Each phase of the roadmap ended with a pre-release (`v0.N.0`) tagged on the merge commit of its
-pull request.
+The roadmap phases (0.1–0.5 and so on) were never released. The first public release is
+`v0.9.0`, a stable release meant for testing 1.0: it goes to the update feed and the Homebrew
+tap like any other. Fixes follow as `0.9.1`, `0.9.2`, …, and `v1.0.0` comes once 0.9 has been
+tested enough.
