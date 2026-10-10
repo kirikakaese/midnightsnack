@@ -14,6 +14,7 @@
   } from "@midnightsnack/ui";
   import { onDestroy } from "svelte";
   import { connectToHost, host } from "../lib/host";
+  import { updates } from "../lib/updates.svelte";
   import { buildKeymap, installKeyHandler, type KeyAction } from "../lib/keymap";
   import ConnectPanel from "../operator/ConnectPanel.svelte";
   import ControlPanel from "../operator/ControlPanel.svelte";
@@ -39,7 +40,7 @@
     { id: "show" as const, label: t("tab.show") },
     { id: "outputs" as const, label: t("tab.outputs") },
     { id: "connect" as const, label: t("tab.connect"), badge: conn?.pending.length ?? 0 },
-    { id: "control" as const, label: t("tab.control") },
+    { id: "control" as const, label: t("tab.control"), badge: updates.pending ? 1 : 0 },
   ]);
   // Selecting a cue opens the inspector.
   $effect(() => {

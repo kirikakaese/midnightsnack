@@ -1,0 +1,35 @@
+# Homebrew cask for DECK; the release workflow fills in the version and checksum and pushes it to
+# kirikakaese/homebrew-tap as Casks/deck.rb (see docs/dev/releasing.md).
+cask "deck" do
+  version "@VERSION@"
+  sha256 "@SHA256@"
+
+  url "https://github.com/kirikakaese/midnightsnack/releases/download/v#{version}/DECK_#{version}_universal.dmg"
+  name "DECK"
+  desc "Presentation and beamer host with phone remotes"
+  homepage "https://github.com/kirikakaese/midnightsnack"
+
+  livecheck do
+    url :url
+    strategy :github_latest
+  end
+
+  auto_updates true
+  depends_on macos: ">= :monterey"
+
+  app "DECK.app"
+
+  zap trash: [
+    "~/Library/Application Support/io.github.kirikakaese.deck",
+    "~/Library/Caches/io.github.kirikakaese.deck",
+    "~/Library/Saved Application State/io.github.kirikakaese.deck.savedState",
+    "~/Library/WebKit/io.github.kirikakaese.deck",
+    "~/Library/Preferences/io.github.kirikakaese.deck.plist",
+  ]
+
+  caveats <<~EOS
+    DECK is not notarized by Apple. The first time you open it, macOS blocks it:
+    open System Settings → Privacy & Security and click “Open Anyway”.
+    DECK updates itself afterwards; updates are verified with DECK's release key.
+  EOS
+end

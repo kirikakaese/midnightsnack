@@ -1,8 +1,10 @@
-# midnightsnack
+# DECK
 
-**A free, open-source, cross-platform presentation and beamer host with remote control.**
+**Display Engine & Cue Keeper — a free, open-source, cross-platform presentation and beamer
+host with remote control.** (Developed under the name *midnightsnack*, which lives on in the
+`.msnack` show files.)
 
-midnightsnack runs on a laptop (macOS, Windows, Linux) connected to one or more projectors or
+DECK runs on a laptop (macOS, Windows, Linux) connected to one or more projectors or
 screens. The laptop is the **host**: it holds the show (a cue list), renders fullscreen output
 windows on the chosen displays and gives the operator a presenter view. **Remotes** control the
 host — a phone or tablet browser (no install), a second computer, or hardware such as clickers,
@@ -36,12 +38,21 @@ MIDI controllers, OSC and Stream Deck via Bitfocus Companion.
 - **Connectivity:** the local network, the laptop's own hotspot, optional HTTPS, and a
   self-hosted relay with end-to-end encryption for phones on other networks.
 - **Languages:** English and German; [translations](docs/dev/translating.md) welcome.
+- **Updates:** DECK updates itself from its GitHub releases (Control → Updates: automatic
+  checks, how often, install on quit, beta versions). Updates are installed only with a valid
+  signature from DECK's release key, and never during a show.
 
 ## Install
 
-Download midnightsnack for macOS, Windows or Linux from the
-[releases page](https://github.com/kirikakaese/midnightsnack/releases) and follow
-[Getting started](docs/user/getting-started.md). The [user guide](docs/user/README.md) covers
+Download DECK for macOS, Windows or Linux from the
+[releases page](https://github.com/kirikakaese/midnightsnack/releases), or on a Mac with
+Homebrew:
+
+```sh
+brew install --cask kirikakaese/tap/deck
+```
+
+Then follow [Getting started](docs/user/getting-started.md). The [user guide](docs/user/README.md) covers
 everything else.
 
 ## Quick start (development)
@@ -120,6 +131,6 @@ Contributions are welcome — please read [CONTRIBUTING.md](CONTRIBUTING.md) and
 
 ## License
 
-midnightsnack is free software, licensed under the
+DECK is free software, licensed under the
 [GNU General Public License v3.0 or later](LICENSE). Third-party components are listed in
 [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).

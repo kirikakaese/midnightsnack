@@ -1,4 +1,4 @@
-# Contributing to midnightsnack
+# Contributing to DECK
 
 Thanks for helping! This document covers the workflow; the architecture is described in
 [docs/dev/architecture.md](docs/dev/architecture.md).

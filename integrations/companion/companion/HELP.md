@@ -1,10 +1,10 @@
-## midnightsnack
+## DECK
 
-Controls [midnightsnack](https://github.com/kirikakaese/midnightsnack), the free presentation host.
+Controls [DECK](https://github.com/kirikakaese/midnightsnack), the free presentation host.
 
 ### Setup
 
-1. In midnightsnack open the **Control** tab, create an **API key** (role *Operator*) and copy it.
+1. In DECK open the **Control** tab, create an **API key** (role *Operator*) and copy it.
 2. If Companion runs on another computer, untick **Only from this computer** below the API keys.
 3. Add this connection in Companion and enter the host's address, port (default `4747`) and the key.
 

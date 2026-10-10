@@ -10,7 +10,7 @@ const exe = join(
   "..",
   "target",
   "debug",
-  process.platform === "win32" ? "midnightsnack-host.exe" : "midnightsnack-host",
+  process.platform === "win32" ? "deck.exe" : "deck",
 );
 if (!existsSync(exe)) {
   console.error(`smoke test: ${exe} not found; build the host first`);

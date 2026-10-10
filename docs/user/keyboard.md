@@ -18,11 +18,11 @@ Keys are ignored while you type in a text field. Holding a key down never repeat
 
 ## Changing the mapping
 
-Edit `host-settings.json` in midnightsnack's configuration folder (quit the app first):
+Edit `host-settings.json` in DECK's configuration folder (quit the app first):
 
-- macOS: `~/Library/Application Support/io.github.kirikakaese.midnightsnack/`
-- Windows: `%APPDATA%\io.github.kirikakaese.midnightsnack\`
-- Linux: `~/.config/io.github.kirikakaese.midnightsnack/`
+- macOS: `~/Library/Application Support/io.github.kirikakaese.deck/`
+- Windows: `%APPDATA%\io.github.kirikakaese.deck\`
+- Linux: `~/.config/io.github.kirikakaese.deck/`
 
 ```json
 {

@@ -1,4 +1,4 @@
-# Translating midnightsnack
+# Translating DECK
 
 Every text in the operator window, the outputs, the stage display and the phone remote comes
 from one catalog per language in `packages/ui/src/locales/`. English (`en.json`) is the source;

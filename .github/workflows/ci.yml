@@ -142,16 +142,16 @@ jobs:
           file: deploy/relay/Dockerfile
           push: false
           load: true
-          tags: midnightsnack-relay:ci
+          tags: deck-relay:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
       - name: Start and check health
         run: |
-          docker run -d --name relay -p 8080:8080 midnightsnack-relay:ci
+          docker run -d --name relay -p 8080:8080 deck-relay:ci
           for i in $(seq 1 30); do
             curl -fsS http://127.0.0.1:8080/healthz && break
             sleep 1
           done
           curl -fsS http://127.0.0.1:8080/relay/v1/info
           curl -fsS http://127.0.0.1:8080/r/AAAAAAAAAAAAAAAAAAAAAA | grep -q '<div id="app"'
-          docker exec relay /usr/local/bin/midnightsnack-relay --healthcheck
+          docker exec relay /usr/local/bin/deck-relay --healthcheck

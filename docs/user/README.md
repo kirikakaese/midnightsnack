@@ -14,8 +14,10 @@
 
 ## Installing unsigned builds
 
-Releases are not code-signed yet, so your operating system will warn you:
+Releases are not signed with an Apple or Microsoft certificate yet, so your operating system
+warns you the first time:
 
-- **macOS:** right-click the app and choose **Open**, then confirm.
+- **macOS** (also when installed with Homebrew): open DECK once; when macOS blocks it, open
+  **System Settings → Privacy & Security** and click **Open Anyway**.
 - **Windows:** in the SmartScreen dialog choose **More info → Run anyway**.
 - **Linux:** make the AppImage executable (`chmod +x`) or install the `.deb`.

@@ -36,7 +36,7 @@ test.afterEach(() => op.close());
 
 test("a German phone pairs and runs the show in German", async ({ page }) => {
   await page.goto(op.joinUrl.replace(/^http:\/\/[^/]+/, `http://127.0.0.1:${devInfo().port}`));
-  await expect(page).toHaveTitle("midnightsnack-Fernbedienung");
+  await expect(page).toHaveTitle("DECK-Fernbedienung");
   await expect(page.locator("html")).toHaveAttribute("lang", "de");
   await expectNoEnglish(page);
   await page.getByLabel("Gerätename").fill("Telefon");

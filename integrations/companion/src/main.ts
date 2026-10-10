@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Bitfocus Companion module: buttons for midnightsnack (actions), button colors that follow the
+// Bitfocus Companion module: buttons for DECK (actions), button colors that follow the
 // show (feedbacks) and text such as the live cue or the countdown (variables).
 import {
   InstanceBase,
@@ -106,7 +106,7 @@ export default class MidnightsnackInstance extends InstanceBase {
         width: 12,
         label: "Setup",
         value:
-          "Create an API key in midnightsnack (Control tab → API keys) with the Operator role " +
+          "Create an API key in DECK (Control tab → API keys) with the Operator role " +
           "and paste it below. If Companion runs on another computer, untick “Only from this " +
           "computer” there.",
       },
@@ -157,7 +157,7 @@ export default class MidnightsnackInstance extends InstanceBase {
       ok: [InstanceStatus.Ok, null],
       disconnected: [InstanceStatus.Disconnected, "Host not reachable"],
       unauthorized: [InstanceStatus.AuthenticationFailure, "API key rejected (revoked?)"],
-      incompatible: [InstanceStatus.ConnectionFailure, "Incompatible midnightsnack version"],
+      incompatible: [InstanceStatus.ConnectionFailure, "Incompatible DECK version"],
     };
     const [s, message] = map[status];
     this.updateStatus(s, message);

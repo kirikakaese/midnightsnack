@@ -1,6 +1,6 @@
 # Security policy
 
-midnightsnack exposes a network server on the host machine, so security reports are taken
+DECK exposes a network server on the host machine, so security reports are taken
 seriously.
 
 ## Reporting a vulnerability

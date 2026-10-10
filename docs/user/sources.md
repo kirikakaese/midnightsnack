@@ -2,12 +2,12 @@
 
 ## PowerPoint, Keynote and LibreOffice presentations
 
-Add `.pptx`, `.ppt`, `.odp` or `.key` files with **+ Files** like any PDF. midnightsnack converts
+Add `.pptx`, `.ppt`, `.odp` or `.key` files with **+ Files** like any PDF. DECK converts
 them to PDF in the background and the cue behaves exactly like a PDF deck; the cue list shows the
 original file name.
 
 - **Converter:** PPTX, PPT and ODP need [LibreOffice](https://www.libreoffice.org) installed
-  (free). midnightsnack finds it in the usual install location or on the `PATH`; set
+  (free). DECK finds it in the usual install location or on the `PATH`; set
   `MIDNIGHTSNACK_SOFFICE` to the `soffice` program to use another one. Keynote files need Keynote
   on a Mac. Without a converter you get a message saying what to install — or export the deck
   as PDF yourself.
@@ -35,7 +35,7 @@ board or a video stream. Settings in the **Cue** tab:
 | **Keep logins and cookies**  | The page keeps its login between shows; otherwise it runs privately and forgets everything when it closes |
 
 The page is loaded in the background while it is the next cue, so it appears without a loading
-screen. It runs isolated from midnightsnack: it cannot control the show or read your files.
+screen. It runs isolated from DECK: it cannot control the show or read your files.
 Blackout, logo and test patterns cover web pages; overlays are not drawn on top of them. The
 monitors in the operator window and on phones show a placeholder with the address, not the page.
 
@@ -51,7 +51,7 @@ projector.
 
 ## Screen and window capture
 
-**+ Add… → Screen or window capture** lists the screens and windows midnightsnack can capture;
+**+ Add… → Screen or window capture** lists the screens and windows DECK can capture;
 pick one. The cue shows the live picture on the outputs and the operator's monitors, and at a few
 frames per second on thumbnails and phones. In the **Cue** tab you can change the source and the
 frame rate (5–30 fps).
@@ -60,8 +60,8 @@ If the captured window is closed or the screen disappears, the output keeps the 
 the **Cue** tab says the source is gone; capture resumes when it is back.
 
 - **macOS:** the first time, macOS asks for **Screen Recording** permission. If you declined, the
-  picker offers **Open screen recording settings**: allow midnightsnack under *Privacy &
-  Security → Screen Recording*, then restart midnightsnack.
+  picker offers **Open screen recording settings**: allow DECK under *Privacy &
+  Security → Screen Recording*, then restart DECK.
 - **Windows:** works without setup.
 - **Linux:** works on X11 sessions. Wayland sessions are not supported yet; log in with an X11
   ("Xorg") session to capture.

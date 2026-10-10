@@ -7,7 +7,7 @@ Download the installer for your system from the
 
 | System                     | File                                     |
 | -------------------------- | ---------------------------------------- |
-| macOS 12 or later          | `.dmg` (Apple silicon and Intel)         |
+| macOS 12 or later          | `.dmg` (Apple silicon and Intel), or `brew install --cask kirikakaese/tap/deck` |
 | Windows 10/11              | `-setup.exe` (English or German) or `.msi` |
 | Debian, Ubuntu, Mint, …    | `.deb`                                   |
 | Other Linux distributions  | `.AppImage`                              |
@@ -15,8 +15,13 @@ Download the installer for your system from the
 Builds are not code-signed yet; see [installing unsigned builds](README.md#installing-unsigned-builds).
 For PowerPoint and other presentations, also install [LibreOffice](https://www.libreoffice.org).
 
-Start midnightsnack. The operator window opens; the language follows your system and can be
-changed in the **Control** tab. Double-clicking a `.msnack` show file opens it in midnightsnack.
+DECK updates itself (macOS, Windows, AppImage): **Control → Updates** sets whether and how often
+it checks, whether updates are downloaded automatically and installed when DECK quits, and
+whether beta versions are offered. An update never installs during a show. The `.deb` is
+updated with the next `.deb` (or your package manager).
+
+Start DECK. The operator window opens; the language follows your system and can be
+changed in the **Control** tab. Double-clicking a `.msnack` show file opens it in DECK.
 
 ## 1. Build a show
 
@@ -57,7 +62,7 @@ In the **Outputs** tab choose the projector's display for the **Main** output an
 never takes keyboard focus. Your screen is kept awake while an output is open. With a single
 screen, tick **Windowed (rehearsal)** to see the output in a normal window.
 
-midnightsnack remembers the display and reopens the output there next time if it is connected.
+DECK remembers the display and reopens the output there next time if it is connected.
 More screens (a second room, a confidence monitor for the speaker) are described in
 [outputs.md](outputs.md).
 
@@ -85,5 +90,5 @@ restarts on every slide.
 
 **Save** writes a `.msnack` file with all media embedded, so it can be copied to another
 computer. **Save linked…** writes a small file that refers to your media in place. Your work is
-also autosaved continuously: after a crash, midnightsnack reopens the show at the slide you were
+also autosaved continuously: after a crash, DECK reopens the show at the slide you were
 on.

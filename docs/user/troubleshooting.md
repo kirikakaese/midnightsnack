@@ -7,7 +7,7 @@ The phone must reach the laptop: same network, no device isolation. Guest, hotel
 company Wi-Fi networks stop devices from talking to each other. Try another address under
 **QR code for** in the Connect tab, start the laptop's [hotspot](connectivity.md#hotspot), or
 use a [relay](connectivity.md#relay). A firewall on the laptop must allow incoming connections
-for midnightsnack (port 4747, and 4749 for HTTPS); Windows and macOS ask on first start.
+for DECK (port 4747, and 4749 for HTTPS); Windows and macOS ask on first start.
 
 **"Wrong PIN." or "Too many attempts."**
 After several wrong PINs from a device (or many overall) pairing pauses for a minute. Type the
@@ -31,7 +31,7 @@ and second computer and changes the PIN; API keys stay (revoke them in the Contr
 ## Outputs
 
 **The output opened on the wrong screen.**
-Outputs tab → pick the display for the output → **Open output** again. midnightsnack remembers
+Outputs tab → pick the display for the output → **Open output** again. DECK remembers
 the display by name and reopens the output there when it is connected.
 
 **The projector was unplugged during the show.**
@@ -45,8 +45,8 @@ Install the GStreamer plugins for the format, usually `gstreamer1.0-libav` and
 installs the basic ones and recommends the rest; the AppImage brings its own.
 
 **Screen capture shows nothing (macOS).**
-Allow screen recording for midnightsnack in System Settings → Privacy & Security → Screen
-Recording, then restart midnightsnack.
+Allow screen recording for DECK in System Settings → Privacy & Security → Screen
+Recording, then restart DECK.
 
 ## Files
 
@@ -54,30 +54,45 @@ Recording, then restart midnightsnack.
 Presentations are converted to PDF with LibreOffice (Keynote files with Keynote, on a Mac).
 Install LibreOffice, or export the presentation as PDF and add that.
 
-**Double-clicking a `.msnack` file does not open midnightsnack.**
+**Double-clicking a `.msnack` file does not open DECK.**
 The installers register the file type (on Linux the `.deb` installs it system-wide; the
 AppImage does not register file types, use **Open…** there or an AppImage integration tool).
-If midnightsnack is already running, the show opens in it, after asking about unsaved changes.
+If DECK is already running, the show opens in it, after asking about unsaved changes.
 
 **A show opened on another computer is missing media.**
 Shows saved with **Save linked…** only point at the media files. Use **Save** or
 **Save as…**, which put the media into the show file.
 
-**"This is not a valid midnightsnack show."**
-The file is damaged, from a newer version of midnightsnack, or refers to files of the wrong
-type (a show cannot make midnightsnack serve arbitrary files to phones).
+**"This is not a valid DECK show."**
+The file is damaged, from a newer version of DECK, or refers to files of the wrong
+type (a show cannot make DECK serve arbitrary files to phones).
 
-**Where does midnightsnack keep its data?**
+**Where does DECK keep its data?**
 Settings, paired devices, the autosaved show and accepted uploads are in the app's data
 folder, readable only by your user account:
 
 | System  | Folder                                                          |
 | ------- | --------------------------------------------------------------- |
-| Linux   | `~/.local/share/io.github.kirikakaese.midnightsnack` (settings of this computer in `~/.config/…`) |
-| macOS   | `~/Library/Application Support/io.github.kirikakaese.midnightsnack` |
-| Windows | `%APPDATA%\io.github.kirikakaese.midnightsnack`                 |
+| Linux   | `~/.local/share/io.github.kirikakaese.deck` (settings of this computer in `~/.config/…`) |
+| macOS   | `~/Library/Application Support/io.github.kirikakaese.deck` |
+| Windows | `%APPDATA%\io.github.kirikakaese.deck`                 |
 
-Deleting the folder resets midnightsnack: all phones must pair again.
+Deleting the folder resets DECK: all phones must pair again.
+
+## Updates
+
+**How do I update DECK?**
+Control → Updates → **Check now**, then **Install and restart** (close the outputs first). With
+**Download updates automatically and install them when DECK quits**, the next quit installs a
+downloaded update. The `.deb` is updated by installing the newer `.deb`.
+
+**"This build of DECK was not made by the release workflow."**
+Builds you made yourself (or got from elsewhere) do not update themselves. Install DECK from
+the releases page to get updates.
+
+**An update check failed.**
+DECK needs to reach github.com to check. On an offline show network that is expected; check
+again later, or turn automatic checks off.
 
 ## Language
 

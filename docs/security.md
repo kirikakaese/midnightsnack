@@ -1,6 +1,6 @@
 # Security model
 
-midnightsnack runs a network server on the presenting laptop. This document describes what it
+DECK runs a network server on the presenting laptop. This document describes what it
 protects, against whom, and the known limits.
 
 ## Assets
@@ -39,6 +39,7 @@ protects, against whom, and the known limits.
 | Relay operator reads or alters the show       | Remotes and hosts talk Noise NK end to end through the relay; the host's static key comes from the QR code's URL fragment (never sent to servers). The relay sees only ciphertext and connection metadata; tampering breaks the session. |
 | Someone else registers this host on a relay   | The host id is derived from a 256-bit host secret by the relay; only the secret's owner can register it. Relays can require an access token from hosts. |
 | Host-only tokens used through the relay       | Tunneled requests and sessions get a synthetic address (`100::/64`) that is never loopback, so host-window tokens, local-only API keys and local-only actions are refused exactly as from the LAN. Video, audio and capture streams are not served through the relay. |
+| Malicious or tampered updates                 | Updates are installed only with a valid signature from DECK's release key (minisign), with the version bound into the signature so an old signed release cannot be offered as new (no downgrades). The key is compiled into release builds only; the private key never leaves the repository's secrets. Nothing installs during a show: on request with no output open, or when the app quits. |
 | Plain-text relay connections                  | Relays are only accepted over HTTPS, except on this computer or the local network. |
 | Passive sniffing on the LAN                   | Optional HTTPS with a generated certificate; its SHA-256 fingerprint is shown in the Connect tab for comparison on the browser's warning page. |
 | Relay or join links shared too widely         | Pairing still needs the PIN and approval. "Reset relay identity" changes keys and host id; old relay links stop working. |
@@ -75,7 +76,7 @@ protects, against whom, and the known limits.
 - Rate limiting is per IP address; many devices behind one NAT share a lockout.
 - The operator window's Content-Security-Policy allows connections to any host on the network,
   because controller windows (one host running another host's show) load slides and the
-  WebSocket from the other computer. The window only runs midnightsnack's own code.
+  WebSocket from the other computer. The window only runs DECK's own code.
 - MIDI input acts with the operator role and is not authenticated: anyone who can plug a MIDI
   device into the host can run the show (they could also press its keys).
 - Everything the configured OpenSlides account can read about the meeting's agenda, motions and

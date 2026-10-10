@@ -2,10 +2,10 @@
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 <mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
   <mime-type type="application/x-midnightsnack-show">
-    <comment>midnightsnack show</comment>
-    <comment xml:lang="de">midnightsnack-Show</comment>
+    <comment>DECK show</comment>
+    <comment xml:lang="de">DECK-Show</comment>
     <sub-class-of type="application/zip"/>
     <glob pattern="*.msnack"/>
-    <icon name="midnightsnack-host"/>
+    <icon name="deck"/>
   </mime-type>
 </mime-info>

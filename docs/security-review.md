@@ -1,6 +1,6 @@
 # Security review for 1.0
 
-A review of everything in midnightsnack that faces the network or handles untrusted input,
+A review of everything in DECK that faces the network or handles untrusted input,
 done before the 1.0 release. It complements the [security model](security.md), which
 describes the controls; this document records what was checked, what was found and what was
 done about it.

@@ -52,10 +52,10 @@ impl CertBundle {
         let mut params = rcgen::CertificateParams::new(names)?;
         params
             .distinguished_name
-            .push(rcgen::DnType::CommonName, "midnightsnack host");
+            .push(rcgen::DnType::CommonName, "DECK host");
         params
             .distinguished_name
-            .push(rcgen::DnType::OrganizationName, "midnightsnack");
+            .push(rcgen::DnType::OrganizationName, "DECK");
         params.extended_key_usages = vec![rcgen::ExtendedKeyUsagePurpose::ServerAuth];
         let now = time::OffsetDateTime::now_utc();
         params.not_before = now - time::Duration::days(1);

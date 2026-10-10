@@ -11,6 +11,7 @@ mod midi;
 mod open_file;
 mod output;
 mod settings;
+mod updates;
 mod web;
 
 use std::collections::BTreeMap;
@@ -34,7 +35,7 @@ pub(crate) struct HostState {
 }
 
 impl HostState {
-    fn save_settings(&self) {
+    pub(crate) fn save_settings(&self) {
         let s = self.settings.lock().unwrap_or_else(|e| e.into_inner());
         settings::save(&self.config_dir, &s);
     }
@@ -212,8 +213,8 @@ fn update_keep_awake(app: &AppHandle, state: &HostState) {
             .display(true)
             .idle(true)
             .reason("Presentation output is open")
-            .app_name("midnightsnack")
-            .app_reverse_domain("io.github.kirikakaese.midnightsnack")
+            .app_name("DECK")
+            .app_reverse_domain("io.github.kirikakaese.deck")
             .create()
         {
             Ok(k) => *guard = Some(k),
@@ -340,12 +341,36 @@ fn pdfium_dirs(app: &AppHandle) -> Vec<PathBuf> {
     dirs
 }
 
+/// The app was called midnightsnack before 1.0: settings, paired devices and the autosave of an
+/// earlier version are moved over from the folder named after the old identifier.
+const OLD_IDENTIFIER: &str = "io.github.kirikakaese.midnightsnack";
+
+fn migrate_from_old_name(dir: &std::path::Path) {
+    let Some(old) = dir.parent().map(|p| p.join(OLD_IDENTIFIER)) else {
+        return;
+    };
+    if dir.exists() || !old.is_dir() {
+        return;
+    }
+    match std::fs::rename(&old, dir) {
+        Ok(()) => {
+            tracing::info!(from = %old.display(), to = %dir.display(), "moved data of the previous name")
+        }
+        Err(e) => {
+            tracing::warn!(error = %e, from = %old.display(), "could not move data of the previous name")
+        }
+    }
+}
+
 fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let handle = app.handle().clone();
     let paths = app.path();
     let config_dir = paths.app_config_dir()?;
     let data_dir = paths.app_data_dir()?;
     let cache_dir = paths.app_cache_dir()?.join("render");
+    for dir in [&config_dir, &data_dir] {
+        migrate_from_old_name(dir);
+    }
     let host_settings = settings::load(&config_dir);
 
     let mut config = ServerConfig::new(cache_dir);
@@ -405,6 +430,10 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         midi::spawn(handle.clone(), server_state.clone());
     }
     app.manage(open_file::PendingOpen::default());
+    app.manage(updates::Updates::default());
+    if !smoke {
+        tauri::async_runtime::spawn(updates::run(handle.clone()));
+    }
     if let Some(path) = open_file::show_in_args(std::env::args()) {
         open_file::request(&handle, path);
     }
@@ -422,7 +451,7 @@ pub fn run() {
     tracing::info!(
         version = APP_VERSION,
         protocol = PROTOCOL_VERSION,
-        "starting midnightsnack"
+        "starting DECK"
     );
 
     tauri::Builder::default()
@@ -440,6 +469,11 @@ pub fn run() {
             },
         ))
         .plugin(tauri_plugin_dialog::init())
+        .plugin(
+            tauri_plugin_updater::Builder::new()
+                .pubkey(updates::pubkey().unwrap_or_default())
+                .build(),
+        )
         .setup(setup)
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { .. } = event {
@@ -476,11 +510,18 @@ pub fn run() {
             hotspot::hotspot_stop,
             hotspot::open_hotspot_settings,
             open_file::take_pending_open,
+            updates::update_info,
+            updates::set_update_settings,
+            updates::check_for_updates,
+            updates::install_update,
             ui_ready
         ])
         .build(tauri::generate_context!())
-        .expect("error while building midnightsnack")
+        .expect("error while building DECK")
         .run(|_app, _event| {
+            if let tauri::RunEvent::Exit = _event {
+                updates::install_on_exit(_app);
+            }
             // macOS hands documents to the running app as an event, not as arguments.
             #[cfg(target_os = "macos")]
             if let tauri::RunEvent::Opened { urls } = _event {
@@ -489,4 +530,25 @@ pub fn run() {
                 }
             }
         });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn data_of_the_old_name_is_moved_once() {
+        let root = tempfile::tempdir().unwrap();
+        let old = root.path().join(OLD_IDENTIFIER);
+        std::fs::create_dir_all(&old).unwrap();
+        std::fs::write(old.join("devices.json"), b"[]").unwrap();
+        let new = root.path().join("io.github.kirikakaese.deck");
+        migrate_from_old_name(&new);
+        assert!(new.join("devices.json").is_file());
+        assert!(!old.exists());
+        // A second run (or a fresh install) leaves things alone.
+        std::fs::create_dir_all(&old).unwrap();
+        migrate_from_old_name(&new);
+        assert!(old.exists());
+    }
 }

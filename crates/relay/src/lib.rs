@@ -174,7 +174,7 @@ pub async fn serve(listener: tokio::net::TcpListener, relay: Arc<Relay>) -> std:
 
 async fn info(State(relay): State<Arc<Relay>>) -> Response {
     axum::Json(serde_json::json!({
-        "name": "midnightsnack-relay",
+        "name": "deck-relay",
         "version": VERSION,
         "protocol": RELAY_PROTOCOL,
         "access_token_required": relay.config.access_token.is_some(),

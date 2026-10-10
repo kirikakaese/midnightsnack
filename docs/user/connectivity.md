@@ -24,7 +24,7 @@ relay instead.
 ## Hotspot
 
 The laptop becomes its own Wi-Fi network; phones join it and then scan the QR code. This works
-without any internet connection. midnightsnack recognizes the hotspot's address and puts it
+without any internet connection. DECK recognizes the hotspot's address and puts it
 first in the QR code selector.
 
 - **Linux (NetworkManager):** enter a network name and a password (8 or more characters) under
@@ -45,7 +45,7 @@ they scan the pairing QR code as usual.
 
 ## HTTPS on the local network
 
-**Also serve HTTPS** encrypts the connection between phones and the laptop. midnightsnack
+**Also serve HTTPS** encrypts the connection between phones and the laptop. DECK
 creates its own certificate (shown as a **fingerprint**) and serves HTTPS on port 4749 next to
 the normal address. Because no public authority signed the certificate, browsers show a warning
 the first time each phone opens the page:
@@ -63,7 +63,7 @@ over two years and renewed automatically.
 
 For phones that cannot reach the laptop directly, the laptop can connect to a **relay** on the
 internet, and phones connect to the relay. Everything between phone and laptop is end-to-end
-encrypted: the relay only forwards data it cannot read. midnightsnack has no relay of its own —
+encrypted: the relay only forwards data it cannot read. DECK has no relay of its own —
 use one that you, your organization or someone you trust runs ([how to host one](relay.md)).
 
 1. Under **Relay**, enter the relay's address (e.g. `https://relay.example.org`) and, if its

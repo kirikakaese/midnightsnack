@@ -105,7 +105,7 @@ pub fn open(
     };
 
     let mut builder = WindowBuilder::new(app, &label)
-        .title(format!("midnightsnack — {output_id}"))
+        .title(format!("DECK — {output_id}"))
         .focused(false)
         .background_color(tauri::window::Color(0, 0, 0, 255));
     builder = match &target {
