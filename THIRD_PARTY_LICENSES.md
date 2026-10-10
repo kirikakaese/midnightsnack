@@ -42,6 +42,7 @@ DECK is licensed under GPL-3.0-or-later. All dependencies must be compatible wit
 | [rcgen](https://github.com/rustls/rcgen) | MIT OR Apache-2.0 | Self-signed HTTPS certificate |
 | [hyper-util](https://github.com/hyperium/hyper-util) | MIT | HTTP and HTTPS connections |
 | [tauri-plugin-single-instance](https://github.com/tauri-apps/plugins-workspace) | MIT OR Apache-2.0 | Opening shows from the file manager in the running app |
+| [tauri-plugin-updater](https://github.com/tauri-apps/plugins-workspace) / [minisign-verify](https://github.com/jedisct1/rust-minisign-verify) | MIT OR Apache-2.0 / MIT | Signed in-app updates |
 | [tokio-tungstenite](https://github.com/snapview/tokio-tungstenite) | MIT | WebSocket client to the relay |
 | [@companion-module/base](https://github.com/bitfocus/companion-module-base) | MIT | Companion module framework |
 | [ws](https://github.com/websockets/ws) | MIT | WebSocket client of the Companion module |

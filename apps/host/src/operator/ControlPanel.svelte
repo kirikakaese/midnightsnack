@@ -1,11 +1,12 @@
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
-<!-- Control surfaces: MIDI controllers (with learn), the OSC server and API keys; the language. -->
+<!-- Control surfaces: MIDI controllers (with learn), the OSC server and API keys; updates and the language. -->
 <script lang="ts">
   import type { Action, MidiBinding, MidiTrigger } from "@midnightsnack/protocol";
   import { Button, LANGUAGES, t, type HostConnection } from "@midnightsnack/ui";
   import { onDestroy } from "svelte";
   import { host, onMidiPress, type MidiSettings } from "../lib/host";
   import ApiKeysPanel from "./ApiKeysPanel.svelte";
+  import UpdatesPanel from "./UpdatesPanel.svelte";
   import { isController } from "../lib/mode";
 
   interface Props {
@@ -224,6 +225,8 @@
   </section>
 
   <ApiKeysPanel {conn} />
+
+  <UpdatesPanel />
 
   <section aria-label={t("settings.language")}>
     <h3>{t("settings.language")}</h3>

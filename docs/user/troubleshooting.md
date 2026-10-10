@@ -46,7 +46,7 @@ installs the basic ones and recommends the rest; the AppImage brings its own.
 
 **Screen capture shows nothing (macOS).**
 Allow screen recording for DECK in System Settings → Privacy & Security → Screen
-Recording, then restart midnightsnack.
+Recording, then restart DECK.
 
 ## Files
 
@@ -54,7 +54,7 @@ Recording, then restart midnightsnack.
 Presentations are converted to PDF with LibreOffice (Keynote files with Keynote, on a Mac).
 Install LibreOffice, or export the presentation as PDF and add that.
 
-**Double-clicking a `.msnack` file does not open midnightsnack.**
+**Double-clicking a `.msnack` file does not open DECK.**
 The installers register the file type (on Linux the `.deb` installs it system-wide; the
 AppImage does not register file types, use **Open…** there or an AppImage integration tool).
 If DECK is already running, the show opens in it, after asking about unsaved changes.
@@ -78,6 +78,21 @@ folder, readable only by your user account:
 | Windows | `%APPDATA%\io.github.kirikakaese.deck`                 |
 
 Deleting the folder resets DECK: all phones must pair again.
+
+## Updates
+
+**How do I update DECK?**
+Control → Updates → **Check now**, then **Install and restart** (close the outputs first). With
+**Download updates automatically and install them when DECK quits**, the next quit installs a
+downloaded update. The `.deb` is updated by installing the newer `.deb`.
+
+**"This build of DECK was not made by the release workflow."**
+Builds you made yourself (or got from elsewhere) do not update themselves. Install DECK from
+the releases page to get updates.
+
+**An update check failed.**
+DECK needs to reach github.com to check. On an offline show network that is expected; check
+again later, or turn automatic checks off.
 
 ## Language
 

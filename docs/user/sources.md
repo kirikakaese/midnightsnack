@@ -61,7 +61,7 @@ the **Cue** tab says the source is gone; capture resumes when it is back.
 
 - **macOS:** the first time, macOS asks for **Screen Recording** permission. If you declined, the
   picker offers **Open screen recording settings**: allow DECK under *Privacy &
-  Security → Screen Recording*, then restart midnightsnack.
+  Security → Screen Recording*, then restart DECK.
 - **Windows:** works without setup.
 - **Linux:** works on X11 sessions. Wayland sessions are not supported yet; log in with an X11
   ("Xorg") session to capture.

@@ -15,8 +15,13 @@ Download the installer for your system from the
 Builds are not code-signed yet; see [installing unsigned builds](README.md#installing-unsigned-builds).
 For PowerPoint and other presentations, also install [LibreOffice](https://www.libreoffice.org).
 
-Start midnightsnack. The operator window opens; the language follows your system and can be
-changed in the **Control** tab. Double-clicking a `.msnack` show file opens it in midnightsnack.
+DECK updates itself (macOS, Windows, AppImage): **Control → Updates** sets whether and how often
+it checks, whether updates are downloaded automatically and installed when DECK quits, and
+whether beta versions are offered. An update never installs during a show. The `.deb` is
+updated with the next `.deb` (or your package manager).
+
+Start DECK. The operator window opens; the language follows your system and can be
+changed in the **Control** tab. Double-clicking a `.msnack` show file opens it in DECK.
 
 ## 1. Build a show
 

@@ -33,6 +33,7 @@ pub struct HostSettings {
     pub remotes: Vec<crate::controller::RemoteHost>,
     /// Language of the host's windows (`en`, `de`, …); `None` follows the system.
     pub language: Option<String>,
+    pub updates: crate::updates::UpdateSettings,
     // Phase 1/2 fields, migrated into `outputs["main"]`.
     #[serde(skip_serializing)]
     output_display: Option<String>,

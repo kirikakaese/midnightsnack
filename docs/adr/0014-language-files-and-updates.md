@@ -1,6 +1,6 @@
 # 0014. Language choice, opening shows from the system, and no auto-update in 1.0
 
-- **Status:** accepted
+- **Status:** accepted; the part on updates is superseded by [0016](0016-updates.md)
 - **Date:** 2026-10-10
 
 ## Context

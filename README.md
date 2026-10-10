@@ -38,6 +38,9 @@ MIDI controllers, OSC and Stream Deck via Bitfocus Companion.
 - **Connectivity:** the local network, the laptop's own hotspot, optional HTTPS, and a
   self-hosted relay with end-to-end encryption for phones on other networks.
 - **Languages:** English and German; [translations](docs/dev/translating.md) welcome.
+- **Updates:** DECK updates itself from its GitHub releases (Control → Updates: automatic
+  checks, how often, install on quit, beta versions). Updates are installed only with a valid
+  signature from DECK's release key, and never during a show.
 
 ## Install
 

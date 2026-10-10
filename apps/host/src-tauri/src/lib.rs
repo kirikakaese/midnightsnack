@@ -11,6 +11,7 @@ mod midi;
 mod open_file;
 mod output;
 mod settings;
+mod updates;
 mod web;
 
 use std::collections::BTreeMap;
@@ -34,7 +35,7 @@ pub(crate) struct HostState {
 }
 
 impl HostState {
-    fn save_settings(&self) {
+    pub(crate) fn save_settings(&self) {
         let s = self.settings.lock().unwrap_or_else(|e| e.into_inner());
         settings::save(&self.config_dir, &s);
     }
@@ -429,6 +430,10 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         midi::spawn(handle.clone(), server_state.clone());
     }
     app.manage(open_file::PendingOpen::default());
+    app.manage(updates::Updates::default());
+    if !smoke {
+        tauri::async_runtime::spawn(updates::run(handle.clone()));
+    }
     if let Some(path) = open_file::show_in_args(std::env::args()) {
         open_file::request(&handle, path);
     }
@@ -464,6 +469,11 @@ pub fn run() {
             },
         ))
         .plugin(tauri_plugin_dialog::init())
+        .plugin(
+            tauri_plugin_updater::Builder::new()
+                .pubkey(updates::pubkey().unwrap_or_default())
+                .build(),
+        )
         .setup(setup)
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { .. } = event {
@@ -500,11 +510,18 @@ pub fn run() {
             hotspot::hotspot_stop,
             hotspot::open_hotspot_settings,
             open_file::take_pending_open,
+            updates::update_info,
+            updates::set_update_settings,
+            updates::check_for_updates,
+            updates::install_update,
             ui_ready
         ])
         .build(tauri::generate_context!())
         .expect("error while building DECK")
         .run(|_app, _event| {
+            if let tauri::RunEvent::Exit = _event {
+                updates::install_on_exit(_app);
+            }
             // macOS hands documents to the running app as an event, not as arguments.
             #[cfg(target_os = "macos")]
             if let tauri::RunEvent::Opened { urls } = _event {

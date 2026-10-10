@@ -21,7 +21,7 @@ for each one set:
 
 Then click **Open output**. **Move output** sends an open output to another display, **Close
 output** closes the window (the output stays in the show), **Remove output** deletes it from the
-show. Open outputs reopen on their display the next time you start midnightsnack.
+show. Open outputs reopen on their display the next time you start DECK.
 
 ## Showing different cues on different screens
 
