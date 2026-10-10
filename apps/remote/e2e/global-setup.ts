@@ -22,7 +22,7 @@ export default async function globalSetup(): Promise<() => void> {
   const relayPort = process.env.E2E_RELAY_PORT ?? "47480";
   // A relay on this machine stands in for one on the internet.
   const relay = spawn(
-    binary("midnightsnack-relay", "deck-relay"),
+    binary("deck-relay", "midnightsnack-relay"),
     ["--listen", `127.0.0.1:${relayPort}`],
     { stdio: ["ignore", "ignore", "inherit"], env: { ...process.env, RUST_LOG: "warn" } },
   );
