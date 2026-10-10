@@ -7,7 +7,7 @@ Download the installer for your system from the
 
 | System                     | File                                     |
 | -------------------------- | ---------------------------------------- |
-| macOS 12 or later          | `.dmg` (Apple silicon and Intel)         |
+| macOS 12 or later          | `.dmg` (Apple silicon and Intel), or `brew install --cask kirikakaese/tap/deck` |
 | Windows 10/11              | `-setup.exe` (English or German) or `.msi` |
 | Debian, Ubuntu, Mint, …    | `.deb`                                   |
 | Other Linux distributions  | `.AppImage`                              |

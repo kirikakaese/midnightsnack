@@ -81,9 +81,37 @@ installed when the app quits.
 Without the key, prereleases are built with a warning (they do not update themselves) and
 stable releases fail.
 
+## Homebrew
+
+After every stable release (not prereleases) the `Update feeds` job writes the new version into
+the tap [kirikakaese/homebrew-tap](https://github.com/kirikakaese/homebrew-tap) as
+`Casks/deck.rb` (from `scripts/deck.rb.template`), the same tap SMP uses. People then install
+and upgrade with:
+
+```sh
+brew install --cask kirikakaese/tap/deck
+```
+
+The cask declares `auto_updates`, so `brew upgrade` leaves DECK to its own updater.
+
+### The tap token (once)
+
+The job needs a token that may change only the tap. The token SMP uses for its tap works as
+well (same repository, same permission); to make a new one:
+
+1. [Settings → Developer settings → Fine-grained tokens → Generate new token](https://github.com/settings/personal-access-tokens/new):
+   resource owner `kirikakaese`, **Only select repositories** → `kirikakaese/homebrew-tap`,
+   permission **Contents → Read and write**, nothing else.
+2. In this repository: Settings → Secrets and variables → Actions → **New repository secret**,
+   name `TAP_TOKEN`, paste the token.
+
+Without the secret, releases still work; the job notes that it skipped the tap.
+
 ## Signing
 
-Builds are not code-signed yet; the user guide explains how to open unsigned builds. To sign
+macOS builds are signed ad hoc (`signingIdentity: "-"`), which Apple silicon requires for
+downloaded apps, but not with a Developer ID or notarized; the user guide explains how to open
+them. Windows builds are not signed. To sign
 later, add the certificates as repository secrets and pass them to `tauri-action` (macOS:
 `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, plus
 `APPLE_ID`/`APPLE_PASSWORD`/`APPLE_TEAM_ID` for notarization; Windows: a certificate in

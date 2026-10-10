@@ -45,8 +45,14 @@ MIDI controllers, OSC and Stream Deck via Bitfocus Companion.
 ## Install
 
 Download DECK for macOS, Windows or Linux from the
-[releases page](https://github.com/kirikakaese/midnightsnack/releases) and follow
-[Getting started](docs/user/getting-started.md). The [user guide](docs/user/README.md) covers
+[releases page](https://github.com/kirikakaese/midnightsnack/releases), or on a Mac with
+Homebrew:
+
+```sh
+brew install --cask kirikakaese/tap/deck
+```
+
+Then follow [Getting started](docs/user/getting-started.md). The [user guide](docs/user/README.md) covers
 everything else.
 
 ## Quick start (development)

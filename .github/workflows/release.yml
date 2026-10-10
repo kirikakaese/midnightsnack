@@ -234,15 +234,20 @@ jobs:
     if: always() && (github.event_name == 'release' || needs.host.result == 'success')
     runs-on: ubuntu-22.04
     steps:
-      - env:
+      - uses: actions/checkout@v7
+      - id: state
+        env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.event.release.tag_name || github.ref_name }}
         run: |
-          state=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)
-          if [ "$state" = true ]; then
-            echo "$TAG is a draft; the feeds are updated when it is published."
-            exit 0
-          fi
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,isPrerelease \
+            --jq '"draft=\(.isDraft)\nprerelease=\(.isPrerelease)"' >> "$GITHUB_OUTPUT"
+      - name: Update the beta feed
+        if: steps.state.outputs.draft == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name || github.ref_name }}
+        run: |
           if ! gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern latest.json; then
             echo "::warning::$TAG has no latest.json (not built yet, or built without the update key)."
             exit 0
@@ -256,3 +261,35 @@ jobs:
           fi
           gh release upload "$stable" beta.json --repo "$GITHUB_REPOSITORY" --clobber
           echo "beta.json on $stable now offers $TAG"
+      # Stable releases only, like SMP: brew install --cask kirikakaese/tap/deck
+      - name: Update the Homebrew tap
+        if: steps.state.outputs.draft == 'false' && steps.state.outputs.prerelease == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAP_TOKEN: ${{ secrets.TAP_TOKEN }}
+          TAG: ${{ github.event.release.tag_name || github.ref_name }}
+        run: |
+          if [ -z "$TAP_TOKEN" ]; then
+            echo "::notice::TAP_TOKEN is not set, so the Homebrew tap was not updated (see docs/dev/releasing.md)."
+            exit 0
+          fi
+          version="${TAG#v}"
+          dmg="DECK_${version}_universal.dmg"
+          if ! gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "$dmg"; then
+            echo "::warning::$TAG has no $dmg yet; the tap is updated once it is built."
+            exit 0
+          fi
+          sha="$(sha256sum "$dmg" | cut -d' ' -f1)"
+          git clone "https://x-access-token:${TAP_TOKEN}@github.com/kirikakaese/homebrew-tap.git" tap
+          mkdir -p tap/Casks
+          sed -e "s/@VERSION@/$version/" -e "s/@SHA256@/$sha/" scripts/deck.rb.template > tap/Casks/deck.rb
+          cd tap
+          git config user.name "kirikakaese"
+          git config user.email "252577764+kirikakaese@users.noreply.github.com"
+          git add Casks/deck.rb
+          if git diff --cached --quiet; then
+            echo "The cask is already up to date."
+          else
+            git commit -m "deck $version"
+            git push
+          fi
