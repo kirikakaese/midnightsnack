@@ -117,7 +117,7 @@ See [docs/dev/architecture.md](docs/dev/architecture.md) for how the parts fit t
 | 3     | Outputs & sources: multi-output, capture, web, office formats, OpenSlides URL | 0.3.0 |
 | 4     | Control surfaces: pointer/drawing, upload inbox, MIDI, OSC, Companion       | 0.4.0   |
 | 5     | Connectivity: hotspot, HTTPS, E2E-encrypted relay + Docker image, fallback  | 0.5.0   |
-| 6     | OpenSlides native integration: agenda, motions, speakers, projector sync    | 0.6.0   |
+| 6     | OpenSlides native integration: agenda, motions, speakers, projector sync    | 1.0.0   |
 | 7     | 1.0: security review, performance, translations, installers, docs           | 1.0.0   |
 
 Phase plans live in [docs/plans](docs/plans), decisions in [docs/adr](docs/adr).
