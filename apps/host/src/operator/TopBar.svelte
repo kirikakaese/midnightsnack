@@ -11,6 +11,8 @@
     type Ticker,
   } from "@midnightsnack/ui";
   import { ask, open, save } from "@tauri-apps/plugin-dialog";
+  import { onDestroy } from "svelte";
+  import { host, onOpenShowRequested } from "../lib/host";
   import { isController } from "../lib/mode";
 
   interface Props {
@@ -41,6 +43,20 @@
     const path = await open({ multiple: false, filters: showFilter });
     if (typeof path === "string") conn.action({ action: "open_show", path });
   }
+
+  // Shows opened from the file manager, at launch or while running.
+  async function openPending() {
+    const path = await host.takePendingOpen().catch(() => null);
+    if (path && (await confirmDiscard())) conn.action({ action: "open_show", path });
+  }
+  let checkedPending = false;
+  $effect(() => {
+    if (conn.show && !checkedPending && !isController()) {
+      checkedPending = true;
+      openPending();
+    }
+  });
+  onDestroy(onOpenShowRequested(() => !isController() && openPending()));
 
   async function saveAs(embed_media: boolean) {
     const path = await save({ filters: showFilter, defaultPath: `${title || "show"}.msnack` });

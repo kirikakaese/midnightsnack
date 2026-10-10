@@ -8,6 +8,7 @@ mod controller;
 mod hotplug;
 mod hotspot;
 mod midi;
+mod open_file;
 mod output;
 mod settings;
 mod web;
@@ -403,6 +404,10 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     if !smoke {
         midi::spawn(handle.clone(), server_state.clone());
     }
+    app.manage(open_file::PendingOpen::default());
+    if let Some(path) = open_file::show_in_args(std::env::args()) {
+        open_file::request(&handle, path);
+    }
     tauri::async_runtime::spawn(web::run(handle, server_state, data_dir.join("web")));
     Ok(())
 }
@@ -421,6 +426,19 @@ pub fn run() {
     );
 
     tauri::Builder::default()
+        // First: a second launch (double-clicking a show while the app runs) hands its
+        // arguments to this instance and exits.
+        .plugin(tauri_plugin_single_instance::init(
+            |app, args, _cwd| match open_file::show_in_args(args) {
+                Some(path) => open_file::request(app, path),
+                None => {
+                    if let Some(w) = app.get_webview_window("operator") {
+                        let _ = w.unminimize();
+                        let _ = w.set_focus();
+                    }
+                }
+            },
+        ))
         .plugin(tauri_plugin_dialog::init())
         .setup(setup)
         .on_window_event(|window, event| {
@@ -457,8 +475,18 @@ pub fn run() {
             hotspot::hotspot_start,
             hotspot::hotspot_stop,
             hotspot::open_hotspot_settings,
+            open_file::take_pending_open,
             ui_ready
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running midnightsnack");
+        .build(tauri::generate_context!())
+        .expect("error while building midnightsnack")
+        .run(|_app, _event| {
+            // macOS hands documents to the running app as an event, not as arguments.
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Opened { urls } = _event {
+                if let Some(path) = urls.iter().find_map(|u| u.to_file_path().ok()) {
+                    open_file::request(_app, path);
+                }
+            }
+        });
 }

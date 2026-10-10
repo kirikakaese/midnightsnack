@@ -145,3 +145,17 @@ export async function connectToHost(): Promise<HostConnection> {
   conn.connect();
   return conn;
 }
+
+/** Called when a show is opened from the file manager while the app runs. */
+export function onOpenShowRequested(cb: () => void): () => void {
+  let unlisten: (() => void) | null = null;
+  let cancelled = false;
+  listen("open-show-requested", () => cb()).then((u) => {
+    if (cancelled) u();
+    else unlisten = u;
+  });
+  return () => {
+    cancelled = true;
+    unlisten?.();
+  };
+}
