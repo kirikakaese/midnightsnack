@@ -36,5 +36,7 @@ pub enum ErrorCode {
     CapturePermission,
     /// An upload exceeds the host's size limit.
     FileTooLarge,
+    /// Too many uploads are waiting for the operator's decision.
+    InboxFull,
     Internal,
 }

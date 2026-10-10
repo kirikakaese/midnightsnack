@@ -8,10 +8,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
-use axum::extract::ConnectInfo;
 use axum::Router;
-use hyper_util::rt::{TokioExecutor, TokioIo};
-use hyper_util::service::TowerToHyperService;
 use midnightsnack_core::now_ms;
 use midnightsnack_protocol::DEFAULT_HTTPS_PORT;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
@@ -20,7 +17,6 @@ use sha2::{Digest, Sha256};
 use tokio::net::TcpListener;
 
 use crate::state::{lock, AppState, Event};
-use crate::ws::Secure;
 
 /// Certificates are valid this long (Apple platforms refuse longer-lived server certificates).
 const VALIDITY_DAYS: i64 = 820;
@@ -223,9 +219,15 @@ pub async fn run(state: Arc<AppState>, router: Router, bind: std::net::IpAddr, p
 
 async fn serve(listener: TcpListener, config: Arc<rustls::ServerConfig>, router: Router) {
     let acceptor = tokio_rustls::TlsAcceptor::from(config);
+    let slots = Arc::new(tokio::sync::Semaphore::new(crate::listen::MAX_CONNECTIONS));
     // Connections end with the listener: dropping this set aborts them on restart.
     let mut connections = tokio::task::JoinSet::new();
     loop {
+        let permit = slots
+            .clone()
+            .acquire_owned()
+            .await
+            .expect("semaphore is never closed");
         let (tcp, addr) = tokio::select! {
             accepted = listener.accept() => match accepted {
                 Ok(a) => a,
@@ -241,26 +243,12 @@ async fn serve(listener: TcpListener, config: Arc<rustls::ServerConfig>, router:
         let acceptor = acceptor.clone();
         let router = router.clone();
         connections.spawn(async move {
-            let Ok(Ok(tls)) =
+            if let Ok(Ok(tls)) =
                 tokio::time::timeout(TLS_HANDSHAKE_TIMEOUT, acceptor.accept(tcp)).await
-            else {
-                return;
-            };
-            let svc = tower::ServiceExt::map_request(
-                router,
-                move |mut req: axum::http::Request<hyper::body::Incoming>| {
-                    req.extensions_mut().insert(ConnectInfo(addr));
-                    req.extensions_mut().insert(Secure);
-                    req
-                },
-            );
-            let builder = hyper_util::server::conn::auto::Builder::new(TokioExecutor::new());
-            if let Err(e) = builder
-                .serve_connection_with_upgrades(TokioIo::new(tls), TowerToHyperService::new(svc))
-                .await
             {
-                tracing::debug!(%addr, error = %e, "HTTPS connection ended");
+                crate::listen::serve_connection(tls, addr, true, router).await;
             }
+            drop(permit);
         });
     }
 }

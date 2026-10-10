@@ -40,7 +40,8 @@ midnightsnack is licensed under GPL-3.0-or-later. All dependencies must be compa
 | [ring](https://github.com/briansmith/ring) | Apache-2.0 AND ISC | Cryptography provider for rustls and rcgen |
 | [rustls-native-certs](https://github.com/rustls/rustls-native-certs) | Apache-2.0 OR ISC OR MIT | The operating system's trusted certificates |
 | [rcgen](https://github.com/rustls/rcgen) | MIT OR Apache-2.0 | Self-signed HTTPS certificate |
-| [hyper-util](https://github.com/hyperium/hyper-util) | MIT | HTTPS connections |
+| [hyper-util](https://github.com/hyperium/hyper-util) | MIT | HTTP and HTTPS connections |
+| [tauri-plugin-single-instance](https://github.com/tauri-apps/plugins-workspace) | MIT OR Apache-2.0 | Opening shows from the file manager in the running app |
 | [tokio-tungstenite](https://github.com/snapview/tokio-tungstenite) | MIT | WebSocket client to the relay |
 | [@companion-module/base](https://github.com/bitfocus/companion-module-base) | MIT | Companion module framework |
 | [ws](https://github.com/websockets/ws) | MIT | WebSocket client of the Companion module |

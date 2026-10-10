@@ -14,9 +14,10 @@
 
   const link = currentLink();
   const joinToken = joinTokenFromUrl();
-  // Switching between the LAN and the relay carries the token in the fragment.
+  // Switching between the LAN and the relay carries the token in the fragment. It never
+  // replaces a stored token, so a crafted link cannot unpair this phone or swap its identity.
   const handover = handedOverToken();
-  if (handover) storage.setToken(link, handover);
+  if (handover && !storage.token(link)) storage.setToken(link, handover);
   if (handover || (window.location.hash.includes("k=") && !joinToken)) clearJoinUrl();
   // A fresh QR scan always starts a new pairing, even if this browser was paired before.
   let token = $state<string | null>(joinToken ? null : storage.token(link));

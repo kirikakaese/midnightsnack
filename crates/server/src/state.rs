@@ -306,8 +306,12 @@ impl AppState {
 
     /// Other ways to reach this host, for paired remotes.
     pub fn routes(&self) -> Routes {
+        // Encrypted first: a phone leaving the relay should not fall back to plain HTTP when
+        // HTTPS is on.
+        let mut lan = lock(&self.base_urls).clone();
+        lan.sort_by_key(|u| !u.starts_with("https://"));
         Routes {
-            lan: lock(&self.base_urls).clone(),
+            lan,
             relay: self.relay_route(),
         }
     }

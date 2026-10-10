@@ -6,6 +6,8 @@
 //! - `--access-token TOKEN` (`MIDNIGHTSNACK_RELAY_ACCESS_TOKEN`): hosts must present it
 //! - `--max-hosts N` (`MIDNIGHTSNACK_RELAY_MAX_HOSTS`, default 200)
 //! - `--max-remotes-per-host N` (`MIDNIGHTSNACK_RELAY_MAX_REMOTES`, default 64)
+//! - `--max-queued-mb N` (`MIDNIGHTSNACK_RELAY_MAX_QUEUED_MB`, default 256): memory for
+//!   messages waiting for remotes, across all hosts
 //! - `--healthcheck`: checks a running relay on the listen port and exits (for containers)
 
 use std::net::SocketAddr;
@@ -21,7 +23,7 @@ fn env(name: &str) -> Option<String> {
 fn usage() -> ExitCode {
     eprintln!(
         "usage: midnightsnack-relay [--listen ADDR] [--access-token TOKEN] [--max-hosts N] \
-         [--max-remotes-per-host N] [--healthcheck] [--version]"
+         [--max-remotes-per-host N] [--max-queued-mb N] [--healthcheck] [--version]"
     );
     ExitCode::from(2)
 }
@@ -45,6 +47,10 @@ async fn main() -> ExitCode {
     if let Some(n) = env("MIDNIGHTSNACK_RELAY_MAX_REMOTES").and_then(|v| v.parse().ok()) {
         config.max_remotes_per_host = n;
     }
+    if let Some(n) = env("MIDNIGHTSNACK_RELAY_MAX_QUEUED_MB").and_then(|v| v.parse::<usize>().ok())
+    {
+        config.max_queued_bytes = n * 1024 * 1024;
+    }
     let mut healthcheck = false;
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
@@ -61,6 +67,10 @@ async fn main() -> ExitCode {
             },
             "--max-remotes-per-host" => match value().and_then(|v| v.parse().ok()) {
                 Some(n) => config.max_remotes_per_host = n,
+                None => return usage(),
+            },
+            "--max-queued-mb" => match value().and_then(|v| v.parse::<usize>().ok()) {
+                Some(n) => config.max_queued_bytes = n * 1024 * 1024,
                 None => return usage(),
             },
             "--healthcheck" => healthcheck = true,

@@ -39,6 +39,7 @@ impl From<ErrorCode> for ApiFailure {
             ErrorCode::PdfEngineMissing => StatusCode::SERVICE_UNAVAILABLE,
             ErrorCode::UnsupportedFile => StatusCode::UNSUPPORTED_MEDIA_TYPE,
             ErrorCode::FileTooLarge => StatusCode::PAYLOAD_TOO_LARGE,
+            ErrorCode::InboxFull => StatusCode::TOO_MANY_REQUESTS,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         };
         ApiFailure(status, code)
@@ -101,7 +102,7 @@ pub async fn slide(
         .slide_source(&cue_id, slide)
         .ok_or(ErrorCode::NotFound)?;
     let size = match (q.w, q.h) {
-        (Some(w), Some(h)) => TargetSize::new(w, h),
+        (Some(w), Some(h)) => snap_size(w, h, *lock(&state.output_size)),
         _ => THUMB_SIZE,
     };
     let path = state
@@ -145,6 +146,30 @@ pub async fn slide(
         .into_response())
 }
 
+/// Render sizes a client may ask for besides the outputs' own size: each distinct size is a
+/// new render and a new cache file, so arbitrary sizes would let any device fill the disk.
+const SIZE_STEPS: [(u32, u32); 6] = [
+    (640, 360),
+    (1280, 720),
+    (1920, 1080),
+    (2560, 1440),
+    (3840, 2160),
+    (7680, 4320),
+];
+
+/// The output size if that is what was asked for, else the smallest step that covers it.
+pub(crate) fn snap_size(w: u32, h: u32, output: TargetSize) -> TargetSize {
+    let wanted = TargetSize::new(w, h);
+    if wanted == output {
+        return output;
+    }
+    let (w, h) = SIZE_STEPS
+        .into_iter()
+        .find(|&(sw, sh)| sw >= wanted.width && sh >= wanted.height)
+        .unwrap_or(SIZE_STEPS[SIZE_STEPS.len() - 1]);
+    TargetSize::new(w, h)
+}
+
 #[derive(Debug, Deserialize)]
 pub struct KeyQuery {
     k: String,
@@ -186,6 +211,10 @@ pub async fn media_file(
         }
         .ok_or(ErrorCode::NotFound)?
     };
+    // Defense in depth: shows are checked when opened.
+    if !crate::host_actions::is_media_file(&path) {
+        return Err(ErrorCode::NotFound.into());
+    }
     serve_file(path, req).await
 }
 
@@ -206,6 +235,9 @@ pub async fn asset(
             .and_then(|a| show.resolve(&a.file))
             .ok_or(ErrorCode::NotFound)?
     };
+    if !midnightsnack_render::is_supported_image(&path) {
+        return Err(ErrorCode::NotFound.into());
+    }
     serve_file(path, req).await
 }
 
@@ -295,4 +327,23 @@ where
     let (tx, rx) = tokio::sync::mpsc::channel(1);
     tokio::spawn(f(tx));
     futures_util::stream::unfold(rx, |mut rx| async move { rx.recv().await.map(|v| (v, rx)) })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn client_sizes_snap_to_a_few_steps() {
+        let out = TargetSize::new(1366, 768);
+        assert_eq!(snap_size(1366, 768, out), out);
+        assert_eq!(snap_size(100, 100, out), TargetSize::new(640, 360));
+        assert_eq!(snap_size(1300, 700, out), TargetSize::new(1920, 1080));
+        assert_eq!(snap_size(7680, 7679, out), TargetSize::new(7680, 4320));
+        let distinct: std::collections::HashSet<_> = (16..4000)
+            .map(|w| snap_size(w, w / 2, out))
+            .map(|s| (s.width, s.height))
+            .collect();
+        assert!(distinct.len() <= SIZE_STEPS.len() + 1);
+    }
 }

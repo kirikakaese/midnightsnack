@@ -112,6 +112,10 @@ Then put a reverse proxy with TLS in front of it as above.
 | `--access-token TOKEN`     | `MIDNIGHTSNACK_RELAY_ACCESS_TOKEN`   | none (open)    |
 | `--max-hosts N`            | `MIDNIGHTSNACK_RELAY_MAX_HOSTS`      | 200            |
 | `--max-remotes-per-host N` | `MIDNIGHTSNACK_RELAY_MAX_REMOTES`    | 64             |
+| `--max-queued-mb N`        | `MIDNIGHTSNACK_RELAY_MAX_QUEUED_MB`  | 256            |
+
+The relay keeps at most 2 MB of messages waiting for each remote and `--max-queued-mb` across
+all of them; remotes that stop reading are dropped (they reconnect on their own).
 
 `RUST_LOG=debug` logs every remote connection; the default (`info`) logs hosts connecting and
 disconnecting by a shortened id. The relay never logs message contents (it cannot read them) and
@@ -119,6 +123,9 @@ keeps no data on disk.
 
 Without an access token anyone can use your relay for their own hosts (they still cannot see or
 control yours). Set one if the server is public.
+
+Hosts only accept relays over HTTPS; plain `http://` works for a relay on the same computer or
+the local network (for testing).
 
 ## What the relay can and cannot do
 

@@ -21,27 +21,31 @@ protects, against whom, and the known limits.
 | Threat                                        | Control                                                                                      |
 | --------------------------------------------- | -------------------------------------------------------------------------------------------- |
 | Stranger on the Wi-Fi controls the show       | Pairing needs the one-time join token (QR), the 6-digit PIN shown on the host, **and** operator approval (unless auto-approve is enabled). |
-| PIN brute force                               | 5 failures per address → 60 s lockout; 20 failures overall per minute → global 60 s lockout; join token required in addition. |
+| PIN brute force                               | 5 failures per address → 60 s lockout; 20 wrong PINs per minute → 60 s lockout, counted separately for QR pairing, PIN-only pairing and the relay (so one cannot lock out the others); a wrong join token only counts against its sender. |
 | Stolen/old QR code                            | Join token rotates after every successful submission; "Disconnect all" also rotates the PIN. |
 | Lost or compromised phone                     | Revoke the device in the operator view; "Disconnect all" forgets every remote device.        |
 | Paired remote reads/writes host files         | File-system actions (`add_files`, `open_show`, `save_show` with a path) are local-only and refused from the network regardless of role. Media is only served for slides in the current show. |
 | Host window token reused from the network     | Host window tokens are in-memory, regenerated on every start, and only accepted from loopback addresses. |
 | Session tokens leaked from disk               | Only SHA-256 hashes of device tokens are stored (`devices.json`).                             |
 | Slide images fetched without pairing          | Requires a per-connection random media key, valid only while that connection is open.        |
-| Malicious show bundle                         | Bundled media names are restricted to a single path component (no traversal); the `show.json` size is capped. |
+| Malicious show bundle                         | Bundled media names are restricted to a single path component (no traversal); the `show.json` size is capped. Every file a show refers to must be of a type its cue shows (also after following symbolic links), so a shared show cannot make the host serve other files; web page and capture cues are validated like actions. |
 | Web page cue attacks the host                 | Web pages run in their own webview without IPC access, incognito unless "keep logins" is set (then with a data directory per cue), and can be kept on their site. |
 | Screen contents leak to the network           | Capture streams need the media key of a live connection; listing windows (titles) is admin-only. Capture only runs while a capture cue is viewed. |
 | Malicious presentation file                   | Office files are converted by LibreOffice in a separate process with a private profile and a timeout; notes are parsed with a size-limited XML reader. |
 | Control surface keys leaked or misused         | API keys are devices with a role: hashed on disk, revocable, shown once. By default they (and OSC) only work from the host itself; opening them to the network is an explicit setting. OSC senders on other computers must authenticate with a key; failed attempts are throttled. "Disconnect all" keeps API keys (configured integrations); revoke them individually. |
-| Uploads used to fill the disk or plant files  | Uploads need a paired device of presenter role or higher, are limited to 2 GB and to media/presentation types, are stored under a generated directory with a sanitized single-component name, and wait in the inbox until an admin accepts them. Pending uploads are deleted on restart. |
+| Uploads used to fill the disk or plant files  | Uploads need a paired device of presenter role or higher, are limited to 2 GB and to media/presentation types, are stored under a generated directory with a sanitized single-component name, and wait in the inbox until an admin accepts them (at most 8 per device and 8 GB overall). Pending uploads are deleted on restart. |
 | Pointer spam                                  | Pointer messages need the presenter role and are capped at 60 per second per device; drawings are validated (points, width, color) and capped per slide. |
 | PIN guessing from a second computer           | Pairing without the QR code's join token is only accepted while every request needs the operator's approval (auto-approve off); the PIN lockouts apply. |
 | Relay operator reads or alters the show       | Remotes and hosts talk Noise NK end to end through the relay; the host's static key comes from the QR code's URL fragment (never sent to servers). The relay sees only ciphertext and connection metadata; tampering breaks the session. |
 | Someone else registers this host on a relay   | The host id is derived from a 256-bit host secret by the relay; only the secret's owner can register it. Relays can require an access token from hosts. |
 | Host-only tokens used through the relay       | Tunneled requests and sessions get a synthetic address (`100::/64`) that is never loopback, so host-window tokens, local-only API keys and local-only actions are refused exactly as from the LAN. Video, audio and capture streams are not served through the relay. |
+| Plain-text relay connections                  | Relays are only accepted over HTTPS, except on this computer or the local network. |
 | Passive sniffing on the LAN                   | Optional HTTPS with a generated certificate; its SHA-256 fingerprint is shown in the Connect tab for comparison on the browser's warning page. |
 | Relay or join links shared too widely         | Pairing still needs the PIN and approval. "Reset relay identity" changes keys and host id; old relay links stop working. |
-| OpenSlides credentials leak                   | The OpenSlides password is stored in its own file in the data directory, readable only by the user, changeable only by admins, and never sent to clients (they see whether one is set). |
+| OpenSlides credentials leak                   | The OpenSlides password is stored in its own file in the data directory, readable only by the user, changeable only by admins, and never sent to clients (they see whether one is set). Changing the server or user forgets it, so it is only sent to the server it was entered for (the same holds for the relay access token); logins do not follow redirects. |
+| Slow or stalled clients exhaust the host      | Request headers must arrive within 30 s and bodies must keep arriving; at most 1,024 open connections per listener; pairing requests are limited to 16 KB; relay channels without a session close after 60 s; client-chosen render sizes snap to a few steps. |
+| Crafted OSC packets                           | Bundles and arrays nested deeper than 4 levels are refused before decoding; authenticated OSC senders act with their device's current role, so revoking it applies at once. |
+| Relay server overload                         | Per-remote (2 MB) and global (256 MB) queue limits; remotes that stop reading are dropped; per-remote message rate limit; host limit; access token for hosts. |
 | OpenSlides content injects markup             | Motion and topic HTML is reduced to plain text blocks on the host; clients render text only. |
 | Remote page embedded/clickjacked              | `Content-Security-Policy` with `frame-ancestors 'none'`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`. |
 
@@ -58,9 +62,16 @@ protects, against whom, and the known limits.
   relays you or people you trust run.
 - **Token handover in URLs.** When a remote switches between the LAN and the relay, its device
   token travels in the URL fragment (not sent to servers) and is removed from the address bar
-  and history immediately.
-- Relay channels each get their own address for per-client PIN lockouts; the global lockout
-  (20 failures per minute) bounds attempts through the relay as a whole.
+  and history immediately. A handed-over token never replaces one the phone already has, and a
+  stored relay key is never replaced by one from a link.
+- Relay channels each get their own address for per-client PIN lockouts; the relay's own
+  lockout (20 wrong PINs per minute) bounds attempts through the relay as a whole, without
+  locking pairing on the local network.
+- An admin device can open the API to the network and create API keys, which survive
+  "Disconnect all" (they are listed in the Control tab). Give the admin role only to devices
+  you control.
+- The relay learns the host secret, which identifies the host there; it never learns the
+  host's Noise key.
 - Rate limiting is per IP address; many devices behind one NAT share a lockout.
 - The operator window's Content-Security-Policy allows connections to any host on the network,
   because controller windows (one host running another host's show) load slides and the
@@ -72,6 +83,11 @@ protects, against whom, and the known limits.
   visibility.
 - The PIN is stable for a host session until "Disconnect all"; the one-time join token is the
   per-pairing secret.
+
+## Reviews
+
+The 1.0 review, with every finding and what was done about it, is in
+[security-review.md](security-review.md).
 
 ## Reporting
 

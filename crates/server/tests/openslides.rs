@@ -154,6 +154,15 @@ async fn meeting_data_and_pages_follow_openslides() {
         let mode = std::fs::metadata(&creds).unwrap().permissions().mode();
         assert_eq!(mode & 0o077, 0);
     }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mode = std::fs::metadata(dir.path().join("data/settings.json"))
+            .unwrap()
+            .permissions()
+            .mode();
+        assert_eq!(mode & 0o077, 0, "settings (relay token) are private too");
+    }
     let settings = std::fs::read_to_string(dir.path().join("data/settings.json")).unwrap();
     assert!(settings.contains("openslides"));
     assert!(
@@ -177,6 +186,18 @@ async fn meeting_data_and_pages_follow_openslides() {
         .unwrap();
     wait_until(|| lock(&h.state.openslides_data).is_none()).await;
     assert_eq!(h.state.openslides_status().state, OpenSlidesState::Off);
+
+    // Another server (or account) does not get the stored password.
+    h.state
+        .perform(
+            Origin::LOCAL_ADMIN,
+            configure("https://other.example.org", None, Some(1)),
+        )
+        .await
+        .unwrap();
+    assert!(!h.state.openslides_status().has_password);
+    assert!(lock(&h.state.openslides_password).is_empty());
+    assert!(!creds.exists());
 }
 
 #[tokio::test]

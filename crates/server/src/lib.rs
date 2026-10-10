@@ -12,6 +12,7 @@ pub mod discovery;
 mod host_actions;
 pub mod https;
 mod inbox;
+mod listen;
 mod openslides_service;
 mod osc_service;
 mod pairing;
@@ -20,6 +21,8 @@ mod scheduler;
 pub mod state;
 mod tunnel;
 mod util;
+
+pub use util::write_json_atomic;
 mod ws;
 
 use std::net::SocketAddr;
@@ -28,13 +31,13 @@ use std::sync::Arc;
 
 use axum::http::{header, HeaderValue};
 use axum::routing::{get, post};
-use axum::serve::ListenerExt;
 use axum::Router;
 use midnightsnack_core::APP_VERSION;
 use midnightsnack_protocol::{HostInfo, Role, PROTOCOL_VERSION};
 use midnightsnack_render::{RenderCache, RenderService};
 use tokio::net::TcpListener;
 use tower_http::set_header::SetResponseHeaderLayer;
+use tower_http::timeout::RequestBodyTimeoutLayer;
 
 pub use state::{AppState, Event};
 
@@ -117,7 +120,10 @@ impl Drop for ServerHandle {
 pub fn router(state: Arc<AppState>) -> Router {
     Router::new()
         .route("/api/v1/info", get(api::info))
-        .route("/api/v1/pair", post(api::pair))
+        .route(
+            "/api/v1/pair",
+            post(api::pair).layer(axum::extract::DefaultBodyLimit::max(16 * 1024)),
+        )
         .route("/api/v1/pair/{request_id}", get(api::pair_status))
         .route("/api/v1/ws", get(ws::handler))
         .route("/api/v1/action", post(control_api::action))
@@ -131,6 +137,10 @@ pub fn router(state: Arc<AppState>) -> Router {
             post(inbox::upload).layer(axum::extract::DefaultBodyLimit::disable()),
         )
         .fallback(assets::serve)
+        // Request bodies must keep arriving (slow uploads are fine, stalled ones are not).
+        .layer(RequestBodyTimeoutLayer::new(
+            std::time::Duration::from_secs(30),
+        ))
         .layer(SetResponseHeaderLayer::overriding(
             header::X_CONTENT_TYPE_OPTIONS,
             HeaderValue::from_static("nosniff"),
@@ -297,21 +307,10 @@ pub async fn start(config: ServerConfig) -> std::io::Result<ServerHandle> {
     state.prefetch();
 
     let (tx, rx) = tokio::sync::oneshot::channel::<()>();
-    let app = router(state.clone()).into_make_service_with_connect_info::<SocketAddr>();
-    // Live control sends many tiny messages; never let Nagle's algorithm delay them.
-    let listener = listener.tap_io(|tcp| {
-        if let Err(e) = tcp.set_nodelay(true) {
-            tracing::debug!(error = %e, "could not set TCP_NODELAY");
-        }
-    });
-    tokio::spawn(async move {
-        let server = axum::serve(listener, app).with_graceful_shutdown(async {
-            let _ = rx.await;
-        });
-        if let Err(e) = server.await {
-            tracing::error!(error = %e, "server stopped");
-        }
-    });
+    let app = router(state.clone());
+    tokio::spawn(listen::serve_plain(listener, app, async {
+        let _ = rx.await;
+    }));
     tracing::info!(%addr, "server listening");
 
     let mdns = if config.mdns && !config.bind.ip().is_loopback() {

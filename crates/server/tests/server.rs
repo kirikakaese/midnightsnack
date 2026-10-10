@@ -1080,6 +1080,22 @@ async fn uploads_are_checked() {
         .unwrap_or(0);
     assert_eq!(leftovers, 0, "rejected uploads leave nothing behind");
 
+    // One device cannot pile up files faster than the operator decides.
+    let other = f.pair(&mut op, "Other", Role::Presenter).await;
+    for i in 0..8 {
+        let res = f.upload(&other, &format!("{i}.pdf"), vec![1; 10]).await;
+        assert_eq!(res.status(), 200, "upload {i}");
+    }
+    let res = f.upload(&other, "9.pdf", vec![1; 10]).await;
+    assert_eq!(res.status(), 429);
+    let err: ApiError = res.json().await.unwrap();
+    assert_eq!(err.code, ErrorCode::InboxFull);
+    // Others still can.
+    assert_eq!(
+        f.upload(&presenter, "ok.pdf", vec![1; 10]).await.status(),
+        200
+    );
+
     // Admin uploads and auto-accept skip the inbox.
     let png = std::fs::read(f.png("p.png")).unwrap();
     assert!(png.len() < 1000);
@@ -1324,4 +1340,173 @@ async fn osc_controls_the_show_and_reports_state() {
         _ => None,
     })
     .await;
+}
+
+/// A sender on another computer authenticates with a device token; revoking the device or
+/// lowering its role takes effect on the next message.
+#[tokio::test]
+async fn osc_sessions_follow_the_device() {
+    use rosc::{OscMessage, OscPacket, OscType};
+    // This computer's address on the network (OSC treats loopback senders as operators).
+    let probe = std::net::UdpSocket::bind("0.0.0.0:0").unwrap();
+    let Some(ip) = probe
+        .connect("192.0.2.1:9")
+        .ok()
+        .and_then(|_| probe.local_addr().ok())
+        .map(|a| a.ip())
+        .filter(|ip| !ip.is_loopback() && !ip.is_unspecified())
+    else {
+        eprintln!("no non-loopback address; skipping");
+        return;
+    };
+    let f = fixture().await;
+    let mut op = f.connect(&f.handle.operator_token).await;
+    op.welcome().await;
+    let token = f.pair(&mut op, "Desk", Role::Operator).await;
+    let desk = f
+        .handle
+        .state
+        .devices
+        .lock()
+        .unwrap()
+        .list()
+        .into_iter()
+        .find(|d| d.name == "Desk")
+        .unwrap()
+        .id;
+    op.action(Action::SetApiLocalOnly { on: false })
+        .await
+        .unwrap();
+    let port = std::net::UdpSocket::bind("0.0.0.0:0")
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port();
+    op.action(Action::ConfigureOsc {
+        osc: OscSettings {
+            enabled: true,
+            port,
+        },
+    })
+    .await
+    .unwrap();
+    op.wait(|m| match m {
+        ServerMessage::Devices { control, .. } if control.osc_listening == Some(port) => Some(()),
+        _ => None,
+    })
+    .await;
+
+    let client = tokio::net::UdpSocket::bind((ip, 0)).await.unwrap();
+    client.connect((ip, port)).await.unwrap();
+    let send = |addr: &str, args: Vec<OscType>| {
+        let bytes = rosc::encoder::encode(&OscPacket::Message(OscMessage {
+            addr: addr.into(),
+            args,
+        }))
+        .unwrap();
+        let client = &client;
+        async move { client.send(&bytes).await.unwrap() }
+    };
+    // Without authentication nothing happens; with it, the operator can black out.
+    send("/midnightsnack/blackout", vec![OscType::Int(1)]).await;
+    send("/midnightsnack/auth", vec![OscType::String(token)]).await;
+    send("/midnightsnack/freeze", vec![OscType::Int(1)]).await;
+    let live = op
+        .wait(|m| match m {
+            ServerMessage::Live { live } if live.masters.freeze => Some(live),
+            _ => None,
+        })
+        .await;
+    assert!(
+        !live.masters.blackout,
+        "unauthenticated message was refused"
+    );
+
+    // A stage viewer may not control the show.
+    op.action(Action::SetDeviceRole {
+        device_id: desk.clone(),
+        role: Role::StageViewer,
+    })
+    .await
+    .unwrap();
+    send("/midnightsnack/blackout", vec![OscType::Int(1)]).await;
+    // Revoked: refused as well.
+    op.action(Action::SetDeviceRole {
+        device_id: desk.clone(),
+        role: Role::Operator,
+    })
+    .await
+    .unwrap();
+    op.action(Action::RevokeDevice { device_id: desk })
+        .await
+        .unwrap();
+    send("/midnightsnack/blackout", vec![OscType::Int(1)]).await;
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    let engine = f.handle.state.engine.lock().unwrap();
+    assert!(!engine.live_state(0).masters.blackout);
+}
+
+/// A show file from someone else must not make the host serve arbitrary files or open
+/// arbitrary URLs.
+#[tokio::test]
+async fn shows_pointing_at_other_files_are_refused() {
+    use midnightsnack_core::{bundle, Cue, CueContent, MediaRef, Show};
+    let f = fixture().await;
+    let mut op = f.connect(&f.handle.operator_token).await;
+    op.welcome().await;
+    let secret = f.dir.path().join("id_ed25519");
+    std::fs::write(&secret, "PRIVATE KEY").unwrap();
+    let disguised = f.dir.path().join("clip.mp4");
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(&secret, &disguised).unwrap();
+    let web = |url: &str| CueContent::Web {
+        web: serde_json::from_value(serde_json::json!({
+            "url": url, "zoom": 100, "block_navigation": false, "forward_keys": false,
+            "persist_session": false, "openslides": false
+        }))
+        .unwrap(),
+    };
+    let media = |path: &std::path::Path| CueContent::Media {
+        file: MediaRef::linked(path),
+        video: true,
+        options: Default::default(),
+        duration_ms: None,
+    };
+    let mut cases = vec![
+        ("key as video", media(&secret)),
+        ("local file page", web("file:///etc/passwd")),
+        ("the app itself", web("http://tauri.localhost/")),
+    ];
+    #[cfg(unix)]
+    cases.push(("symlink named like a video", media(&disguised)));
+    for (what, content) in cases {
+        let show = Show {
+            title: what.into(),
+            cues: vec![Cue::new("x", content)],
+            ..Default::default()
+        };
+        let path = f.dir.path().join("evil.msnack");
+        bundle::save(&show, &path, false).unwrap();
+        let r = op
+            .action(Action::OpenShow {
+                path: path.to_string_lossy().into(),
+            })
+            .await;
+        assert_eq!(r, Err(ErrorCode::ShowFileInvalid), "{what}");
+    }
+    assert!(f.handle.state.show_snapshot(Role::Admin).cues.is_empty());
+}
+
+#[tokio::test]
+async fn pairing_requests_are_small() {
+    let f = fixture().await;
+    let res = f
+        .http
+        .post(f.url("/api/v1/pair"))
+        .header("content-type", "application/json")
+        .body(vec![b' '; 64 * 1024])
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 413);
 }

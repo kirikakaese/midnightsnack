@@ -12,6 +12,7 @@ import {
 const TOKEN_KEY = "midnightsnack.token";
 const NAME_KEY = "midnightsnack.deviceName";
 const ROUTES_KEY = "midnightsnack.routes";
+const LANGUAGE_KEY = "midnightsnack.language";
 
 function get(key: string): string | null {
   try {
@@ -30,6 +31,10 @@ function set(key: string, value: string | null): void {
   }
 }
 
+/** The language chosen on this phone; `null` follows the browser. */
+export const loadLanguage = (): string | null => get(LANGUAGE_KEY);
+export const saveLanguage = (code: string | null): void => set(LANGUAGE_KEY, code);
+
 /** Where the host is: on this page's origin (LAN, HTTPS) or behind the relay serving the page. */
 export type HostLink = { kind: "direct" } | { kind: "relay"; hostId: string; key: string | null };
 
@@ -43,9 +48,13 @@ export function currentLink(): HostLink {
   const m = /^\/r\/([A-Za-z0-9_-]{8,64})\/?$/.exec(window.location.pathname);
   if (!m) return { kind: "direct" };
   const hostId = m[1]!;
+  // A host's key never changes for its id (a new relay identity is a new id), so a key once
+  // stored wins over one in a link: a crafted link cannot swap it.
+  const keyName = `midnightsnack.relay.${hostId}.key`;
+  const stored = get(keyName);
   const fromUrl = fragmentParam("k");
-  if (fromUrl) set(`midnightsnack.relay.${hostId}.key`, fromUrl);
-  return { kind: "relay", hostId, key: fromUrl ?? get(`midnightsnack.relay.${hostId}.key`) };
+  if (fromUrl && !stored) set(keyName, fromUrl);
+  return { kind: "relay", hostId, key: stored ?? fromUrl };
 }
 
 function tokenKey(link: HostLink): string {

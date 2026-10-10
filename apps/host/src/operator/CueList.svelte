@@ -167,7 +167,12 @@
     else if (kind === "text") addText();
     else if (kind === "timer") addTimer();
     else if (kind === "blank")
-      conn.action({ action: "add_blank", color: "#000000", at_index: null });
+      conn.action({
+        action: "add_blank",
+        color: "#000000",
+        at_index: null,
+        name: t("cue.kind.blank"),
+      });
     else if (kind === "web" || kind === "openslides" || kind === "capture" || kind === "os_native")
       startAdding(kind);
   }

@@ -1,8 +1,8 @@
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
-<!-- Control surfaces: MIDI controllers (with learn), the OSC server and API keys. -->
+<!-- Control surfaces: MIDI controllers (with learn), the OSC server and API keys; the language. -->
 <script lang="ts">
   import type { Action, MidiBinding, MidiTrigger } from "@midnightsnack/protocol";
-  import { Button, t, type HostConnection } from "@midnightsnack/ui";
+  import { Button, LANGUAGES, t, type HostConnection } from "@midnightsnack/ui";
   import { onDestroy } from "svelte";
   import { host, onMidiPress, type MidiSettings } from "../lib/host";
   import ApiKeysPanel from "./ApiKeysPanel.svelte";
@@ -99,6 +99,16 @@
       { trigger, action: actionOf(learnAction) },
     ];
     await save({ ...midi, bindings });
+  }
+
+  let language = $state("");
+  host
+    .language()
+    .then((l) => (language = l ?? ""))
+    .catch(() => {});
+  function setLanguage(value: string) {
+    language = value;
+    host.setLanguage(value || null);
   }
 
   const osc = $derived(conn.control?.osc ?? { enabled: false, port: 4748 });
@@ -214,6 +224,17 @@
   </section>
 
   <ApiKeysPanel {conn} />
+
+  <section aria-label={t("settings.language")}>
+    <h3>{t("settings.language")}</h3>
+    <select value={language} onchange={(e) => setLanguage(e.currentTarget.value)}>
+      <option value="">{t("settings.language_system")}</option>
+      {#each LANGUAGES as l (l.code)}
+        <option value={l.code} lang={l.code}>{l.name}</option>
+      {/each}
+    </select>
+    <p class="muted">{t("settings.language_hint")}</p>
+  </section>
 </div>
 
 <style>

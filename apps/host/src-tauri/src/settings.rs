@@ -31,6 +31,8 @@ pub struct HostSettings {
     pub midi: crate::midi::MidiSettings,
     /// Hosts this computer controls (controller mode).
     pub remotes: Vec<crate::controller::RemoteHost>,
+    /// Language of the host's windows (`en`, `de`, …); `None` follows the system.
+    pub language: Option<String>,
     // Phase 1/2 fields, migrated into `outputs["main"]`.
     #[serde(skip_serializing)]
     output_display: Option<String>,
@@ -57,9 +59,9 @@ pub fn load(config_dir: &Path) -> HostSettings {
     s
 }
 
+/// Saved readable only by the user: it holds the tokens for hosts this computer controls.
 pub fn save(config_dir: &Path, s: &HostSettings) {
-    let result = std::fs::create_dir_all(config_dir)
-        .and_then(|_| std::fs::write(path(config_dir), serde_json::to_vec_pretty(s)?));
+    let result = midnightsnack_server::write_json_atomic(&path(config_dir), s);
     if let Err(e) = result {
         tracing::error!(error = %e, "failed to save host settings");
     }

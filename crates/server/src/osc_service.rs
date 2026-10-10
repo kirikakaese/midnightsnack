@@ -24,8 +24,9 @@ const MAX_AUTH_FAILURES: u32 = 5;
 
 #[derive(Default)]
 struct Sessions {
-    /// Sender address → role and last activity.
-    authed: HashMap<SocketAddr, (Role, Instant)>,
+    /// Sender address → device id and last activity. The device is looked up on every
+    /// message, so revoking it or changing its role applies at once.
+    authed: HashMap<SocketAddr, (String, Instant)>,
     /// Feedback target → expiry.
     subscribers: HashMap<SocketAddr, Instant>,
     /// Address → (failures, window start).
@@ -146,12 +147,7 @@ async fn handle_datagram(
         let role = if from.ip().is_loopback() {
             Some(Role::Operator)
         } else {
-            sessions.authed.get_mut(&from).and_then(|(role, seen)| {
-                (seen.elapsed() < SESSION_IDLE).then(|| {
-                    *seen = Instant::now();
-                    *role
-                })
-            })
+            session_role(state, sessions, from)
         };
         let Some(role) = role else {
             tracing::debug!(%from, "OSC from unauthenticated sender ignored");
@@ -182,8 +178,34 @@ async fn handle_datagram(
     subscribed
 }
 
+/// The current role of the device a sender authenticated as; ends the session when the
+/// device is gone (revoked, forgotten, disconnected) or it went idle.
+fn session_role(state: &AppState, sessions: &mut Sessions, from: SocketAddr) -> Option<Role> {
+    let (id, seen) = sessions.authed.get_mut(&from)?;
+    let device = (seen.elapsed() < SESSION_IDLE)
+        .then(|| lock(&state.devices).get(id))
+        .flatten()
+        .filter(|d| state.device_allowed_from(d, from));
+    match device {
+        Some(d) => {
+            *seen = Instant::now();
+            Some(d.role)
+        }
+        None => {
+            sessions.authed.remove(&from);
+            None
+        }
+    }
+}
+
 fn authenticate(state: &AppState, sessions: &mut Sessions, from: SocketAddr, token: &str) {
     let now = Instant::now();
+    if sessions.failures.len() > 1024 {
+        // Spoofed source addresses must not grow this forever.
+        sessions
+            .failures
+            .retain(|_, (_, start)| start.elapsed() <= Duration::from_secs(60));
+    }
     let entry = sessions.failures.entry(from.ip()).or_insert((0, now));
     if entry.1.elapsed() > Duration::from_secs(60) {
         *entry = (0, now);
@@ -195,7 +217,7 @@ fn authenticate(state: &AppState, sessions: &mut Sessions, from: SocketAddr, tok
     match device.filter(|d| state.device_allowed_from(d, from)) {
         Some(d) => {
             tracing::info!(%from, device = %d.name, "OSC sender authenticated");
-            sessions.authed.insert(from, (d.role, now));
+            sessions.authed.insert(from, (d.id, now));
         }
         None => {
             entry.0 += 1;

@@ -135,6 +135,8 @@ impl Session {
         let base = normalize_url(&config.url)?;
         let http = reqwest::Client::builder()
             .connect_timeout(CONNECT_TIMEOUT)
+            // Credentials go to the configured server only, never to where it redirects.
+            .redirect(reqwest::redirect::Policy::none())
             .user_agent(concat!("midnightsnack/", env!("CARGO_PKG_VERSION")))
             .build()
             .map_err(unreachable)?;
@@ -264,10 +266,13 @@ impl Session {
             s if s.is_success() => Ok(res),
             StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => Err(Error::Unauthorized),
             s => {
-                let body = res.text().await.unwrap_or_default();
+                let body = read_limited(res, 4096).await.unwrap_or_default();
                 Err(Error::Incompatible(format!(
                     "autoupdate answered {s}: {}",
-                    body.chars().take(200).collect::<String>()
+                    String::from_utf8_lossy(&body)
+                        .chars()
+                        .take(200)
+                        .collect::<String>()
                 )))
             }
         }
@@ -282,7 +287,7 @@ impl Session {
             .await
             .map_err(unreachable)?;
         let res = Self::check(res).await?;
-        let bytes = res.bytes().await.map_err(unreachable)?;
+        let bytes = read_limited(res, MAX_LINE).await?;
         let line = bytes
             .split(|&b| b == b'\n')
             .find(|l| !l.is_empty())
@@ -504,6 +509,20 @@ async fn sleep_until(at: Option<tokio::time::Instant>) {
         Some(at) => tokio::time::sleep_until(at).await,
         None => std::future::pending().await,
     }
+}
+
+/// Reads a response body up to `max` bytes; a larger one is an error, not unbounded memory.
+async fn read_limited(res: reqwest::Response, max: usize) -> Result<Vec<u8>, Error> {
+    let mut out = Vec::new();
+    let mut body = res.bytes_stream();
+    while let Some(chunk) = body.next().await {
+        let chunk = chunk.map_err(unreachable)?;
+        if out.len() + chunk.len() > max {
+            return Err(Error::Incompatible("answer too large".into()));
+        }
+        out.extend_from_slice(&chunk);
+    }
+    Ok(out)
 }
 
 #[cfg(test)]

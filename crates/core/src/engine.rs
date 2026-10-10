@@ -1122,12 +1122,24 @@ impl Engine {
                 Change::BOTH
             }
             RemoveCue { cue_id } => self.remove_cue(cue_id, now_ms)?,
-            AddBlank { color, at_index } => {
+            AddBlank {
+                color,
+                at_index,
+                name,
+            } => {
                 if !is_valid_color(color) {
                     return Err(ErrorCode::InvalidState);
                 }
+                let name = name
+                    .as_deref()
+                    .map(|n| clean_text(n, 200))
+                    .unwrap_or_default();
                 let cue = Cue::new(
-                    "Blank",
+                    if name.is_empty() {
+                        "Blank".into()
+                    } else {
+                        name
+                    },
                     CueContent::Blank {
                         color: color.clone(),
                     },
@@ -1547,14 +1559,37 @@ fn validate_stroke(s: &Stroke) -> Result<Stroke, ErrorCode> {
     })
 }
 
-/// Only plain web pages: no `file:`, `javascript:` or `data:` URLs.
+/// Checks the parts of a show from a file that actions would have refused: web page and
+/// capture cues. (Media files are checked by the host, which knows the supported types.)
+pub fn validate_show_content(show: &Show) -> Result<(), ErrorCode> {
+    for cue in &show.cues {
+        match &cue.content {
+            CueContent::Web { web } => {
+                validate_web(web)?;
+            }
+            CueContent::Capture { capture } => {
+                validate_capture_source(&capture.source)?;
+            }
+            _ => {}
+        }
+    }
+    Ok(())
+}
+
+/// Only plain web pages: no `file:`, `javascript:` or `data:` URLs, and not the app itself
+/// (`tauri.localhost` is the host app's origin on Windows).
 fn validate_web(w: &WebInfo) -> Result<WebInfo, ErrorCode> {
     let url = w.url.trim();
     let lower = url.to_ascii_lowercase();
     let scheme_ok = lower.starts_with("https://") || lower.starts_with("http://");
-    let host_ok = url.split("://").nth(1).is_some_and(|rest| {
-        let host = rest.split(['/', '?', '#']).next().unwrap_or("");
-        !host.is_empty() && !host.contains(char::is_whitespace)
+    let host_ok = lower.split("://").nth(1).is_some_and(|rest| {
+        let authority = rest.split(['/', '?', '#', '\\']).next().unwrap_or("");
+        let host = authority.rsplit('@').next().unwrap_or("");
+        let host = host.split(':').next().unwrap_or("").trim_end_matches('.');
+        !host.is_empty()
+            && !host.contains(char::is_whitespace)
+            && host != "tauri.localhost"
+            && !host.ends_with(".tauri.localhost")
     });
     if !scheme_ok || !host_ok || url.len() > 2000 || !(25..=400).contains(&w.zoom) {
         return Err(ErrorCode::InvalidState);
@@ -1907,11 +1942,13 @@ pub(crate) mod tests {
             &Action::AddBlank {
                 color: "#000".into(),
                 at_index: Some(0),
+                name: Some(" Schwarz\u{7} ".into()),
             },
             0,
         )
         .unwrap();
         assert_eq!(e.show().cues.len(), 3);
+        assert_eq!(e.show().cues[0].name, "Schwarz");
         assert!(e.is_dirty());
         e.mark_saved("/x.msnack".into());
         assert!(!e.is_dirty());

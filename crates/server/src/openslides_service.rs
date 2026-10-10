@@ -70,7 +70,7 @@ pub fn save_password(state: &AppState, password: &str) {
                 }
             })
         } else {
-            crate::util::write_secret_json(
+            crate::util::write_json_atomic(
                 &path,
                 &Credentials {
                     password: password.to_owned(),

@@ -8,6 +8,7 @@ mod controller;
 mod hotplug;
 mod hotspot;
 mod midi;
+mod open_file;
 mod output;
 mod settings;
 mod web;
@@ -20,7 +21,7 @@ use midnightsnack_core::APP_VERSION;
 use midnightsnack_protocol::{HostInfo, MidiTrigger, OutputFeed, DEFAULT_PORT, PROTOCOL_VERSION};
 use midnightsnack_server::{start, state::lock, ServerConfig, ServerHandle};
 use serde::Serialize;
-use tauri::{AppHandle, Manager, State, Webview};
+use tauri::{AppHandle, Emitter, Manager, State, Webview};
 
 use crate::output::DisplayInfo;
 use crate::settings::{HostSettings, Placement};
@@ -73,7 +74,10 @@ fn connection_info(webview: Webview, state: State<'_, HostState>) -> ConnectionI
     let s = &state.server;
     let output_id = output::output_id(webview.label()).map(str::to_owned);
     let token = match &output_id {
-        None => s.operator_token.clone(),
+        // Only the operator window gets the admin token; any other webview (a web cue that
+        // navigated to the app, a controller window whose host was forgotten) gets none.
+        None if webview.label() == "operator" => s.operator_token.clone(),
+        None => String::new(),
         Some(id) => {
             let engine = lock(&s.state.engine);
             let stage = engine
@@ -268,6 +272,32 @@ fn set_midi_settings(state: State<'_, HostState>, settings: midi::MidiSettings) 
     state.save_settings();
 }
 
+#[tauri::command]
+fn language(state: State<'_, HostState>) -> Option<String> {
+    state
+        .settings
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .language
+        .clone()
+}
+
+/// Stores the language and tells every window (operator, outputs, controllers) to switch.
+#[tauri::command]
+fn set_language(app: AppHandle, state: State<'_, HostState>, language: Option<String>) {
+    let language = language.filter(|l| {
+        !l.is_empty() && l.len() <= 16 && l.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+    });
+    state
+        .settings
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .language
+        .clone_from(&language);
+    state.save_settings();
+    let _ = app.emit("language-changed", language);
+}
+
 /// Waits up to 10 s for the next MIDI press; `null` on timeout.
 #[tauri::command]
 async fn midi_learn(learn: State<'_, midi::Learn>) -> Result<Option<MidiTrigger>, ()> {
@@ -374,6 +404,10 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     if !smoke {
         midi::spawn(handle.clone(), server_state.clone());
     }
+    app.manage(open_file::PendingOpen::default());
+    if let Some(path) = open_file::show_in_args(std::env::args()) {
+        open_file::request(&handle, path);
+    }
     tauri::async_runtime::spawn(web::run(handle, server_state, data_dir.join("web")));
     Ok(())
 }
@@ -392,6 +426,19 @@ pub fn run() {
     );
 
     tauri::Builder::default()
+        // First: a second launch (double-clicking a show while the app runs) hands its
+        // arguments to this instance and exits.
+        .plugin(tauri_plugin_single_instance::init(
+            |app, args, _cwd| match open_file::show_in_args(args) {
+                Some(path) => open_file::request(app, path),
+                None => {
+                    if let Some(w) = app.get_webview_window("operator") {
+                        let _ = w.unminimize();
+                        let _ = w.set_focus();
+                    }
+                }
+            },
+        ))
         .plugin(tauri_plugin_dialog::init())
         .setup(setup)
         .on_window_event(|window, event| {
@@ -417,6 +464,8 @@ pub fn run() {
             midi_settings,
             set_midi_settings,
             midi_learn,
+            language,
+            set_language,
             controller::discover_hosts,
             controller::remote_hosts,
             controller::forget_remote,
@@ -426,8 +475,18 @@ pub fn run() {
             hotspot::hotspot_start,
             hotspot::hotspot_stop,
             hotspot::open_hotspot_settings,
+            open_file::take_pending_open,
             ui_ready
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running midnightsnack");
+        .build(tauri::generate_context!())
+        .expect("error while building midnightsnack")
+        .run(|_app, _event| {
+            // macOS hands documents to the running app as an event, not as arguments.
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Opened { urls } = _event {
+                if let Some(path) = urls.iter().find_map(|u| u.to_file_path().ok()) {
+                    open_file::request(_app, path);
+                }
+            }
+        });
 }

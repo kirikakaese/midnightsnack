@@ -78,6 +78,17 @@ fn wanted(engine: &Engine, now_ms: i64) -> Vec<Wanted> {
     out
 }
 
+/// Web pages only: never the app itself (`tauri://localhost`, `http://tauri.localhost` on
+/// Windows) or local files, whatever links the page follows.
+fn is_web(url: &Url) -> bool {
+    let host = url.host_str().unwrap_or_default().to_ascii_lowercase();
+    match url.scheme() {
+        "http" | "https" => host != "tauri.localhost" && !host.ends_with(".tauri.localhost"),
+        "about" => true,
+        _ => false,
+    }
+}
+
 fn same_origin(a: &Url, b: &Url) -> bool {
     a.scheme() == b.scheme()
         && a.host_str() == b.host_str()
@@ -95,7 +106,7 @@ fn create(app: &AppHandle, w: &Wanted, data_root: &Path) -> Option<Webview> {
     )
     .auto_resize()
     .on_navigation(move |to| {
-        let allowed = !block || same_origin(&origin, to) || to.scheme() == "about";
+        let allowed = is_web(to) && (!block || same_origin(&origin, to) || to.scheme() == "about");
         if !allowed {
             tracing::info!(%to, "blocked navigation away from web cue");
         }
@@ -243,3 +254,20 @@ pub async fn run(app: AppHandle, state: Arc<AppState>, data_root: PathBuf) {
 
 /// Signalled when output windows open or close, so web views are re-created in them.
 pub static WINDOWS_CHANGED: tokio::sync::Notify = tokio::sync::Notify::const_new();
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn web_cues_stay_on_the_web() {
+        let ok = |u: &str| is_web(&Url::parse(u).unwrap());
+        assert!(ok("https://example.org/slides"));
+        assert!(ok("http://localhost:3000/"));
+        assert!(ok("about:blank"));
+        assert!(!ok("tauri://localhost/index.html"));
+        assert!(!ok("http://tauri.localhost/"));
+        assert!(!ok("file:///etc/passwd"));
+        assert!(!ok("javascript:alert(1)"));
+    }
+}
