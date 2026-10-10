@@ -164,8 +164,14 @@ fn settings(app: &AppHandle) -> UpdateSettings {
 }
 
 /// On Linux only the AppImage can replace itself; a .deb belongs to the package manager.
+#[cfg(target_os = "linux")]
 fn package_managed(app: &AppHandle) -> bool {
-    cfg!(target_os = "linux") && app.env().appimage.is_none()
+    app.env().appimage.is_none()
+}
+
+#[cfg(not(target_os = "linux"))]
+fn package_managed(_app: &AppHandle) -> bool {
+    false
 }
 
 fn can_update(app: &AppHandle) -> bool {
