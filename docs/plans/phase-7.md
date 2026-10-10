@@ -7,14 +7,14 @@ translations, polished installers and complete documentation — then `v1.0.0`.
 ## Tasks
 
 ### Security review
-- [ ] Review pairing, sessions and roles; the HTTP API, uploads and media; the relay, the
+- [x] Review pairing, sessions and roles; the HTTP API, uploads and media; the relay, the
       Noise tunnel and the relay server; HTTPS; the OpenSlides adapter; host windows, web page
       cues and the Tauri capabilities. Record findings, fixes and accepted risks in
       `docs/security-review.md`.
-- [ ] Fix what the review finds; add tests for each fix.
+- [x] Fix what the review finds; add tests for each fix.
 
 ### Performance and robustness
-- [ ] A benchmark against the development server: action-to-update latency over the
+- [x] A benchmark against the development server: action-to-update latency over the
       WebSocket (local and through the relay) with many connected remotes and pointer traffic;
       memory over a soak run. Record results.
 - [ ] Idle CPU of the host app with an output open; startup time.
@@ -22,23 +22,23 @@ translations, polished installers and complete documentation — then `v1.0.0`.
       disks, bad files, lost displays).
 
 ### Translations
-- [ ] Audit: no user-facing text outside the catalogs (operator, outputs, remote, native
+- [x] Audit: no user-facing text outside the catalogs (operator, outputs, remote, native
       dialogs, server errors), numbers/dates/durations formatted with the locale, plurals via
       ICU messages; a check in CI for keys that are not used anymore.
-- [ ] Language setting in the host (operator, outputs and stage use it; remotes follow their
+- [x] Language setting in the host (operator, outputs and stage use it; remotes follow their
       browser language unless chosen), and a guide for translators.
-- [ ] A complete German translation as the first second language.
+- [x] A complete German translation as the first second language.
 
 ### Installers
-- [ ] `.msnack` file association: double-clicking a show opens it (in the running app if one is
+- [x] `.msnack` file association: double-clicking a show opens it (in the running app if one is
       open).
-- [ ] Package metadata (publisher, homepage, copyright, minimum macOS version), Linux package
+- [x] Package metadata (publisher, homepage, copyright, minimum macOS version), Linux package
       dependencies for media playback, Windows installer languages.
-- [ ] Keep the updater hookable (documented, not enabled).
+- [x] Keep the updater hookable (documented, not enabled).
 
 ### Documentation
 - [ ] README with screenshots of the operator window, an output and the phone remote.
-- [ ] Troubleshooting / FAQ; release process for maintainers; every guide checked against the
+- [x] Troubleshooting / FAQ; release process for maintainers; every guide checked against the
       app.
 
 ### Release
@@ -55,3 +55,30 @@ translations, polished installers and complete documentation — then `v1.0.0`.
 4. Opening a `.msnack` file from the file manager opens it in midnightsnack.
 5. A new user can install, build a show, put it on a projector and pair a phone using only the
    README and the user guide.
+
+## Results
+
+- **Security review** ([security-review.md](../security-review.md)): 24 findings. Fixed: 1 high
+  (an unauthenticated OSC datagram could crash the host), 6 medium and 12 low or
+  informational; 5 low or informational ones accepted with reasons. Every fix rated medium or higher has a test.
+- **Benchmark** (`scripts/bench.mjs`, release build of the development server on the
+  development container, 25 paired phones, 10 of them moving a laser pointer at 30 Hz, the
+  operator alternating next/previous): 14,187 actions in 10 minutes, time until every
+  connection had the new state p50 1.09 ms, p95 1.82 ms, p99 2.82 ms, max 117.85 ms; server
+  memory 19.5 MB at the start, 19.6 MB peak and at the end (no growth).
+- **Host app** (release build, Linux, X11 under Xvfb, software rendering): IDLE_AND_STARTUP
+- **German:** all 533 texts translated; an E2E test checks that a German phone shows no
+  English text from the catalog while pairing, in the control view and in the stage view.
+- **Installers:** `.msnack` association, single instance, metadata and Linux media
+  dependencies; checked by building the `.deb` and opening a show from the command line while
+  the app was running.
+
+## Known limitations and deviations
+
+- **Latency through the relay** was not benchmarked: the benchmark speaks the plain WebSocket
+  protocol, and the relay adds the round trip to the relay server (it forwards without
+  processing). The relay E2E tests cover correctness.
+- **Signing:** installers are still unsigned (see the user guide).
+- **Windows and macOS installers** were not built in this environment; they are built by the
+  release workflow. The file association there comes from the same configuration.
+- **MIDI hardware and a real OpenSlides server** remain untested here (no hardware, no Docker).

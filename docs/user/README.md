@@ -10,6 +10,7 @@
 - [Hosting a relay](relay.md) — Docker, reverse proxies, settings
 - [Keyboard and presentation clickers](keyboard.md)
 - [MIDI, OSC, HTTP API, Stream Deck and a second computer](control.md)
+- [Troubleshooting and FAQ](troubleshooting.md)
 
 ## Installing unsigned builds
 

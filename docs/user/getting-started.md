@@ -1,5 +1,23 @@
 # Getting started
 
+## 0. Install
+
+Download the installer for your system from the
+[releases page](https://github.com/kirikakaese/midnightsnack/releases):
+
+| System                     | File                                     |
+| -------------------------- | ---------------------------------------- |
+| macOS 12 or later          | `.dmg` (Apple silicon and Intel)         |
+| Windows 10/11              | `-setup.exe` (English or German) or `.msi` |
+| Debian, Ubuntu, Mint, …    | `.deb`                                   |
+| Other Linux distributions  | `.AppImage`                              |
+
+Builds are not code-signed yet; see [installing unsigned builds](README.md#installing-unsigned-builds).
+For PowerPoint and other presentations, also install [LibreOffice](https://www.libreoffice.org).
+
+Start midnightsnack. The operator window opens; the language follows your system and can be
+changed in the **Control** tab. Double-clicking a `.msnack` show file opens it in midnightsnack.
+
 ## 1. Build a show
 
 A **show** is a list of **cues**. In the operator window use:

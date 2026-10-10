@@ -11,16 +11,38 @@ MIDI controllers, OSC and Stream Deck via Bitfocus Companion.
 - **Offline-first** — works on a local network with zero internet.
 - **Never a broken frame** — outputs hold the last good frame or fall back to logo/black; no
   dialogs, cursors or spinners on the audience screen.
-- **Fast** — live actions react in under 100 ms on LAN; upcoming slides are pre-rendered.
+- **Fast** — with 25 phones connected, a slide change reaches all of them within about a
+  millisecond on the host itself (under 3 ms for 99 % of changes; the network adds its own
+  delay); upcoming slides are pre-rendered.
 
-> **Status:** early development (phase 6). PDF, PowerPoint/Keynote, image, video, audio,
-> text/lyrics, timer, web page and screen capture cues, transitions, overlays, several outputs
-> and stage displays, phone remotes with laser pointer, drawing and file upload, a second
-> computer as controller, MIDI, OSC, an HTTP API and Bitfocus Companion work today. Remotes
-> connect over the local network, the laptop's hotspot, optional HTTPS, or a self-hosted,
-> end-to-end encrypted relay. OpenSlides 4 meetings (agenda, motions, lists of speakers) are
-> shown natively and follow the OpenSlides projector. See the
-> [roadmap](#roadmap) and the [user guide](docs/user/README.md).
+| Operator window | Phone remote |
+| --- | --- |
+| ![The operator window with the cue list, program and preview monitors and the live controls](docs/images/operator.png) | ![The phone remote with the current and next slide, notes and buttons](docs/images/phone.png) |
+
+![An output window on the projector showing a slide](docs/images/output.png)
+
+## Features
+
+- **Cues:** PDF, PowerPoint, Keynote and LibreOffice presentations, images and image folders,
+  video and audio, text and song lyrics, timers and countdowns, web pages, screen and window
+  capture, and [OpenSlides](https://openslides.com) agendas, motions and lists of speakers.
+- **Screens:** several outputs (projectors, a second room) and stage displays for the speaker,
+  transitions, overlays (logo bug, lower third, clock), blackout, freeze, logo screen and test
+  patterns. Outputs follow their displays when they are unplugged and plugged in again.
+- **Remotes:** any phone or tablet browser after scanning a QR code — operator, presenter
+  (next/previous, laser pointer, drawing, sending files) or read-only stage display — a second
+  computer, presentation clickers, MIDI controllers, OSC, an HTTP API and Stream Deck via
+  Bitfocus Companion.
+- **Connectivity:** the local network, the laptop's own hotspot, optional HTTPS, and a
+  self-hosted relay with end-to-end encryption for phones on other networks.
+- **Languages:** English and German; [translations](docs/dev/translating.md) welcome.
+
+## Install
+
+Download midnightsnack for macOS, Windows or Linux from the
+[releases page](https://github.com/kirikakaese/midnightsnack/releases) and follow
+[Getting started](docs/user/getting-started.md). The [user guide](docs/user/README.md) covers
+everything else.
 
 ## Quick start (development)
 
@@ -85,7 +107,7 @@ See [docs/dev/architecture.md](docs/dev/architecture.md) for how the parts fit t
 | 4     | Control surfaces: pointer/drawing, upload inbox, MIDI, OSC, Companion       | 0.4.0   |
 | 5     | Connectivity: hotspot, HTTPS, E2E-encrypted relay + Docker image, fallback  | 0.5.0   |
 | 6     | OpenSlides native integration: agenda, motions, speakers, projector sync    | 0.6.0   |
-| 7     | 1.0 polish                                                                  | 1.0.0   |
+| 7     | 1.0: security review, performance, translations, installers, docs           | 1.0.0   |
 
 Phase plans live in [docs/plans](docs/plans), decisions in [docs/adr](docs/adr).
 
@@ -93,7 +115,8 @@ Phase plans live in [docs/plans](docs/plans), decisions in [docs/adr](docs/adr).
 
 Contributions are welcome — please read [CONTRIBUTING.md](CONTRIBUTING.md) and the
 [Code of Conduct](CODE_OF_CONDUCT.md). Translations are especially easy: all strings live in
-`packages/ui/src/locales/`.
+`packages/ui/src/locales/` ([guide](docs/dev/translating.md)). Security issues: see
+[SECURITY.md](SECURITY.md) and the [security model](docs/security.md).
 
 ## License
 
