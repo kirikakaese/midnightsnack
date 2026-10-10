@@ -212,8 +212,8 @@ fn update_keep_awake(app: &AppHandle, state: &HostState) {
             .display(true)
             .idle(true)
             .reason("Presentation output is open")
-            .app_name("midnightsnack")
-            .app_reverse_domain("io.github.kirikakaese.midnightsnack")
+            .app_name("DECK")
+            .app_reverse_domain("io.github.kirikakaese.deck")
             .create()
         {
             Ok(k) => *guard = Some(k),
@@ -340,12 +340,36 @@ fn pdfium_dirs(app: &AppHandle) -> Vec<PathBuf> {
     dirs
 }
 
+/// The app was called midnightsnack before 1.0: settings, paired devices and the autosave of an
+/// earlier version are moved over from the folder named after the old identifier.
+const OLD_IDENTIFIER: &str = "io.github.kirikakaese.midnightsnack";
+
+fn migrate_from_old_name(dir: &std::path::Path) {
+    let Some(old) = dir.parent().map(|p| p.join(OLD_IDENTIFIER)) else {
+        return;
+    };
+    if dir.exists() || !old.is_dir() {
+        return;
+    }
+    match std::fs::rename(&old, dir) {
+        Ok(()) => {
+            tracing::info!(from = %old.display(), to = %dir.display(), "moved data of the previous name")
+        }
+        Err(e) => {
+            tracing::warn!(error = %e, from = %old.display(), "could not move data of the previous name")
+        }
+    }
+}
+
 fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let handle = app.handle().clone();
     let paths = app.path();
     let config_dir = paths.app_config_dir()?;
     let data_dir = paths.app_data_dir()?;
     let cache_dir = paths.app_cache_dir()?.join("render");
+    for dir in [&config_dir, &data_dir] {
+        migrate_from_old_name(dir);
+    }
     let host_settings = settings::load(&config_dir);
 
     let mut config = ServerConfig::new(cache_dir);
@@ -422,7 +446,7 @@ pub fn run() {
     tracing::info!(
         version = APP_VERSION,
         protocol = PROTOCOL_VERSION,
-        "starting midnightsnack"
+        "starting DECK"
     );
 
     tauri::Builder::default()
@@ -479,7 +503,7 @@ pub fn run() {
             ui_ready
         ])
         .build(tauri::generate_context!())
-        .expect("error while building midnightsnack")
+        .expect("error while building DECK")
         .run(|_app, _event| {
             // macOS hands documents to the running app as an event, not as arguments.
             #[cfg(target_os = "macos")]
@@ -489,4 +513,25 @@ pub fn run() {
                 }
             }
         });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn data_of_the_old_name_is_moved_once() {
+        let root = tempfile::tempdir().unwrap();
+        let old = root.path().join(OLD_IDENTIFIER);
+        std::fs::create_dir_all(&old).unwrap();
+        std::fs::write(old.join("devices.json"), b"[]").unwrap();
+        let new = root.path().join("io.github.kirikakaese.deck");
+        migrate_from_old_name(&new);
+        assert!(new.join("devices.json").is_file());
+        assert!(!old.exists());
+        // A second run (or a fresh install) leaves things alone.
+        std::fs::create_dir_all(&old).unwrap();
+        migrate_from_old_name(&new);
+        assert!(old.exists());
+    }
 }

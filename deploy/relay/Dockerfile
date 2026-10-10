@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # The midnightsnack relay. Build from the repository root:
-#   docker build -f deploy/relay/Dockerfile -t midnightsnack-relay .
+#   docker build -f deploy/relay/Dockerfile -t deck-relay .
 # The relay serves the web remote, so the image builds it first.
 
 FROM node:22-bookworm-slim AS web
@@ -14,17 +14,17 @@ FROM rust:1-bookworm AS build
 WORKDIR /src
 COPY . .
 COPY --from=web /src/apps/remote/dist apps/remote/dist
-RUN cargo build --release --locked -p midnightsnack-relay
+RUN cargo build --release --locked -p deck-relay
 
 FROM gcr.io/distroless/cc-debian12:nonroot
-LABEL org.opencontainers.image.title="midnightsnack relay" \
-      org.opencontainers.image.description="Self-hostable relay for midnightsnack remotes; forwards end-to-end encrypted traffic only" \
+LABEL org.opencontainers.image.title="DECK relay" \
+      org.opencontainers.image.description="Self-hostable relay for DECK remotes; forwards end-to-end encrypted traffic only" \
       org.opencontainers.image.licenses="GPL-3.0-or-later" \
       org.opencontainers.image.source="https://github.com/kirikakaese/midnightsnack"
-COPY --from=build /src/target/release/midnightsnack-relay /usr/local/bin/midnightsnack-relay
+COPY --from=build /src/target/release/deck-relay /usr/local/bin/deck-relay
 ENV MIDNIGHTSNACK_RELAY_LISTEN=0.0.0.0:8080
 EXPOSE 8080
 USER nonroot
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s \
-  CMD ["/usr/local/bin/midnightsnack-relay", "--healthcheck"]
-ENTRYPOINT ["/usr/local/bin/midnightsnack-relay"]
+  CMD ["/usr/local/bin/deck-relay", "--healthcheck"]
+ENTRYPOINT ["/usr/local/bin/deck-relay"]

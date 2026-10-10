@@ -3,7 +3,7 @@
 Releases are built by the `Release` workflow (`.github/workflows/release.yml`) when a tag
 `vX.Y.Z` is pushed. It builds the host for macOS (universal `.dmg`), Windows (`.msi` and an
 English/German NSIS `.exe`) and Linux (`.deb`, `.AppImage`), the relay binaries and the relay
-Docker image (`ghcr.io/<owner>/midnightsnack-relay`), and creates a GitHub release with the
+Docker image (`ghcr.io/<owner>/deck-relay`), and creates a GitHub release with the
 changelog of that version.
 
 ## Steps
@@ -32,7 +32,7 @@ changelog of that version.
    workflow then builds and publishes. Versions below 1.0 and tags with a suffix
    (`v1.1.0-rc.1`) should be marked as pre-releases.
 8. **Check the release.** Download each installer once and start it; check the relay image
-   with `docker run --rm ghcr.io/<owner>/midnightsnack-relay --version`.
+   with `docker run --rm ghcr.io/<owner>/deck-relay --version`.
 
 ## Signing
 

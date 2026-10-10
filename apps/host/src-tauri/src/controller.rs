@@ -233,7 +233,7 @@ pub fn open_controller(
     }
     let url = format!("index.html#/controller/{id}");
     WebviewWindowBuilder::new(&app, label(&id), WebviewUrl::App(url.into()))
-        .title(format!("midnightsnack — {name}"))
+        .title(format!("DECK — {name}"))
         .inner_size(1280.0, 800.0)
         .min_inner_size(900.0, 600.0)
         .build()

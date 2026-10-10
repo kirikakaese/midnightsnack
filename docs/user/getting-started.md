@@ -57,7 +57,7 @@ In the **Outputs** tab choose the projector's display for the **Main** output an
 never takes keyboard focus. Your screen is kept awake while an output is open. With a single
 screen, tick **Windowed (rehearsal)** to see the output in a normal window.
 
-midnightsnack remembers the display and reopens the output there next time if it is connected.
+DECK remembers the display and reopens the output there next time if it is connected.
 More screens (a second room, a confidence monitor for the speaker) are described in
 [outputs.md](outputs.md).
 
@@ -85,5 +85,5 @@ restarts on every slide.
 
 **Save** writes a `.msnack` file with all media embedded, so it can be copied to another
 computer. **Save linked…** writes a small file that refers to your media in place. Your work is
-also autosaved continuously: after a crash, midnightsnack reopens the show at the slide you were
+also autosaved continuously: after a crash, DECK reopens the show at the slide you were
 on.

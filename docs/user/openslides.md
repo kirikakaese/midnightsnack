@@ -1,9 +1,9 @@
 # OpenSlides
 
-midnightsnack can show an [OpenSlides](https://openslides.com) 4 meeting natively: the agenda,
+DECK can show an [OpenSlides](https://openslides.com) 4 meeting natively: the agenda,
 motions, topics and lists of speakers appear in the show's own look on the beamer, the operator
 monitors, stage displays and phones, and update live as the meeting runs in OpenSlides.
-midnightsnack only reads from OpenSlides; the meeting is still run in OpenSlides.
+DECK only reads from OpenSlides; the meeting is still run in OpenSlides.
 
 For an exact copy of the OpenSlides projector page instead, use the
 [OpenSlides projector](sources.md#openslides-projector) web cue.

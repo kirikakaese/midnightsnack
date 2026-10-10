@@ -1,6 +1,6 @@
 # Third-party licenses
 
-midnightsnack is licensed under GPL-3.0-or-later. All dependencies must be compatible with it.
+DECK is licensed under GPL-3.0-or-later. All dependencies must be compatible with it.
 
 ## Policy
 

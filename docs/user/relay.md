@@ -1,10 +1,10 @@
 # Hosting a relay
 
 A relay lets phones that cannot reach the presenting laptop directly (other network, mobile
-data) control it over the internet. It is optional and self-hosted: midnightsnack does not run
+data) control it over the internet. It is optional and self-hosted: DECK does not run
 one, and hosts never use a relay you did not configure.
 
-The relay is a small program (`midnightsnack-relay`) that forwards end-to-end encrypted traffic
+The relay is a small program (`deck-relay`) that forwards end-to-end encrypted traffic
 between remotes and hosts; it cannot read slides, notes, tokens or actions. It also serves the
 web remote to phones. It needs very little: any small Linux server or VPS with a public DNS name.
 
@@ -18,11 +18,11 @@ web remote to phones. It needs very little: any small Linux server or VPS with a
 ## Docker Compose (recommended)
 
 The repository contains a ready setup in [`deploy/relay`](../../deploy/relay): the relay image
-(`ghcr.io/kirikakaese/midnightsnack-relay`) behind [Caddy](https://caddyserver.com), which
+(`ghcr.io/kirikakaese/deck-relay`) behind [Caddy](https://caddyserver.com), which
 handles TLS.
 
 ```sh
-mkdir midnightsnack-relay && cd midnightsnack-relay
+mkdir deck-relay && cd deck-relay
 curl -O https://raw.githubusercontent.com/kirikakaese/midnightsnack/main/deploy/relay/docker-compose.yml
 curl -O https://raw.githubusercontent.com/kirikakaese/midnightsnack/main/deploy/relay/Caddyfile
 cat > .env <<'ENV'
@@ -34,7 +34,7 @@ docker compose up -d
 ```
 
 Check it with `curl https://relay.example.org/healthz` (answers `ok`) and
-`curl https://relay.example.org/relay/v1/info`. In the midnightsnack host, open **Connect →
+`curl https://relay.example.org/relay/v1/info`. In the DECK host, open **Connect →
 Relay**, enter `https://relay.example.org` and the access token, and click **Connect**.
 
 Update with `docker compose pull && docker compose up -d`. Keep the relay at the same version as
@@ -80,17 +80,17 @@ The relay must be served at the root of its host name (not under a sub-path).
 
 ## Without Docker
 
-Each release has `midnightsnack-relay` binaries for Linux (x86-64, ARM64), macOS and Windows.
+Each release has `deck-relay` binaries for Linux (x86-64, ARM64), macOS and Windows.
 With systemd:
 
 ```ini
-# /etc/systemd/system/midnightsnack-relay.service
+# /etc/systemd/system/deck-relay.service
 [Unit]
-Description=midnightsnack relay
+Description=DECK relay
 After=network-online.target
 
 [Service]
-ExecStart=/usr/local/bin/midnightsnack-relay --listen 127.0.0.1:8080
+ExecStart=/usr/local/bin/deck-relay --listen 127.0.0.1:8080
 Environment=MIDNIGHTSNACK_RELAY_ACCESS_TOKEN=change-me-to-something-long
 DynamicUser=yes
 NoNewPrivileges=yes

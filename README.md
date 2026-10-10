@@ -1,8 +1,10 @@
-# midnightsnack
+# DECK
 
-**A free, open-source, cross-platform presentation and beamer host with remote control.**
+**Display Engine & Cue Keeper — a free, open-source, cross-platform presentation and beamer
+host with remote control.** (Developed under the name *midnightsnack*, which lives on in the
+`.msnack` show files.)
 
-midnightsnack runs on a laptop (macOS, Windows, Linux) connected to one or more projectors or
+DECK runs on a laptop (macOS, Windows, Linux) connected to one or more projectors or
 screens. The laptop is the **host**: it holds the show (a cue list), renders fullscreen output
 windows on the chosen displays and gives the operator a presenter view. **Remotes** control the
 host — a phone or tablet browser (no install), a second computer, or hardware such as clickers,
@@ -39,7 +41,7 @@ MIDI controllers, OSC and Stream Deck via Bitfocus Companion.
 
 ## Install
 
-Download midnightsnack for macOS, Windows or Linux from the
+Download DECK for macOS, Windows or Linux from the
 [releases page](https://github.com/kirikakaese/midnightsnack/releases) and follow
 [Getting started](docs/user/getting-started.md). The [user guide](docs/user/README.md) covers
 everything else.
@@ -120,6 +122,6 @@ Contributions are welcome — please read [CONTRIBUTING.md](CONTRIBUTING.md) and
 
 ## License
 
-midnightsnack is free software, licensed under the
+DECK is free software, licensed under the
 [GNU General Public License v3.0 or later](LICENSE). Third-party components are listed in
 [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).

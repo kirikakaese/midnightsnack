@@ -1,6 +1,6 @@
 # Security model
 
-midnightsnack runs a network server on the presenting laptop. This document describes what it
+DECK runs a network server on the presenting laptop. This document describes what it
 protects, against whom, and the known limits.
 
 ## Assets
@@ -75,7 +75,7 @@ protects, against whom, and the known limits.
 - Rate limiting is per IP address; many devices behind one NAT share a lockout.
 - The operator window's Content-Security-Policy allows connections to any host on the network,
   because controller windows (one host running another host's show) load slides and the
-  WebSocket from the other computer. The window only runs midnightsnack's own code.
+  WebSocket from the other computer. The window only runs DECK's own code.
 - MIDI input acts with the operator role and is not authenticated: anyone who can plug a MIDI
   device into the host can run the show (they could also press its keys).
 - Everything the configured OpenSlides account can read about the meeting's agenda, motions and

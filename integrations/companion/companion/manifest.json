@@ -2,14 +2,19 @@
   "$schema": "../node_modules/@companion-module/base/assets/manifest.schema.json",
   "type": "connection",
   "id": "midnightsnack",
-  "name": "midnightsnack",
-  "shortname": "midnightsnack",
-  "description": "Control midnightsnack presentations: slides, cues, blackout, overlays, timers",
+  "name": "DECK",
+  "shortname": "deck",
+  "description": "Control DECK presentations: slides, cues, blackout, overlays, timers",
   "version": "0.0.0",
   "license": "GPL-3.0-or-later",
   "repository": "git+https://github.com/kirikakaese/midnightsnack.git",
   "bugs": "https://github.com/kirikakaese/midnightsnack/issues",
-  "maintainers": [{ "name": "kirikakaese", "github": "kirikakaese" }],
+  "maintainers": [
+    {
+      "name": "kirikakaese",
+      "github": "kirikakaese"
+    }
+  ],
   "runtime": {
     "type": "node22",
     "api": "nodejs-ipc",
@@ -17,7 +22,7 @@
     "entrypoint": "../dist/main.js"
   },
   "legacyIds": [],
-  "manufacturer": "midnightsnack",
-  "products": ["midnightsnack"],
+  "manufacturer": "DECK",
+  "products": ["DECK"],
   "keywords": ["presentation", "slides", "pdf", "lyrics", "projector"]
 }

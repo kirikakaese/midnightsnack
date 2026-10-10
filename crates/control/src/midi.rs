@@ -77,7 +77,7 @@ mod io {
 
     /// Names of the MIDI input ports currently available.
     pub fn port_names() -> Vec<String> {
-        let Ok(input) = midir::MidiInput::new("midnightsnack") else {
+        let Ok(input) = midir::MidiInput::new("DECK") else {
             return Vec::new();
         };
         input
@@ -106,7 +106,7 @@ mod io {
         let mut decoder = Decoder::default();
         loop {
             // Connect new ports, forget vanished ones.
-            if let Ok(input) = midir::MidiInput::new("midnightsnack") {
+            if let Ok(input) = midir::MidiInput::new("DECK") {
                 let ports = input.ports();
                 let names: Vec<(String, midir::MidiInputPort)> = ports
                     .into_iter()
@@ -114,10 +114,10 @@ mod io {
                     .collect();
                 connections.retain(|name, _| names.iter().any(|(n, _)| n == name));
                 for (name, port) in names {
-                    if connections.contains_key(&name) || name.contains("midnightsnack") {
+                    if connections.contains_key(&name) || name.contains("DECK") {
                         continue;
                     }
-                    let Ok(input) = midir::MidiInput::new("midnightsnack") else {
+                    let Ok(input) = midir::MidiInput::new("DECK") else {
                         continue;
                     };
                     let raw = raw_tx.clone();

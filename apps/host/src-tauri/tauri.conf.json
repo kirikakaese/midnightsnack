@@ -1,7 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "midnightsnack",
-  "identifier": "io.github.kirikakaese.midnightsnack",
+  "productName": "DECK",
+  "mainBinaryName": "deck",
+  "identifier": "io.github.kirikakaese.deck",
   "build": {
     "beforeDevCommand": "pnpm dev",
     "devUrl": "http://localhost:1420",
@@ -12,7 +13,7 @@
     "windows": [
       {
         "label": "operator",
-        "title": "midnightsnack",
+        "title": "DECK",
         "width": 1280,
         "height": 800,
         "minWidth": 960,
@@ -28,11 +29,11 @@
     "active": true,
     "targets": ["deb", "appimage", "msi", "nsis", "dmg", "app"],
     "category": "Productivity",
-    "shortDescription": "Presentation host with remote control",
+    "shortDescription": "DECK — presentation host with remote control",
     "longDescription": "Run presentations, PDFs, images, video, text and timers on projectors and screens, with phones and tablets as remote controls, presenter views and stage displays.",
-    "publisher": "midnightsnack contributors",
+    "publisher": "DECK contributors",
     "homepage": "https://github.com/kirikakaese/midnightsnack",
-    "copyright": "Copyright © midnightsnack contributors. Licensed under the GPL 3.0 or later.",
+    "copyright": "Copyright © DECK contributors. Licensed under the GPL 3.0 or later.",
     "license": "GPL-3.0-or-later",
     "licenseFile": "../../../LICENSE",
     "icon": [
@@ -49,9 +50,9 @@
       "deb": {
         "depends": ["gstreamer1.0-plugins-base", "gstreamer1.0-plugins-good"],
         "recommends": ["libreoffice-impress", "gstreamer1.0-libav", "gstreamer1.0-plugins-bad"],
-        "desktopTemplate": "linux/midnightsnack.desktop",
+        "desktopTemplate": "linux/deck.desktop",
         "files": {
-          "/usr/share/mime/packages/midnightsnack.xml": "linux/midnightsnack-mime.xml"
+          "/usr/share/mime/packages/deck.xml": "linux/deck-mime.xml"
         }
       },
       "appimage": {
@@ -61,8 +62,8 @@
     "fileAssociations": [
       {
         "ext": ["msnack"],
-        "name": "midnightsnack show",
-        "description": "midnightsnack show",
+        "name": "DECK show",
+        "description": "DECK show",
         "role": "Editor",
         "mimeType": "application/x-midnightsnack-show",
         "exportedType": {

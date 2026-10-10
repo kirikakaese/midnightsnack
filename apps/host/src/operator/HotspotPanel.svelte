@@ -29,7 +29,7 @@
   }
 
   let status = $state<HotspotStatus | null>(null);
-  let ssid = $state(stored(SSID_KEY, () => "midnightsnack"));
+  let ssid = $state(stored(SSID_KEY, () => "DECK"));
   let password = $state(stored(PASSWORD_KEY, randomPassword));
   let busy = $state(false);
   let error = $state<string | null>(null);

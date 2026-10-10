@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! `midnightsnack-relay` — see `docs/user/relay.md`.
+//! `deck-relay` — see `docs/user/relay.md`.
 //!
 //! Options (each also as an environment variable):
 //! - `--listen ADDR` (`MIDNIGHTSNACK_RELAY_LISTEN`, default `0.0.0.0:8080`)
@@ -22,7 +22,7 @@ fn env(name: &str) -> Option<String> {
 
 fn usage() -> ExitCode {
     eprintln!(
-        "usage: midnightsnack-relay [--listen ADDR] [--access-token TOKEN] [--max-hosts N] \
+        "usage: deck-relay [--listen ADDR] [--access-token TOKEN] [--max-hosts N] \
          [--max-remotes-per-host N] [--max-queued-mb N] [--healthcheck] [--version]"
     );
     ExitCode::from(2)
@@ -75,7 +75,7 @@ async fn main() -> ExitCode {
             },
             "--healthcheck" => healthcheck = true,
             "--version" => {
-                println!("midnightsnack-relay {VERSION}");
+                println!("deck-relay {VERSION}");
                 return ExitCode::SUCCESS;
             }
             _ => return usage(),

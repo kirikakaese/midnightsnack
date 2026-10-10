@@ -9,7 +9,7 @@ repository.workspace = true
 authors.workspace = true
 
 [[bin]]
-name = "midnightsnack-relay"
+name = "deck-relay"
 path = "src/main.rs"
 
 [dependencies]

@@ -8,7 +8,7 @@
 # Then enter https://relay.example.org (and the token) in the host's Connect tab.
 services:
   relay:
-    image: ghcr.io/kirikakaese/midnightsnack-relay:latest
+    image: ghcr.io/kirikakaese/deck-relay:latest
     restart: unless-stopped
     environment:
       MIDNIGHTSNACK_RELAY_ACCESS_TOKEN: ${MIDNIGHTSNACK_RELAY_ACCESS_TOKEN:-}

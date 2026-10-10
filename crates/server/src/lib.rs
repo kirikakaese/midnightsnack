@@ -82,7 +82,7 @@ pub fn default_host_name() -> String {
         .or_else(|_| std::env::var("HOSTNAME"))
         .ok()
         .filter(|s| !s.trim().is_empty())
-        .unwrap_or_else(|| "midnightsnack".to_owned())
+        .unwrap_or_else(|| "DECK".to_owned())
 }
 
 /// A running server.

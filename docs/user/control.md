@@ -22,7 +22,7 @@ listed in Companion, load it as a developer module:
 
 1. Build it: `pnpm --filter companion-module-midnightsnack build`.
 2. In Companion's settings, set the *developer modules* folder to the repository's
-   `integrations` folder and add a **midnightsnack** connection.
+   `integrations` folder and add a **DECK** connection.
 3. Enter the host's address, port (`4747`) and an API key.
 
 **Actions:** go, next/previous slide, next/previous cue, go to cue *n* (and slide), blackout /
@@ -30,13 +30,13 @@ freeze / logo (toggle, on, off), panic, overlays, clear drawing, media play/paus
 timer, countdown, message to stage.
 **Feedbacks:** blackout / freeze / logo active (red), cue *n* live (green), overlay shown
 (blue), countdown in overtime (purple).
-**Variables:** `$(midnightsnack:cue_name)`, `cue_number`, `slide`, `slide_count`, `slide_of`,
+**Variables:** `$(deck:cue_name)`, `cue_number`, `slide`, `slide_count`, `slide_of`,
 `next_name`, `show_timer`, `slide_timer`, `countdown`, `countdown_label`, `stage_message`,
 `show_title`.
 
 ## MIDI controllers
 
-Plug in a MIDI controller (pads, buttons, a keyboard) — midnightsnack listens on every MIDI input
+Plug in a MIDI controller (pads, buttons, a keyboard) — DECK listens on every MIDI input
 and notices controllers plugged in later.
 
 1. Choose an action in the list under **MIDI** (e.g. *Next slide*).
@@ -96,7 +96,7 @@ allows and answers `{}` or `{"code": "forbidden"}` (and similar). Uploads work w
 
 ## A second computer as controller
 
-The host app can run the show of another midnightsnack host — for example from a desk at the
+The host app can run the show of another DECK host — for example from a desk at the
 back of the room while the laptop with the projector stays on stage.
 
 1. On the second computer open the **Connect** tab → **Control another computer**.

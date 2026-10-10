@@ -1,6 +1,6 @@
-# Companion module for midnightsnack
+# Companion module for DECK
 
-Controls [midnightsnack](../../README.md) from [Bitfocus Companion](https://bitfocus.io/companion)
+Controls [DECK](../../README.md) from [Bitfocus Companion](https://bitfocus.io/companion)
 (Stream Deck and other surfaces): actions, feedbacks and variables over the host's WebSocket API.
 Setup and the list of actions, feedbacks and variables are in
 [docs/user/control.md](../../docs/user/control.md#bitfocus-companion-stream-deck).

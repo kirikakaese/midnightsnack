@@ -76,7 +76,7 @@ jobs:
           tauriScript: pnpm tauri
           args: ${{ matrix.args }}
           tagName: ${{ github.ref_name }}
-          releaseName: midnightsnack ${{ github.ref_name }}
+          releaseName: DECK ${{ github.ref_name }}
           releaseBody: ${{ needs.changelog.outputs.notes }}
           releaseDraft: true
           prerelease: ${{ startsWith(github.ref_name, 'v0.') }}
@@ -117,15 +117,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
         run: |
-          name="midnightsnack-relay-${TAG}-${{ matrix.target }}"
+          name="deck-relay-${TAG}-${{ matrix.target }}"
           mkdir "$name"
           cp LICENSE "$name/"
           if [ "$RUNNER_OS" = "Windows" ]; then
-            cp target/release/midnightsnack-relay.exe "$name/"
+            cp target/release/deck-relay.exe "$name/"
             7z a "$name.zip" "$name" > /dev/null
             gh release upload "$TAG" "$name.zip" --clobber
           else
-            cp target/release/midnightsnack-relay "$name/"
+            cp target/release/deck-relay "$name/"
             tar czf "$name.tar.gz" "$name"
             gh release upload "$TAG" "$name.tar.gz" --clobber
           fi
@@ -145,7 +145,7 @@ jobs:
       - id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository_owner }}/midnightsnack-relay
+          images: ghcr.io/${{ github.repository_owner }}/deck-relay
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
