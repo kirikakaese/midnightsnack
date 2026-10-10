@@ -1,8 +1,14 @@
 name: Release
 
+# Push a tag like v1.2.3 (or v1.2.3-rc.1 / v1.2.3-beta.1 for a prerelease) to build a draft
+# release. Publishing the draft (GitHub → Releases) makes it public and, through the `feeds`
+# job, offers it to the in-app updater: stable releases to everyone, prereleases to users who
+# opted into betas. See docs/dev/releasing.md.
 on:
   push:
     tags: ["v*.*.*"]
+  release:
+    types: [published]
 
 permissions:
   contents: write
@@ -14,6 +20,7 @@ env:
 jobs:
   changelog:
     name: Changelog
+    if: github.event_name == 'push'
     runs-on: ubuntu-22.04
     outputs:
       notes: ${{ steps.cliff.outputs.content }}
@@ -37,17 +44,21 @@ jobs:
           - name: macOS universal
             os: macos-14
             rust-targets: aarch64-apple-darwin,x86_64-apple-darwin
-            args: --target universal-apple-darwin --bundles dmg
+            args: --target universal-apple-darwin --bundles app,dmg
+            prerelease-args: --target universal-apple-darwin --bundles app,dmg
             pdfium: mac-univ
           - name: Windows x64
             os: windows-2022
             rust-targets: ""
             args: --bundles msi,nsis
+            # MSI versions cannot carry "-rc.1"; prereleases ship the NSIS installer only.
+            prerelease-args: --bundles nsis
             pdfium: win-x64
           - name: Linux x64
             os: ubuntu-22.04
             rust-targets: ""
             args: --bundles deb,appimage
+            prerelease-args: --bundles deb,appimage
             pdfium: linux-x64
     runs-on: ${{ matrix.os }}
     steps:
@@ -70,19 +81,53 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Fetch PDFium
         run: node scripts/fetch-pdfium.mjs ${{ matrix.pdfium }}
+      - name: Check the version and the update key
+        id: release
+        shell: bash
+        env:
+          TAG: ${{ github.ref_name }}
+          UPDATER_PUBKEY: ${{ vars.TAURI_UPDATER_PUBKEY }}
+          HAS_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
+        run: |
+          version="${TAG#v}"
+          cargo_version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
+          if [ "$version" != "$cargo_version" ]; then
+            echo "::error::Tag $TAG does not match the version $cargo_version in Cargo.toml"
+            exit 1
+          fi
+          prerelease=false
+          if [[ "$version" == *-* || "$version" == 0.* ]]; then prerelease=true; fi
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
+          if [ -n "$UPDATER_PUBKEY" ] && [ "$HAS_PRIVATE_KEY" = true ]; then
+            echo "updater-config=--config src-tauri/tauri.updater.conf.json" >> "$GITHUB_OUTPUT"
+            echo "DECK_UPDATER_PUBKEY=$UPDATER_PUBKEY" >> "$GITHUB_ENV"
+            echo "DECK_UPDATE_FEED=https://github.com/$GITHUB_REPOSITORY/releases/latest/download" >> "$GITHUB_ENV"
+          elif [ "$prerelease" = true ]; then
+            echo "::warning::No update key (variable TAURI_UPDATER_PUBKEY, secret TAURI_SIGNING_PRIVATE_KEY); this prerelease will not update itself."
+          else
+            echo "::error::Stable releases need the update key (see docs/dev/releasing.md)."
+            exit 1
+          fi
       - uses: tauri-apps/tauri-action@v1
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           projectPath: apps/host
           tauriScript: pnpm tauri
-          args: ${{ matrix.args }}
+          args: >-
+            ${{ steps.release.outputs.prerelease == 'true' && matrix.prerelease-args || matrix.args }}
+            ${{ steps.release.outputs.updater-config }}
           tagName: ${{ github.ref_name }}
           releaseName: DECK ${{ github.ref_name }}
           releaseBody: ${{ needs.changelog.outputs.notes }}
           releaseDraft: true
-          prerelease: ${{ startsWith(github.ref_name, 'v0.') }}
+          prerelease: ${{ steps.release.outputs.prerelease == 'true' }}
+          includeUpdaterJson: true
 
   relay:
     name: Relay (${{ matrix.target }})
+    if: github.event_name == 'push'
     needs: host
     strategy:
       fail-fast: false
@@ -132,6 +177,7 @@ jobs:
 
   relay-image:
     name: Relay Docker image
+    if: github.event_name == 'push'
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v7
@@ -149,7 +195,7 @@ jobs:
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest
+            type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}
       - uses: docker/build-push-action@v6
         with:
           context: .
@@ -163,6 +209,7 @@ jobs:
 
   checksums:
     name: Checksums
+    if: github.event_name == 'push'
     needs: [host, relay]
     runs-on: ubuntu-22.04
     steps:
@@ -176,3 +223,36 @@ jobs:
           rm -f SHA256SUMS.txt
           sha256sum * > SHA256SUMS.txt
           gh release upload "$TAG" SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" --clobber
+
+  # Offers a published release to the in-app updater. Runs after the build (for a release that
+  # is already published, e.g. created on the Releases page) and when a draft is published. The
+  # app reads its feeds from the latest stable release: latest.json (stable) and beta.json (the
+  # newest release, prereleases included).
+  feeds:
+    name: Update feeds
+    needs: host
+    if: always() && (github.event_name == 'release' || needs.host.result == 'success')
+    runs-on: ubuntu-22.04
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name || github.ref_name }}
+        run: |
+          state=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)
+          if [ "$state" = true ]; then
+            echo "$TAG is a draft; the feeds are updated when it is published."
+            exit 0
+          fi
+          if ! gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern latest.json; then
+            echo "::warning::$TAG has no latest.json (not built yet, or built without the update key)."
+            exit 0
+          fi
+          cp latest.json beta.json
+          stable=$(gh release list --repo "$GITHUB_REPOSITORY" --exclude-drafts \
+            --exclude-pre-releases --limit 1 --json tagName --jq '.[0].tagName')
+          if [ -z "$stable" ]; then
+            echo "::warning::No stable release yet to carry the beta feed."
+            exit 0
+          fi
+          gh release upload "$stable" beta.json --repo "$GITHUB_REPOSITORY" --clobber
+          echo "beta.json on $stable now offers $TAG"
