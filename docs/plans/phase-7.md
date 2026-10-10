@@ -17,8 +17,8 @@ translations, polished installers and complete documentation — then `v1.0.0`.
 - [x] A benchmark against the development server: action-to-update latency over the
       WebSocket (local and through the relay) with many connected remotes and pointer traffic;
       memory over a soak run. Record results.
-- [ ] Idle CPU of the host app with an output open; startup time.
-- [ ] Fix what the measurements or the review of failure paths turn up (reconnects, full
+- [x] Idle CPU of the host app with an output open; startup time.
+- [x] Fix what the measurements or the review of failure paths turn up (reconnects, full
       disks, bad files, lost displays).
 
 ### Translations
@@ -37,7 +37,7 @@ translations, polished installers and complete documentation — then `v1.0.0`.
 - [x] Keep the updater hookable (documented, not enabled).
 
 ### Documentation
-- [ ] README with screenshots of the operator window, an output and the phone remote.
+- [x] README with screenshots of the operator window, an output and the phone remote.
 - [x] Troubleshooting / FAQ; release process for maintainers; every guide checked against the
       app.
 
@@ -66,12 +66,25 @@ translations, polished installers and complete documentation — then `v1.0.0`.
   operator alternating next/previous): 14,187 actions in 10 minutes, time until every
   connection had the new state p50 1.09 ms, p95 1.82 ms, p99 2.82 ms, max 117.85 ms; server
   memory 19.5 MB at the start, 19.6 MB peak and at the end (no growth).
-- **Host app** (release build, Linux, X11 under Xvfb, software rendering): IDLE_AND_STARTUP
+- **Host app** (release build, Linux, X11 under Xvfb without a GPU): from start to a working
+  operator window 1.0 s (three runs: 1.01, 1.04, 1.03 s). Idle with an output open and the
+  show running: the output window's web process 0.2 % of one core, the host process 1 %; the
+  operator window 12–14 %, almost all of it WebKitGTK compositing in software (with
+  `WEBKIT_DISABLE_COMPOSITING_MODE=1` the operator window drops to 2 % and the whole app to
+  about 3 %). Machines with a GPU composite in hardware. Memory about 950 MB for all
+  processes together under software rendering.
+- **Failure paths:** reconnects (E2E: phones, relay fallback), lost displays (phase 3),
+  unreadable or hostile show files (now refused with `show_file_invalid`), and write errors
+  (reported as `io`, autosave errors logged) were reviewed; the review's resource limits
+  (stalled clients, full queues, upload volume) were the fixes this turned up.
 - **German:** all 533 texts translated; an E2E test checks that a German phone shows no
   English text from the catalog while pairing, in the control view and in the stage view.
-- **Installers:** `.msnack` association, single instance, metadata and Linux media
-  dependencies; checked by building the `.deb` and opening a show from the command line while
-  the app was running.
+- **Installers:** built the `.deb` and checked its metadata, dependencies, desktop entry
+  (`Exec=… %F`, `MimeType`) and MIME definition (`*.msnack`); with them installed, `gio open`
+  of a show launches midnightsnack with the file. Starting the app with a show opens it;
+  launching it again with another show (with a session bus, as on every Linux desktop) hands
+  the file to the running app within 0.07 s and exits, and the running app opens it. The
+  operator window in German was checked on screen.
 
 ## Known limitations and deviations
 

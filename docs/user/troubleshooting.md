@@ -55,8 +55,8 @@ Presentations are converted to PDF with LibreOffice (Keynote files with Keynote,
 Install LibreOffice, or export the presentation as PDF and add that.
 
 **Double-clicking a `.msnack` file does not open midnightsnack.**
-The installers register the file type. On Linux, log out and back in after installing (or run
-`update-desktop-database ~/.local/share/applications`); otherwise use **Open…** in the app.
+The installers register the file type (on Linux the `.deb` installs it system-wide; the
+AppImage does not register file types, use **Open…** there or an AppImage integration tool).
 If midnightsnack is already running, the show opens in it, after asking about unsaved changes.
 
 **A show opened on another computer is missing media.**
