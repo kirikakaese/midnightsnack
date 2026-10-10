@@ -118,7 +118,7 @@ jobs:
       - name: Build development server and relay
         run: |
           cargo build -p midnightsnack-server --bin midnightsnack-devserver --locked
-          cargo build -p deck-relay --locked
+          cargo build -p midnightsnack-relay --locked
       - name: Install Chromium
         run: pnpm --filter @midnightsnack/remote exec playwright install --with-deps chromium
       - name: Playwright

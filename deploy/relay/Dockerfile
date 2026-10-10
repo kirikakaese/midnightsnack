@@ -14,7 +14,7 @@ FROM rust:1-bookworm AS build
 WORKDIR /src
 COPY . .
 COPY --from=web /src/apps/remote/dist apps/remote/dist
-RUN cargo build --release --locked -p deck-relay
+RUN cargo build --release --locked -p midnightsnack-relay
 
 FROM gcr.io/distroless/cc-debian12:nonroot
 LABEL org.opencontainers.image.title="DECK relay" \
