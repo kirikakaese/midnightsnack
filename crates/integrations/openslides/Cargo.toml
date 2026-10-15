@@ -14,7 +14,7 @@ mock = ["dep:axum"]
 
 [dependencies]
 axum = { version = "0.8", optional = true }
-base64 = "0.22"
+base64 = "0.23"
 bytes = "1"
 futures-util = "0.3"
 midnightsnack-protocol.workspace = true
