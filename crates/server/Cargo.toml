@@ -19,7 +19,7 @@ futures-util = "0.3"
 hyper = "1"
 hyper-util = { version = "0.1", features = ["server-auto", "tokio", "service"] }
 if-addrs = "0.13"
-mdns-sd = "0.13"
+mdns-sd = "0.21"
 midnightsnack-core.workspace = true
 midnightsnack-protocol.workspace = true
 midnightsnack-render = { path = "../render" }
